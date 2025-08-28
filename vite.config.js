@@ -6,7 +6,7 @@ import path from 'path'
 export default defineConfig({
   plugins: [react()],
   server: {
-    allowedHosts: true
+    host: true  // Korrigiert: 'allowedHosts' ist nicht gültig; 'host: true' exposet auf 0.0.0.0 für Dev
   },
   resolve: {
     alias: {
