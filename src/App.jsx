@@ -3,9 +3,9 @@ import React, { useEffect, useState } from 'react';
 import './App.css';
 import Pages from "@/pages/index.jsx";
 import { Toaster } from "@/components/ui/toaster";
-import Login from "@/components/auth/Login";  // Deine neue Login-Komponente (angepasst für PocketBase)
-import pb from '@/api/pb';  // Dein PocketBase-Client
-import { User } from '@/entities';  // Dein User-Objekt aus entities.js
+import Login from "@/components/auth/Login";  
+import pb from '@/api/pb';  
+import { User } from '@/api/entities';  
 import CalendarLoader from "@/components/ui/CalendarLoader";  // Für Loading-State
 
 function App() {
