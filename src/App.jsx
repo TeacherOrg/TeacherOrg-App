@@ -11,23 +11,26 @@ import CalendarLoader from "@/components/ui/CalendarLoader";  // Für Loading-St
 function App() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [bypassAuth, setBypassAuth] = useState(true);  // Temporär true für Tests ohne Login
 
   useEffect(() => {
-    // Aktuellen User laden
-    const currentUser = User.current();  // Oder pb.authStore.model
-    setUser(currentUser);
-    setLoading(false);
+    if (bypassAuth) {
+      // Simuliere User für Tests (deaktiviere Auth)
+      setUser({ id: 'test_user', email: 'test@example.com', role: 'admin' });  // Fake-User
+      setLoading(false);
+    } else {
+      // Normaler Auth-Check
+      const currentUser = User.current();
+      setUser(currentUser);
+      setLoading(false);
 
-    // Auf Auth-Änderungen hören (Login/Logout)
-    const unsubscribe = pb.authStore.onChange((token, model) => {
-      setUser(model || null);
-    });
+      const unsubscribe = pb.authStore.onChange((token, model) => {
+        setUser(model || null);
+      });
 
-    return () => {
-      // Unsubscribe (PocketBase onChange hat kein direktes unsubscribe, aber clear falls nötig)
-      pb.authStore.clear();  // Optional, nur bei Cleanup
-    };
-  }, []);
+      return () => pb.authStore.clear();
+    }
+  }, [bypassAuth]);
 
   if (loading) {
     return (
@@ -37,7 +40,7 @@ function App() {
     );
   }
 
-  if (!user) {
+  if (!user && !bypassAuth) {
     return <Login onLogin={(loggedUser) => setUser(loggedUser)} />;
   }
 
