@@ -1,3 +1,4 @@
+// src/components/settings/SettingsModal.jsx
 import React, { useState, useEffect, useCallback } from 'react';
 import { Setting, Class, Subject, Holiday } from '@/api/entities';
 import { Button } from '@/components/ui/button';
@@ -6,11 +7,11 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { X, User as UserIcon, Sun, Moon, Monitor, Home, RotateCcw, Mail, Lock, LogOut } from 'lucide-react'; // Neu: LogOut-Icon
-import { supabase } from '@/api/supabase'; // Korrigierter Import mit Alias
+import { X, User as UserIcon, Sun, Moon, Monitor, Home, RotateCcw, Mail, Lock, LogOut } from 'lucide-react';
+import pb from '@/api/pb'; // PocketBase-Client
 import CalendarLoader from '../ui/CalendarLoader';
 
-// Import the other settings components
+// Import the other settings components (assuming they are already adapted to PocketBase)
 import ClassesSettings from './ClassesSettings';
 import SubjectSettings from './SubjectSettings';
 import ScheduleSettings from './ScheduleSettings';
@@ -20,7 +21,7 @@ import SizeSettings from './SizeSettings';
 // Angepasste ProfileSettings-Komponente (vor CATEGORIES deklariert)
 const ProfileSettings = ({
     pendingEmail, setPendingEmail,
-    pendingUserSettings, setPendingUserSettings // Passwort nicht pending, sofort speichern
+    pendingUserSettings, setPendingUserSettings
 }) => {
     const [user, setUser] = useState(null);
     const [showPasswordForm, setShowPasswordForm] = useState(false);
@@ -32,8 +33,10 @@ const ProfileSettings = ({
 
     useEffect(() => {
         const loadUser = async () => {
-            const { data: { user } } = await supabase.auth.getUser();
-            setUser(user);
+            const currentUser = pb.authStore.model;
+            if (currentUser) {
+                setUser(currentUser);
+            }
         };
         loadUser();
     }, []);
@@ -60,13 +63,9 @@ const ProfileSettings = ({
         }
     };
 
-    const handleLogout = async () => {
-        try {
-            await supabase.auth.signOut();
-            window.location.href = '/login'; // Redirect zur Login-Seite (passe an dein Routing an)
-        } catch (error) {
-            console.error('Logout failed:', error);
-        }
+    const handleLogout = () => {
+        pb.authStore.clear();
+        window.location.href = '/login'; // Redirect zur Login-Seite (passe an dein Routing an)
     };
 
     const handlePasswordChange = async () => {
@@ -80,16 +79,11 @@ const ProfileSettings = ({
         }
 
         try {
-            // Re-Auth mit altem Passwort
-            const { error: reAuthError } = await supabase.auth.signInWithPassword({
-                email: user.email,
-                password: oldPassword
-            });
-            if (reAuthError) throw new Error('Altes Passwort falsch.');
+            // Re-Auth mit altem Passwort (PocketBase hat kein direktes Re-Auth, aber login zum Verifizieren)
+            await pb.collection('users').authWithPassword(user.email, oldPassword);
 
             // Neues Passwort setzen
-            const { error } = await supabase.auth.updateUser({ password: newPassword });
-            if (error) throw error;
+            await pb.collection('users').update(user.id, { password: newPassword });
 
             setPasswordMessage('Passwort geändert! Bestätigung per E-Mail gesendet.');
             setShowPasswordForm(false);
@@ -103,10 +97,7 @@ const ProfileSettings = ({
 
     const handleForgotPassword = async () => {
         try {
-            const { error } = await supabase.auth.resetPasswordForEmail(user.email, {
-                redirectTo: 'http://localhost:5173/auth/change-password' // Passe an deine ChangePassword-URL an
-            });
-            if (error) throw error;
+            await pb.collection('users').requestPasswordReset(user.email);
             setPasswordMessage('Reset-Link gesendet! Überprüfe deine E-Mail.');
         } catch (error) {
             setPasswordMessage(`Fehler: ${error.message}`);
@@ -175,7 +166,7 @@ const ProfileSettings = ({
             {/* Rest wie in deiner Version: Benutzerinfo, Darstellung, Navigation, Tutorial */}
             <Card>
                 <CardHeader>
-                    <CardTitle className="flex items-center gap-3">
+                    <CardTitle className="flex items-center gap-3 text-slate-800 dark:text-white">
                         <UserIcon className="w-5 h-5" />
                         Benutzerinformationen
                     </CardTitle>
@@ -252,7 +243,6 @@ const ProfileSettings = ({
                 </CardContent>
             </Card>
 
-            {/* Neu: Logout-Option am Ende */}
             <Card>
                 <CardHeader>
                     <CardTitle className="flex items-center gap-3">
@@ -294,15 +284,13 @@ const SettingsModal = ({ isOpen, onClose }) => {
     
     // Für Profil-Änderungen (pending, um zentral zu speichern)
     const [pendingEmail, setPendingEmail] = useState('');
-    const [pendingNewPassword, setPendingNewPassword] = useState('');
-    const [pendingConfirmPassword, setPendingConfirmPassword] = useState('');
     const [pendingUserSettings, setPendingUserSettings] = useState({ preferred_theme: 'dark', default_start_page: 'Timetable' });
 
     const loadAllData = useCallback(async () => {
         setIsLoading(true);
         try {
-            const [settingsData, classData, subjectData, holidayData, { data: { user: fetchedUser } }] = await Promise.all([
-                Setting.list(), Class.list(), Subject.list(), Holiday.list(), supabase.auth.getUser(),
+            const [settingsData, classData, subjectData, holidayData] = await Promise.all([
+                Setting.list(), Class.list(), Subject.list(), Holiday.list()
             ]);
 
             if (settingsData.length > 0) {
@@ -321,12 +309,13 @@ const SettingsModal = ({ isOpen, onClose }) => {
             }
 
             // Lade User-Daten für Profil
+            const fetchedUser = pb.authStore.model;
             if (fetchedUser) {
                 setUser(fetchedUser); // Neu: Setze user-State
                 setPendingEmail(fetchedUser.email || '');
                 setPendingUserSettings({
-                    preferred_theme: fetchedUser.user_metadata?.preferred_theme || 'dark',
-                    default_start_page: fetchedUser.user_metadata?.default_start_page || 'Timetable'
+                    preferred_theme: fetchedUser.role || 'dark', // Passe an deine User-Felder an, z.B. fetchedUser.preferred_theme
+                    default_start_page: fetchedUser.default_start_page || 'Timetable'
                 });
             }
 
@@ -352,11 +341,9 @@ const SettingsModal = ({ isOpen, onClose }) => {
             // Speichere Profil-Änderungen, wenn pending (Passwort wird separat gehandhabt)
             if (activeCategory === 'Profil') {
                 if (pendingEmail && pendingEmail !== user?.email) {
-                    await supabase.auth.updateUser({ email: pendingEmail });
+                    await pb.collection('users').requestEmailChange(pendingEmail);
                 }
-                await supabase.auth.updateUser({
-                    data: pendingUserSettings
-                });
+                await pb.collection('users').update(user.id, pendingUserSettings);
             }
 
             console.log("Settings saved!");
@@ -380,8 +367,6 @@ const SettingsModal = ({ isOpen, onClose }) => {
             case 'Größe': return { settings, setSettings };
             case 'Profil': return { 
                 pendingEmail, setPendingEmail,
-                pendingNewPassword, setPendingNewPassword,
-                pendingConfirmPassword, setPendingConfirmPassword,
                 pendingUserSettings, setPendingUserSettings 
             }; // Props für pending Änderungen
             default: return {};
@@ -390,7 +375,7 @@ const SettingsModal = ({ isOpen, onClose }) => {
 
     const hasPendingChanges = () => {
         // Einfache Check, ob Änderungen pending sind (für Disable Save-Button)
-        return pendingEmail !== user?.email || pendingNewPassword || Object.keys(pendingUserSettings).length > 0;
+        return pendingEmail !== user?.email || Object.keys(pendingUserSettings).length > 0;
     };
 
     return (

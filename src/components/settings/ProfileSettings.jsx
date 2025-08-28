@@ -1,5 +1,6 @@
+// src/components/settings/ProfileSettings.jsx
 import React, { useState, useEffect } from 'react';
-import { supabase } from '../supabase'; // Dein Supabase-Client
+import pb from '@/api/pb'; // PocketBase-Client
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -24,14 +25,14 @@ export default function ProfileSettings() {
     useEffect(() => {
         const loadUserData = async () => {
             try {
-                const { data: { user } } = await supabase.auth.getUser();
-                if (user) {
-                    setUser(user);
+                const fetchedUser = pb.authStore.model;
+                if (fetchedUser) {
+                    setUser(fetchedUser);
                     setUserSettings({
-                        preferred_theme: user.user_metadata?.preferred_theme || 'dark',
-                        default_start_page: user.user_metadata?.default_start_page || 'Timetable'
+                        preferred_theme: fetchedUser.preferred_theme || 'dark',
+                        default_start_page: fetchedUser.default_start_page || 'Timetable'
                     });
-                    setNewEmail(user.email || '');
+                    setNewEmail(fetchedUser.email || '');
                 }
             } catch (error) {
                 console.error("Failed to load user data:", error);
@@ -47,9 +48,7 @@ export default function ProfileSettings() {
             const updatedSettings = { ...userSettings, [setting]: value };
             setUserSettings(updatedSettings);
             
-            const { error } = await supabase.auth.updateUser({
-                data: updatedSettings
-            });
+            const { error } = await pb.collection('users').update(user.id, updatedSettings);
             if (error) throw error;
             
             // Apply theme immediately
@@ -82,8 +81,7 @@ export default function ProfileSettings() {
     const handleEmailChange = async () => {
         if (!newEmail) return;
         try {
-            const { error } = await supabase.auth.updateUser({ email: newEmail });
-            if (error) throw error;
+            await pb.collection('users').requestEmailChange(newEmail);
             setEmailMessage('E-Mail-Änderung angefordert. Bitte bestätigen Sie die Änderung in Ihrer neuen E-Mail-Adresse.');
         } catch (error) {
             setEmailMessage(`Fehler: ${error.message}`);
@@ -97,25 +95,20 @@ export default function ProfileSettings() {
         }
         if (!newPassword) return;
         try {
-            const { error } = await supabase.auth.updateUser({ password: newPassword });
-            if (error) throw error;
+            await pb.collection('users').update(user.id, { password: newPassword });
             setPasswordMessage('Passwort geändert. Eine Bestätigungs-E-Mail wurde gesendet.');
             setShowPasswordForm(false);
             setNewPassword('');
             setConfirmPassword('');
-            // Optional: Sende eine custom Bestätigungs-E-Mail via Supabase Edge Function oder ähnlich, falls nötig
         } catch (error) {
             setPasswordMessage(`Fehler: ${error.message}`);
         }
     };
 
     const handleRestartOnboarding = async () => {
-        if (window.confirm('Möchten Sie das Einführungstutorial wirklich neu starten? Dies wird Sie durch die Grundfunktionen der App führen.')) {
+        if (window.confirm("Möchten Sie das Einführungstutorial wirklich neu starten? Dies wird Sie durch die Grundfunktionen der App führen.")) {
             try {
-                const { error } = await supabase.auth.updateUser({
-                    data: { has_completed_onboarding: false }
-                });
-                if (error) throw error;
+                await pb.collection('users').update(user.id, { has_completed_onboarding: false });
                 window.location.reload(); // Reload to trigger onboarding
             } catch (error) {
                 console.error("Failed to reset onboarding:", error);
@@ -253,11 +246,11 @@ export default function ProfileSettings() {
                     <div className="flex items-center gap-4 p-4 bg-slate-50 dark:bg-slate-700/50 rounded-lg">
                         <Avatar className="h-12 w-12 bg-blue-600 text-white">
                             <AvatarFallback className="bg-blue-600 text-white font-semibold">
-                                {getInitials(user?.user_metadata?.full_name || user?.email)}
+                                {getInitials(user?.full_name || user?.email)}
                             </AvatarFallback>
                         </Avatar>
                         <div>
-                            <p className="font-semibold text-slate-800 dark:text-white">{user?.user_metadata?.full_name || 'Unbekannt'}</p>
+                            <p className="font-semibold text-slate-800 dark:text-white">{user?.full_name || 'Unbekannt'}</p>
                             <p className="text-sm text-slate-600 dark:text-slate-400">{user?.email || 'Keine E-Mail'}</p>
                         </div>
                     </div>
