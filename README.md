@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Base44 App
 
 
@@ -18,3 +19,7 @@ npm run build
 ```
 
 For more information and support, please contact Base44 support at app@base44.com.
+=======
+# TeacherOrg-App
+Meine React-App für TeacherOrg (Exoscale)
+>>>>>>> 594282158989faf002e611a4e36ad857633b0591
