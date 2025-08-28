@@ -1,6 +1,6 @@
 // src/components/auth/Login.jsx
 import React, { useState } from 'react';
-import { pb } from '@/entities';  // Importiere den PocketBase-Client aus entities.js
+import pb from '@/api/pb';  // Direkter Import von pb (aus pb.js)
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
