@@ -3,8 +3,9 @@ import React, { useEffect, useState } from 'react';
 import './App.css';
 import Pages from "@/pages/index.jsx";
 import { Toaster } from "@/components/ui/toaster";
-import Login from "@/components/auth/Login";  // Deine neue Login-Komponente
-import { supabase } from '@/api/supabase';  // Der Client
+import Login from "@/components/auth/Login";  // Deine neue Login-Komponente (angepasst für PocketBase)
+import pb from '@/api/pb';  // Dein PocketBase-Client (früher supabase)
+import { User } from '@/entities';  // Dein User-Objekt aus entities.js
 import CalendarLoader from "@/components/ui/CalendarLoader";  // Für Loading-State
 
 function App() {
@@ -12,18 +13,20 @@ function App() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Aktuelle Session laden
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null);
-      setLoading(false);
-    });
+    // Aktuellen User laden
+    const currentUser = User.current();  // Oder pb.authStore.model
+    setUser(currentUser);
+    setLoading(false);
 
     // Auf Auth-Änderungen hören (Login/Logout)
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null);
+    const unsubscribe = pb.authStore.onChange((token, model) => {
+      setUser(model || null);
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      // Unsubscribe (PocketBase onChange hat kein direktes unsubscribe, aber clear falls nötig)
+      pb.authStore.clear();  // Optional, nur bei Cleanup
+    };
   }, []);
 
   if (loading) {
@@ -35,7 +38,7 @@ function App() {
   }
 
   if (!user) {
-    return <Login onLogin={setUser} />;
+    return <Login onLogin={(loggedUser) => setUser(loggedUser)} />;
   }
 
   return (
