@@ -1,0 +1,143 @@
+// entities.js (aktualisiert für PocketBase)
+import pb from '@/api/pb'; // Passe Pfad an, z. B. '../api/pb'
+
+class PbEntity {
+  constructor(name) {
+    this.name = name.toLowerCase();
+    this.collection = pb.collection(`${this.name}s`); // Plural-Namen, z. B. 'lessons' für Lesson
+  }
+
+  normalizeData(item) {
+    if (item.lesson_number !== undefined) item.lesson_number = Number(item.lesson_number);
+    if (item.week_number !== undefined) item.week_number = Number(item.week_number);
+    if (item.school_year !== undefined) item.school_year = Number(item.school_year);
+    return item;
+  }
+
+  async list(query = {}) {
+    const params = { filter: this.buildFilter(query), perPage: 500 }; // Passe Limit an Bedarf an
+    const { items } = await this.collection.getList(1, params.perPage, params);
+    return items.map(this.normalizeData);
+  }
+
+  async find(query = {}) {
+    return this.list(query);
+  }
+
+  async filter(query = {}) {
+    return this.find(query);
+  }
+
+  async findOne(query = {}) {
+    const results = await this.find(query);
+    return results[0] || null;
+  }
+
+  async findById(id) {
+    try {
+      const item = await this.collection.getOne(id);
+      return this.normalizeData(item);
+    } catch {
+      return null;
+    }
+  }
+
+  async create(newData) {
+    const entity = this.normalizeData(newData);
+    const created = await this.collection.create(entity);
+    return this.normalizeData(created);
+  }
+
+  async update(id, updates) {
+    const updated = await this.collection.update(id, this.normalizeData(updates));
+    return this.normalizeData(updated);
+  }
+
+  async delete(id) {
+    try {
+      await this.collection.delete(id);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  async batchCreate(items) {
+    return Promise.all(items.map(item => this.create(item)));
+  }
+
+  async bulkCreate(items) {
+    return this.batchCreate(items);
+  }
+
+  async batchUpdate(updates) {
+    return Promise.all(updates.map(({ id, data }) => this.update(id, data)));
+  }
+
+  async batchDelete(ids) {
+    return Promise.all(ids.map(id => this.delete(id)));
+  }
+
+  async sync() {
+    // Für Realtime-Sync: Nutze Subscriptions in deinen Komponenten (z. B. in useEffect)
+    return { status: 'synced' };
+  }
+
+  buildFilter(query) {
+    if (Object.keys(query).length === 0) return '';
+    return Object.entries(query).map(([key, value]) => {
+      if (typeof value === 'object' && value !== null) {
+        if (value.$gt) return `${key} > ${value.$gt}`;
+        if (value.$lt) return `${key} < ${value.$lt}`;
+        if (value.$in) return `${key} ~ '${value.$in.join('|')}'`; // Annäherung für IN
+        if (value.$eq) return `${key} = ${value.$eq}`;
+      }
+      return `${key} = '${value}'`; // Für Strings escapen
+    }).join(' && ');
+  }
+}
+
+// Instanzen für ALLE Entities – gleich wie bisher
+export const Lesson = new PbEntity('Lesson');
+export const Student = new PbEntity('Student');
+export const YearlyLesson = new PbEntity('YearlyLesson');
+export const Topic = new PbEntity('Topic');
+export const Setting = new PbEntity('Setting');
+export const Class = new PbEntity('Class');
+export const Subject = new PbEntity('Subject');
+export const Holiday = new PbEntity('Holiday');
+export const Performance = new PbEntity('Performance');
+export const UeberfachlichKompetenz = new PbEntity('UeberfachlichKompetenz');
+export const Competency = new PbEntity('Competency');
+export const Fachbereich = new PbEntity('Fachbereich');
+export const DailyNote = new PbEntity('DailyNote');
+export const Announcement = new PbEntity('Announcement');
+export const Chore = new PbEntity('Chore');
+export const ChoreAssignment = new PbEntity('ChoreAssignment');
+
+// Auth mit PocketBase – echt, mit Default role 'teacher' bei Signup
+export const User = {
+  current: () => pb.authStore.model || null,
+
+  login: async ({ email, password }) => {
+    const authData = await pb.collection('users').authWithPassword(email, password);
+    return { success: true, user: authData.record };
+  },
+
+  signup: async ({ email, password }) => {
+    const userData = {
+      email,
+      password,
+      passwordConfirm: password,
+      role: 'teacher'  // Default role als 'teacher'
+    };
+    const newUser = await pb.collection('users').create(userData);
+    // Automatisch einloggen nach Signup
+    return await User.login({ email, password });
+  },
+
+  logout: () => {
+    pb.authStore.clear();
+    return { success: true };
+  },
+};
