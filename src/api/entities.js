@@ -1,5 +1,4 @@
-// entities.js (aktualisiert für PocketBase)
-import pb from '@/api/pb'; // Passe Pfad an, z. B. '../api/pb'
+import pb from '@/api/pb'; 
 
 class PbEntity {
   constructor(name) {
@@ -98,22 +97,22 @@ class PbEntity {
 }
 
 // Instanzen für ALLE Entities – gleich wie bisher
-export const Lesson = new PbEntity('Lesson');
-export const Student = new PbEntity('Student');
-export const YearlyLesson = new PbEntity('YearlyLesson');
-export const Topic = new PbEntity('Topic');
-export const Setting = new PbEntity('Setting');
-export const Class = new PbEntity('Class');
-export const Subject = new PbEntity('Subject');
-export const Holiday = new PbEntity('Holiday');
-export const Performance = new PbEntity('Performance');
-export const UeberfachlichKompetenz = new PbEntity('UeberfachlichKompetenz');
-export const Competency = new PbEntity('Competency');
-export const Fachbereich = new PbEntity('Fachbereich');
-export const DailyNote = new PbEntity('DailyNote');
-export const Announcement = new PbEntity('Announcement');
-export const Chore = new PbEntity('Chore');
-export const ChoreAssignment = new PbEntity('ChoreAssignment');
+export const Lesson = new PbEntity('Lesson'); // Generiert 'lessons'
+export const Student = new PbEntity('Student'); // Generiert 'students'
+export const YearlyLesson = new PbEntity('Yearly_lesson'); // Generiert 'yearly_lessons' – korrigiert mit Underscore
+export const Topic = new PbEntity('Topic'); // Generiert 'topics'
+export const Setting = new PbEntity('Setting'); // Generiert 'settings'
+export const Class = new PbEntity('Classe'); // Generiert 'classes' – korrigiert für korrekten Plural
+export const Subject = new PbEntity('Subject'); // Generiert 'subjects'
+export const Holiday = new PbEntity('Holiday'); // Generiert 'holidays'
+export const Performance = new PbEntity('Performance'); // Generiert 'performances'
+export const UeberfachlichKompetenz = new PbEntity('Ueberfachliche_kompetenz'); // Generiert 'ueberfachliche_kompetenzs' – passe bei Bedarf in PocketBase zu diesem Namen um, oder erweitere die Logic
+export const Competency = new PbEntity('Competencie'); // Generiert 'competencies' – korrigiert für 'ies'-Plural
+export const Fachbereich = new PbEntity('Fachbereich'); // Generiert 'fachbereichs' – passe in PocketBase zu 'fachbereichs' um, oder erweitere Logic für 'e'
+export const DailyNote = new PbEntity('Daily_note'); // Generiert 'daily_notes' – korrigiert mit Underscore
+export const Announcement = new PbEntity('Announcement'); // Generiert 'announcements'
+export const Chore = new PbEntity('Chore'); // Generiert 'chores'
+export const ChoreAssignment = new PbEntity('Chore_assignment');
 
 // Auth mit PocketBase – echt, mit Default role 'teacher' bei Signup
 export const User = {
