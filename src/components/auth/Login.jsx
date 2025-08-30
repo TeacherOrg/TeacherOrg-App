@@ -25,7 +25,7 @@ export default function Login({ onLogin }) {
       if (isRegister) {
         // Registrierung: Erstelle User und sende Verification-Email
         result = await pb.collection('users').create({
-          username, // Neu: Required Field für PocketBase
+          username, // Neu: Required Field für PocketBase (nonempty, unique)
           email,
           password,
           passwordConfirm: password,
@@ -35,12 +35,14 @@ export default function Login({ onLogin }) {
         await pb.collection('users').requestVerification(email);
         setMessage('Registrierung erfolgreich! Bitte überprüfen Sie Ihre E-Mail zur Bestätigung.');
       } else {
-        // Login (kein username needed, nur email/password)
+        // Login (kein username needed)
         result = await pb.collection('users').authWithPassword(email, password);
         onLogin(result.record);  // Weiterleiten zur App, passe an pb.authStore.model an falls nötig
       }
     } catch (err) {
-      setError(err.message || 'Ein Fehler ist aufgetreten. Details: ' + JSON.stringify(err.data)); // Verbessert: Zeige detaillierten Error
+      // Verbessert: Parse detaillierten Error aus PB (z. B. "username: Cannot be blank.")
+      const errorDetails = err.data ? JSON.stringify(err.data) : err.message;
+      setError(`Fehler: ${errorDetails}`);
     } finally {
       setLoading(false);
     }

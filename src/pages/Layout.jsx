@@ -4,6 +4,7 @@ import { User } from "@/api/entities";
 import { createPageUrl } from "@/utils";
 import { Calendar, Users, Settings, BookOpen, GraduationCap, LogOut, ClipboardList } from "lucide-react"; // Füge ClipboardList hinzu
 import { Button } from "@/components/ui/button";
+import { useNavigate } from "react-router-dom";
 import {
   Sidebar,
   SidebarContent,
