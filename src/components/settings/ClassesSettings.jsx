@@ -62,19 +62,30 @@ export default function ClassesSettings({ classes, refreshData }) {
     const handleAddClass = async () => {
         if (!newClassName.trim()) return;
         try {
-            const currentUserId = pb.authStore.model.id;  // Aktueller User (Teacher)
-            const currentYear = new Date().getFullYear();  // Für school_year, falls required
-            const newClass = await Class.create({ 
+            const currentUserId = pb.authStore.model.id;
+            const currentYear = new Date().getFullYear();
+            const payload = { 
                 name: newClassName.trim(),
-                user_id: currentUserId,  // Required Relation zu users
-                teacher_id: currentUserId,  // Required Relation zu teachers (angenommen users mit role=teacher)
-                school_year: currentYear  // Wenn required; ansonsten entfernen
-            });
+                user_id: currentUserId,
+                teacher_id: currentUserId,
+                school_year: currentYear
+            };
+            console.log("Sending Payload to PB:", payload);  // Neu: Log vor Send
+            console.log("Auth valid?", pb.authStore.isValid, "User ID:", currentUserId);  // Check Auth
+
+            const newClass = await Class.create(payload);
             setNewClassName('');
             await refreshData();
             setActiveClassId(newClass.id);
         } catch (error) {
-            console.error("Error creating class:", error.data);  // Log detailliert
+            console.error("Full Error Object:", error);  // Log alles (Stack, name, message)
+            if (error.name) console.error("Error Type:", error.name);  // z. B. TypeError
+            if (error.message) console.error("Error Message:", error.message);
+            if (error.stack) console.error("Stack Trace:", error.stack);
+            if (error.data) console.error("PB Data:", error.data);  // Validation-Details
+            if (error.status) console.error("Status:", error.status);  // 400 usw.
+            alert(`Fehler beim Erstellen: ${error.message || 'Unbekannt'}`);  // UI-Feedback
+            loadAllData();  // Optional: Reload auf Error
         }
     };
     
