@@ -10,7 +10,7 @@ import YearlyOverview from "./YearlyOverview";
 
 import Chores from "./Chores";
 
-import { BrowserRouter as Router, Route, Routes, useLocation } from 'react-router-dom';
+import { Route, Routes, useLocation } from 'react-router-dom';  // Entferne BrowserRouter as Router – wir importieren ihn nicht mehr hier
 
 const PAGES = {
     
@@ -39,8 +39,7 @@ function _getCurrentPage(url) {
     return pageName || Object.keys(PAGES)[0];
 }
 
-// Create a wrapper component that uses useLocation inside the Router context
-function PagesContent() {
+export default function Pages() {  // Entferne PagesContent – mache Pages direkt zur Komponente mit useLocation
     const location = useLocation();
     const currentPage = _getCurrentPage(location.pathname);
     
@@ -63,13 +62,5 @@ function PagesContent() {
                 
             </Routes>
         </Layout>
-    );
-}
-
-export default function Pages() {
-    return (
-        <Router>
-            <PagesContent />
-        </Router>
     );
 }
