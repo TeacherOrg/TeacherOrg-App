@@ -1,5 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { Class, Student, Subject, Lesson, YearlyLesson, Performance, UeberfachlichKompetenz } from '@/api/entities';
+import pb from '@/api/pb';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
