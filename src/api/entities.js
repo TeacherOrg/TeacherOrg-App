@@ -132,23 +132,23 @@ export const User = {
 
   signup: async ({ email, password }) => {
     try {
+      const username = email.split('@')[0]; // Neu: Erstelle username aus Email (z. B. 'test' von test@example.com) – oder lass User eingeben
       const userData = {
-        username: email.split('@')[0], // Neu: Required, z. B. 'test' von test@example.com – oder lass User eingeben
+        username, // Required Field
         email,
         password,
         passwordConfirm: password,
-        role: 'teacher',  // Custom Field – stelle sicher, es existiert in Schema
+        role: 'teacher',  // Custom Field
         emailVisibility: true,
-        // Neu: Wenn 'name' required: name: 'Default Name' oder lass blank, wenn nicht nonempty
       };
       const newUser = await pb.collection('users').create(userData);
       await pb.collection('users').requestVerification(email);
       return { success: true, user: newUser, message: 'Registrierung erfolgreich! Bitte überprüfen Sie Ihre E-Mail.' };
     } catch (error) {
-      console.error('Signup Error Details:', error.data); // Neu: Log detailliertes data für Debug
+      console.error('Signup Error Details:', error.data); // Neu: Log detailliertes data (z. B. { username: { code: 'validation_required' } })
       let errorMessage = 'Ein Fehler ist aufgetreten.';
       if (error.status === 400 && error.data) {
-        errorMessage = `Ungültige Daten: ${JSON.stringify(error.data)}`; // Zeige spezifisch, z. B. "username: cannot be blank"
+        errorMessage = `Ungültige Daten: ${JSON.stringify(error.data)}`; // Zeige spezifisch in UI
       }
       return { success: false, error: errorMessage };
     }

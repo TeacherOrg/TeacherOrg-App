@@ -8,6 +8,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 export default function Login({ onLogin }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [username, setUsername] = useState(''); // Neu: State für username
   const [isRegister, setIsRegister] = useState(false);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -24,6 +25,7 @@ export default function Login({ onLogin }) {
       if (isRegister) {
         // Registrierung: Erstelle User und sende Verification-Email
         result = await pb.collection('users').create({
+          username, // Neu: Required Field für PocketBase
           email,
           password,
           passwordConfirm: password,
@@ -33,12 +35,12 @@ export default function Login({ onLogin }) {
         await pb.collection('users').requestVerification(email);
         setMessage('Registrierung erfolgreich! Bitte überprüfen Sie Ihre E-Mail zur Bestätigung.');
       } else {
-        // Login
+        // Login (kein username needed, nur email/password)
         result = await pb.collection('users').authWithPassword(email, password);
         onLogin(result.record);  // Weiterleiten zur App, passe an pb.authStore.model an falls nötig
       }
     } catch (err) {
-      setError(err.message);
+      setError(err.message || 'Ein Fehler ist aufgetreten. Details: ' + JSON.stringify(err.data)); // Verbessert: Zeige detaillierten Error
     } finally {
       setLoading(false);
     }
@@ -51,6 +53,16 @@ export default function Login({ onLogin }) {
           {isRegister ? 'Registrieren' : 'Anmelden'}
         </h2>
         <form onSubmit={handleSubmit} className="space-y-4">
+          {isRegister && ( // Neu: Username nur bei Registrierung anzeigen
+            <Input
+              type="text"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              placeholder="Benutzername (erforderlich)"
+              className="bg-slate-700 border-slate-600 text-white"
+              required
+            />
+          )}
           <Input
             type="email"
             value={email}

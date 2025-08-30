@@ -136,8 +136,9 @@ export default function Layout({ children, currentPageName }) {
                 </div>
                 {user && (
                   <div className="mt-3 p-3 bg-slate-100 dark:bg-slate-800 rounded-lg">
-                    <p className="text-sm font-medium text-slate-900 dark:text-white truncate">{user.full_name}</p>
+                    <p className="text-sm font-medium text-slate-900 dark:text-white truncate">{user.full_name || user.username}</p> {/* Neu: Fallback zu username */}
                     <p className="text-xs text-slate-500 dark:text-slate-400 truncate">{user.email}</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 truncate">@{user.username}</p> {/* Neu: Username als @-Handle anzeigen */}
                   </div>
                 )}
               </SidebarHeader>
