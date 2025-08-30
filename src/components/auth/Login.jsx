@@ -4,12 +4,12 @@ import pb from '@/api/pb';  // Direkter Import von pb (aus pb.js)
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'; // Neu: Import für Select (aus shadcn/ui, falls installiert)
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'; // Neu: Import Select aus shadcn/ui (installiere, falls nicht: npx shadcn-ui@latest add select)
 
 export default function Login({ onLogin }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [username, setUsername] = useState(''); // Vorherig: Für username
+  const [username, setUsername] = useState(''); // Vorherig
   const [role, setRole] = useState('teacher'); // Neu: State für role, default 'teacher'
   const [isRegister, setIsRegister] = useState(false);
   const [error, setError] = useState(null);
@@ -25,20 +25,21 @@ export default function Login({ onLogin }) {
     try {
       let result;
       if (isRegister) {
+        if (!role) throw new Error('Rolle auswählen!'); // Neu: Lokal prüfen
         // Registrierung: Erstelle User und sende Verification-Email
         result = await pb.collection('users').create({
-          username, // Vorherig
+          username,
           email,
           password,
           passwordConfirm: password,
-          role, // Neu: Gesendete Rolle (required, wenn nonempty aktiviert)
-          emailVisibility: true, // Optional
+          role, // Neu: Gesendet als String ('teacher' etc.)
+          emailVisibility: true,
         });
         // Sende Verification-Email
         await pb.collection('users').requestVerification(email);
         setMessage('Registrierung erfolgreich! Bitte überprüfen Sie Ihre E-Mail zur Bestätigung.');
       } else {
-        // Login (kein role needed)
+        // Login
         result = await pb.collection('users').authWithPassword(email, password);
         onLogin(result.record);
       }
@@ -57,7 +58,7 @@ export default function Login({ onLogin }) {
           {isRegister ? 'Registrieren' : 'Anmelden'}
         </h2>
         <form onSubmit={handleSubmit} className="space-y-4">
-          {isRegister && ( // Username nur bei Registrierung
+          {isRegister && (
             <Input
               type="text"
               value={username}
@@ -67,10 +68,10 @@ export default function Login({ onLogin }) {
               required
             />
           )}
-          {isRegister && ( // Neu: Role-Select nur bei Registrierung
-            <div>
-              <label className="text-white mb-2 block">Rolle auswählen (erforderlich)</label>
-              <Select value={role} onValueChange={setRole}>
+          {isRegister && ( // Neu: Role-Select, required
+            <div className="space-y-2">
+              <label className="text-white">Rolle (erforderlich)</label>
+              <Select value={role} onValueChange={setRole} required>
                 <SelectTrigger className="bg-slate-700 border-slate-600 text-white">
                   <SelectValue placeholder="Rolle wählen" />
                 </SelectTrigger>
