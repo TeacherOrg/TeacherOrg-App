@@ -1,16 +1,16 @@
-// src/components/auth/Login.jsx
+// src/components/auth/Login.jsx (ersetze den vollen Code)
 import React, { useState } from 'react';
-import pb from '@/api/pb';  // Direkter Import von pb (aus pb.js)
+import pb from '@/api/pb';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'; // Neu: Import Select aus shadcn/ui (installiere, falls nicht: npx shadcn-ui@latest add select)
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'; // Neu: Import, falls nicht da (shadcn/ui)
 
 export default function Login({ onLogin }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [username, setUsername] = useState(''); // Vorherig
-  const [role, setRole] = useState('teacher'); // Neu: State für role, default 'teacher'
+  const [username, setUsername] = useState('');
+  const [role, setRole] = useState('teacher'); // Neu: Default 'teacher'
   const [isRegister, setIsRegister] = useState(false);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -25,27 +25,22 @@ export default function Login({ onLogin }) {
     try {
       let result;
       if (isRegister) {
-        if (!username || !role) throw new Error('Benutzername und Rolle ausfüllen!'); // Neu: Lokal prüfen
-        // Registrierung: Erstelle User und sende Verification-Email
         result = await pb.collection('users').create({
           username,
           email,
           password,
           passwordConfirm: password,
-          role, // Gesendet – stelle sicher, value 'teacher' etc. ist
+          role, // Neu: Sende role (required, wenn nonempty)
           emailVisibility: true,
         });
-        // Sende Verification-Email
         await pb.collection('users').requestVerification(email);
         setMessage('Registrierung erfolgreich! Bitte überprüfen Sie Ihre E-Mail zur Bestätigung.');
       } else {
-        // Login
         result = await pb.collection('users').authWithPassword(email, password);
         onLogin(result.record);
       }
     } catch (err) {
-      const errorDetails = err.data ? JSON.stringify(err.data) : err.message;
-      setError(`Fehler: ${errorDetails}`);
+      setError(err.message || JSON.stringify(err.data)); // Details zeigen
     } finally {
       setLoading(false);
     }
@@ -68,9 +63,9 @@ export default function Login({ onLogin }) {
               required
             />
           )}
-          {isRegister && ( // Neu: Role-Select, required
-            <div className="space-y-2">
-              <label className="text-white">Rolle (erforderlich)</label>
+          {isRegister && ( // Neu: Role-Select
+            <div>
+              <label className="text-white block mb-1">Rolle (erforderlich)</label>
               <Select value={role} onValueChange={setRole} required>
                 <SelectTrigger className="bg-slate-700 border-slate-600 text-white">
                   <SelectValue placeholder="Rolle wählen" />
