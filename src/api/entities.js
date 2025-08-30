@@ -43,8 +43,13 @@ class PbEntity {
 
   async create(newData) {
     const entity = this.normalizeData(newData);
-    const created = await this.collection.create(entity);
-    return this.normalizeData(created);
+    try {
+      const created = await this.collection.create(entity);
+      return this.normalizeData(created);
+    } catch (error) {
+      console.error(`Error creating in ${this.name}:`, error.data || error);  // Neu: Log detailliertes error.data
+      throw error;
+    }
   }
 
   async update(id, updates) {

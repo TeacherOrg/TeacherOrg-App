@@ -443,7 +443,7 @@ const SettingsModal = ({ isOpen, onClose }) => {
                         ) : ActiveComponent ? (
                             <>
                                 <ActiveComponent {...getComponentProps()} />
-                                {errorMessage && <p className="text-red-500 font-semibold mt-4">{errorMessage}</p>} // Neu: Error-Anzeige hier
+                                {errorMessage && <p className="text-red-500 font-semibold mt-4">{errorMessage}</p>} 
                             </>
                         ) : (
                            <div className="text-slate-800 dark:text-white">Kategorie nicht gefunden</div>
