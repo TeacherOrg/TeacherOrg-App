@@ -4,11 +4,13 @@ import pb from '@/api/pb';  // Direkter Import von pb (aus pb.js)
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'; // Neu: Import für Select (aus shadcn/ui, falls installiert)
 
 export default function Login({ onLogin }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [username, setUsername] = useState(''); // Neu: State für username
+  const [username, setUsername] = useState(''); // Vorherig: Für username
+  const [role, setRole] = useState('teacher'); // Neu: State für role, default 'teacher'
   const [isRegister, setIsRegister] = useState(false);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -25,22 +27,22 @@ export default function Login({ onLogin }) {
       if (isRegister) {
         // Registrierung: Erstelle User und sende Verification-Email
         result = await pb.collection('users').create({
-          username, // Neu: Required Field für PocketBase (nonempty, unique)
+          username, // Vorherig
           email,
           password,
           passwordConfirm: password,
-          emailVisibility: true, // Optional: Macht E-Mail sichtbar
+          role, // Neu: Gesendete Rolle (required, wenn nonempty aktiviert)
+          emailVisibility: true, // Optional
         });
         // Sende Verification-Email
         await pb.collection('users').requestVerification(email);
         setMessage('Registrierung erfolgreich! Bitte überprüfen Sie Ihre E-Mail zur Bestätigung.');
       } else {
-        // Login (kein username needed)
+        // Login (kein role needed)
         result = await pb.collection('users').authWithPassword(email, password);
-        onLogin(result.record);  // Weiterleiten zur App, passe an pb.authStore.model an falls nötig
+        onLogin(result.record);
       }
     } catch (err) {
-      // Verbessert: Parse detaillierten Error aus PB (z. B. "username: Cannot be blank.")
       const errorDetails = err.data ? JSON.stringify(err.data) : err.message;
       setError(`Fehler: ${errorDetails}`);
     } finally {
@@ -55,7 +57,7 @@ export default function Login({ onLogin }) {
           {isRegister ? 'Registrieren' : 'Anmelden'}
         </h2>
         <form onSubmit={handleSubmit} className="space-y-4">
-          {isRegister && ( // Neu: Username nur bei Registrierung anzeigen
+          {isRegister && ( // Username nur bei Registrierung
             <Input
               type="text"
               value={username}
@@ -64,6 +66,21 @@ export default function Login({ onLogin }) {
               className="bg-slate-700 border-slate-600 text-white"
               required
             />
+          )}
+          {isRegister && ( // Neu: Role-Select nur bei Registrierung
+            <div>
+              <label className="text-white mb-2 block">Rolle auswählen (erforderlich)</label>
+              <Select value={role} onValueChange={setRole}>
+                <SelectTrigger className="bg-slate-700 border-slate-600 text-white">
+                  <SelectValue placeholder="Rolle wählen" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="admin">Admin</SelectItem>
+                  <SelectItem value="teacher">Teacher</SelectItem>
+                  <SelectItem value="student">Student</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           )}
           <Input
             type="email"
