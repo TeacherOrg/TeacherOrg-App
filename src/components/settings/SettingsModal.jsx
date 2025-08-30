@@ -163,7 +163,7 @@ const ProfileSettings = ({
                 </CardContent>
             </Card>
 
-            {/* Rest wie in deiner Version: Benutzerinfo, Darstellung, Navigation, Tutorial */}
+            {/* Rest wie wie in deiner Version: Benutzerinfo, Darstellung, Navigation, Tutorial */}
             <Card>
                 <CardHeader>
                     <CardTitle className="flex items-center gap-3 text-slate-800 dark:text-white">
@@ -273,6 +273,7 @@ const CATEGORIES = [
 const SettingsModal = ({ isOpen, onClose }) => {
     const [activeCategory, setActiveCategory] = useState('Klassen');
     const [isLoading, setIsLoading] = useState(true);
+    const [errorMessage, setErrorMessage] = useState(''); // Neu: Hier platziert, oben in der Komponente!
 
     // All data states
     const [settings, setSettings] = useState(null);
@@ -288,7 +289,14 @@ const SettingsModal = ({ isOpen, onClose }) => {
 
     const loadAllData = useCallback(async () => {
         setIsLoading(true);
+        setErrorMessage(''); // Reset bei jedem Load
         try {
+            if (!pb.authStore.isValid || !pb.authStore.model) {
+                throw new Error('Nicht authentifiziert – bitte einloggen.');
+            }
+            if (pb.authStore.model.role !== 'teacher') {
+                throw new Error('Unzureichende Rechte – nur für Teachers.');
+            }
             const [settingsData, classData, subjectData, holidayData] = await Promise.all([
                 Setting.list(), Class.list(), Subject.list(), Holiday.list()
             ]);
@@ -296,7 +304,22 @@ const SettingsModal = ({ isOpen, onClose }) => {
             if (settingsData.length > 0) {
                 setSettings(settingsData[0]);
             } else {
-                const defaultSettings = await Setting.create({});
+                // Create mit required Fields und Initial-Defaults aus Schema
+                const defaultSettings = await Setting.create({
+                    user_id: pb.authStore.model.id, // Required: Relation zu current User
+                    startTime: '08:00', // Text, initial
+                    lessonsPerDay: 8, // Number, min 1, initial
+                    lessonDuration: 45, // Number, min 1, initial
+                    shortBreak: 5, // Number, min 1, initial
+                    morningBreakAfter: 2, // Number, min 1, initial
+                    morningBreakDuration: 20, // Number, min 1, initial
+                    lunchBreakAfter: 4, // Number, min 1, initial
+                    lunchBreakDuration: 40, // Number, min 1, initial
+                    afternoonBreakAfter: 6, // Number, min 1, initial
+                    afternoonBreakDuration: 15, // Number, min 1, initial
+                    cellWidth: 120, // Number, min 1, initial
+                    cellHeight: 80 // Number, min 1, initial
+                });
                 setSettings(defaultSettings);
             }
             
@@ -314,17 +337,25 @@ const SettingsModal = ({ isOpen, onClose }) => {
                 setUser(fetchedUser); // Neu: Setze user-State
                 setPendingEmail(fetchedUser.email || '');
                 setPendingUserSettings({
-                    preferred_theme: fetchedUser.role || 'dark', // Passe an deine User-Felder an, z.B. fetchedUser.preferred_theme
+                    preferred_theme: fetchedUser.preferred_theme || 'dark', // Passe an deine User-Felder an, z.B. fetchedUser.preferred_theme
                     default_start_page: fetchedUser.default_start_page || 'Timetable'
                 });
+            } else {
+                setErrorMessage('User-Daten konnten nicht geladen werden.');
             }
 
         } catch (error) {
             console.error("Failed to load settings data:", error);
+            if (error.status === 400) {
+                console.log('Validation Errors:', error.data); // Zeige spezifische PB-Errors (z.B. { field: { code: 'validation_required' } })
+                setErrorMessage(`Ungültige Daten: ${JSON.stringify(error.data)}`);
+            } else {
+                setErrorMessage(`Fehler: ${error.message}`);
+            }
         } finally {
             setIsLoading(false);
         }
-    }, [activeClassId]);
+    }, [activeClassId]); // Optional: Für Reload bei Class-Change
 
     useEffect(() => {
         if (isOpen) {
@@ -410,7 +441,10 @@ const SettingsModal = ({ isOpen, onClose }) => {
                         {isLoading ? (
                             <CalendarLoader />
                         ) : ActiveComponent ? (
-                            <ActiveComponent {...getComponentProps()} />
+                            <>
+                                <ActiveComponent {...getComponentProps()} />
+                                {errorMessage && <p className="text-red-500 font-semibold mt-4">{errorMessage}</p>} // Neu: Error-Anzeige hier
+                            </>
                         ) : (
                            <div className="text-slate-800 dark:text-white">Kategorie nicht gefunden</div>
                         )}

@@ -1,15 +1,16 @@
 import { useState, useEffect } from 'react';
-import { pb } from '@/entities'; 
-import { useRouter } from 'next/router'; // Oder React Router, je nach Framework
+import pb from '@/api/pb'; // Passe an deinen Import an (früher '@/entities', aber pb direkt)
+import { useNavigate, useSearchParams } from 'react-router-dom'; // Neu: Von react-router-dom
 
 const ChangePassword = () => {
   const [newPassword, setNewPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState(''); // Neu: Bestätigungsfeld hinzufügen
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const router = useRouter();
-  const { token } = router.query; // Token aus URL holen (z.B. /change-password?token=...)
+  const navigate = useNavigate(); // Neu: Für Redirects
+  const [searchParams] = useSearchParams(); // Neu: Für Query-Params
+  const token = searchParams.get('token'); // Token aus URL holen (z.B. /change-password?token=...)
 
   useEffect(() => {
     if (!token) {
@@ -29,7 +30,7 @@ const ChangePassword = () => {
     try {
       await pb.collection('users').confirmPasswordReset(token, newPassword, confirmPassword);
       setMessage('Passwort geändert! Du kannst dich jetzt einloggen.');
-      router.push('/login');
+      navigate('/login'); // Neu: Redirect mit navigate
     } catch (err) {
       setError(`Fehler: ${err.message}`);
     } finally {

@@ -93,7 +93,7 @@ class PbEntity {
       }
       return `${key} = ${this.formatValue(value)}`;
     }).join(' && ');
-  },
+  };
 
   // Neue Hilfsfunktion hinzufügen (direkt unter buildFilter)
   formatValue(value) {
