@@ -16,6 +16,7 @@ function App() {
   useEffect(() => {
     // Normaler Auth-Check (kein Bypass)
     const currentUser = User.current();
+    console.log('App.jsx: Current User?', currentUser); // Sollte null sein bei neuem Browser
     setUser(currentUser);
     setLoading(false);
 
