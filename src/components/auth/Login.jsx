@@ -25,14 +25,14 @@ export default function Login({ onLogin }) {
     try {
       let result;
       if (isRegister) {
-        if (!role) throw new Error('Rolle auswählen!'); // Neu: Lokal prüfen
+        if (!username || !role) throw new Error('Benutzername und Rolle ausfüllen!'); // Neu: Lokal prüfen
         // Registrierung: Erstelle User und sende Verification-Email
         result = await pb.collection('users').create({
           username,
           email,
           password,
           passwordConfirm: password,
-          role, // Neu: Gesendet als String ('teacher' etc.)
+          role, // Gesendet – stelle sicher, value 'teacher' etc. ist
           emailVisibility: true,
         });
         // Sende Verification-Email
