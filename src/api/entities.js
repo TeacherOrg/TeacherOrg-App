@@ -89,10 +89,17 @@ class PbEntity {
         if (value.$gt) return `${key} > ${value.$gt}`;
         if (value.$lt) return `${key} < ${value.$lt}`;
         if (value.$in) return `${key} ~ '${value.$in.join('|')}'`; // Annäherung für IN
-        if (value.$eq) return `${key} = ${value.$eq}`;
+        if (value.$eq) return `${key} = ${this.formatValue(value.$eq)}`;
       }
-      return `${key} = '${value}'`; // Für Strings escapen
+      return `${key} = ${this.formatValue(value)}`;
     }).join(' && ');
+  },
+
+  // Neue Hilfsfunktion hinzufügen (direkt unter buildFilter)
+  formatValue(value) {
+    if (typeof value === 'string') return `'${value.replace(/'/g, "\\'")}'`; // Escape single quotes
+    if (typeof value === 'number' || typeof value === 'boolean') return value;
+    return `'${value}'`; // Fallback für andere Typen
   }
 }
 
@@ -124,15 +131,26 @@ export const User = {
   },
 
   signup: async ({ email, password }) => {
-    const userData = {
-      email,
-      password,
-      passwordConfirm: password,
-      role: 'teacher'  // Default role als 'teacher'
-    };
-    const newUser = await pb.collection('users').create(userData);
-    // Automatisch einloggen nach Signup
-    return await User.login({ email, password });
+    try {
+      const userData = {
+        email,
+        password,
+        passwordConfirm: password,
+        role: 'teacher',  // Default role als 'teacher'
+        emailVisibility: true,  // Optional, für Verification
+      };
+      const newUser = await pb.collection('users').create(userData);
+      await pb.collection('users').requestVerification(email);
+      return { success: true, user: newUser, message: 'Registrierung erfolgreich! Bitte überprüfen Sie Ihre E-Mail.' };
+    } catch (error) {
+      let errorMessage = 'Ein Fehler ist aufgetreten.';
+      if (error.status === 400 && error.data?.email) {
+        errorMessage = 'E-Mail ist bereits vergeben oder ungültig.';
+      } else if (error.status === 400 && error.data?.password) {
+        errorMessage = 'Passwort ist zu schwach oder stimmt nicht überein.';
+      }
+      return { success: false, error: errorMessage };
+    }
   },
 
   logout: () => {

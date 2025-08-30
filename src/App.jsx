@@ -7,30 +7,25 @@ import Login from "@/components/auth/Login";
 import pb from '@/api/pb';  
 import { User } from '@/api/entities';  
 import CalendarLoader from "@/components/ui/CalendarLoader";  // Für Loading-State
+import AuthGuard from '@/components/auth/AuthGuard';  // Neu: Import des AuthGuards
 
 function App() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [bypassAuth, setBypassAuth] = useState(true);  // Temporär true für Tests ohne Login
 
   useEffect(() => {
-    if (bypassAuth) {
-      // Simuliere User für Tests (deaktiviere Auth)
-      setUser({ id: 'test_user', email: 'test@example.com', role: 'admin' });  // Fake-User
-      setLoading(false);
-    } else {
-      // Normaler Auth-Check
-      const currentUser = User.current();
-      setUser(currentUser);
-      setLoading(false);
+    // Normaler Auth-Check (kein Bypass)
+    const currentUser = User.current();
+    setUser(currentUser);
+    setLoading(false);
 
-      const unsubscribe = pb.authStore.onChange((token, model) => {
-        setUser(model || null);
-      });
+    // Listener für Auth-Changes (z. B. nach Login/Logout)
+    const unsubscribe = pb.authStore.onChange((token, model) => {
+      setUser(model || null);
+    });
 
-      return () => pb.authStore.clear();
-    }
-  }, [bypassAuth]);
+    return () => unsubscribe();  // Cleanup
+  }, []);
 
   if (loading) {
     return (
@@ -40,13 +35,15 @@ function App() {
     );
   }
 
-  if (!user && !bypassAuth) {
+  if (!user) {
     return <Login onLogin={(loggedUser) => setUser(loggedUser)} />;
   }
 
   return (
     <>
-      <Pages />
+      <AuthGuard>  {/* Neu: Wrap um Pages für protected Routes */}
+        <Pages />
+      </AuthGuard>
       <Toaster />
     </>
   );

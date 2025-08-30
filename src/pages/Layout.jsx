@@ -92,8 +92,15 @@ export default function Layout({ children, currentPageName }) {
   const handleLogout = async () => {
     try {
       await User.logout();
+      // Redirect zu Login (nutze react-router's useNavigate, da du useLocation hast)
+      const navigate = useNavigate(); // Import: import { useNavigate } from "react-router-dom";
+      navigate('/login'); // Oder wo dein Login ist
+      // Optional: Toast zeigen (wenn du Toaster hast)
+      // toast.success('Erfolgreich ausgeloggt!');
     } catch (error) {
       console.error("Logout error:", error);
+      // Optional: Error-Toast
+      // toast.error('Logout fehlgeschlagen. Bitte versuchen Sie es erneut.');
     }
   };
 
