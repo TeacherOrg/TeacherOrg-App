@@ -62,12 +62,19 @@ export default function ClassesSettings({ classes, refreshData }) {
     const handleAddClass = async () => {
         if (!newClassName.trim()) return;
         try {
-            const newClass = await Class.create({ name: newClassName.trim() });
+            const currentUserId = pb.authStore.model.id;  // Aktueller User (Teacher)
+            const currentYear = new Date().getFullYear();  // Für school_year, falls required
+            const newClass = await Class.create({ 
+                name: newClassName.trim(),
+                user_id: currentUserId,  // Required Relation zu users
+                teacher_id: currentUserId,  // Required Relation zu teachers (angenommen users mit role=teacher)
+                school_year: currentYear  // Wenn required; ansonsten entfernen
+            });
             setNewClassName('');
             await refreshData();
             setActiveClassId(newClass.id);
         } catch (error) {
-            console.error("Error creating class:", error);
+            console.error("Error creating class:", error.data);  // Log detailliert
         }
     };
     
