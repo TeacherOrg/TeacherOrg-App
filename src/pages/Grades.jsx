@@ -13,13 +13,11 @@ export default function GradesPage() {
   const [classes, setClasses] = useState([]);
   const [activeClassId, setActiveClassId] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
-
-  useEffect(() => {
-    loadData();
-  }, []);
+  const [error, setError] = useState(null);  // Neu: Für Error-Feedback
 
   const loadData = useCallback(async () => {
     setIsLoading(true);
+    setError(null);  // Reset Error
     try {
       const [
         studentsData, 
@@ -37,22 +35,29 @@ export default function GradesPage() {
       setPerformances(performancesData || []);
       setUeberfachlich(ueberfachlichData || []);
       setClasses(classesData || []);
-      
-      if (classesData?.length > 0 && !activeClassId) {
-        setActiveClassId(classesData[0].id);
-      }
     } catch (error) {
       console.error("Error loading data:", error);
+      setError("Fehler beim Laden der Daten. Bitte versuchen Sie es erneut.");
     } finally {
       setIsLoading(false);
     }
-  }, [activeClassId]);
+  }, []);
+
+  // Neu: Separater Effect für initial Load
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  // Neu: Effect für auto-set activeClassId nach Classes-Load
+  useEffect(() => {
+    if (classes.length > 0 && !activeClassId) {
+      setActiveClassId(classes[0].id);
+    }
+  }, [classes, activeClassId]);
 
   const studentsForActiveClass = students.filter(s => s.class_id === activeClassId);
   const performancesForActiveClass = performances.filter(p => p.class_id === activeClassId);
   const ueberfachlichForActiveClass = ueberfachlich.filter(u => u.class_id === activeClassId);
-
-  const totalPerformances = performancesForActiveClass.length;
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-900 p-6 transition-colors duration-300">
@@ -91,7 +96,7 @@ export default function GradesPage() {
               className="bg-transparent text-gray-900 dark:text-white font-medium border-none outline-none w-full"
             >
               <option disabled value="">Klasse auswählen...</option>
-              {(classes || []).map(cls => (
+              {classes.map(cls => (
                 <option key={cls.id} value={cls.id}>{cls.name}</option>
               ))}
             </select>
@@ -106,6 +111,11 @@ export default function GradesPage() {
         >
           {isLoading ? (
             <CalendarLoader />
+          ) : error ? (
+            <div className="p-4 text-red-500">
+              {error}
+              <Button onClick={loadData} className="ml-4">Erneut versuchen</Button>
+            </div>
           ) : activeClassId ? (
             <PerformanceView
               students={studentsForActiveClass}
