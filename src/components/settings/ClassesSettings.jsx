@@ -1,12 +1,12 @@
 import React, { useState, useRef } from 'react';
 import { Class, Student, Subject, Lesson, YearlyLesson, Performance, UeberfachlichKompetenz } from '@/api/entities';
-import pb from '@/api/pb';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Plus, Trash2, ChevronDown, ChevronUp, FileText, Loader2 } from 'lucide-react';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import pb from '@/api/pb'; // Neu: Importiere pb hier
 
 // Utility functions for cascading deletes with rate limiting
 const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
@@ -52,7 +52,7 @@ export default function ClassesSettings({ classes, refreshData }) {
     const loadStudents = async () => {
         if (!activeClassId) return;
         try {
-            const studentsData = await Student.filter({ class_id: activeClassId });
+            const studentsData = await Student.filter({ class_id: activeClassId }, { $cancelKey: `students-load-${activeClassId}` });
             setStudents(studentsData);
         } catch (error) {
             console.error("Error loading students:", error);
@@ -71,7 +71,7 @@ export default function ClassesSettings({ classes, refreshData }) {
                 teacher_id: currentUserId,
                 school_year: currentYear
             };
-            console.log("Sending Payload to PB:", payload);  // Neu: Log vor Send
+            console.log("Sending Payload to PB:", payload);  // Debug
             console.log("Auth valid?", pb.authStore.isValid, "User ID:", currentUserId);  // Check Auth
 
             const newClass = await Class.create(payload);
@@ -79,14 +79,14 @@ export default function ClassesSettings({ classes, refreshData }) {
             await refreshData();
             setActiveClassId(newClass.id);
         } catch (error) {
-            console.error("Full Error Object:", error);  // Log alles (Stack, name, message)
-            if (error.name) console.error("Error Type:", error.name);  // z. B. TypeError
+            console.error("Full Error Object:", error);
+            if (error.name) console.error("Error Type:", error.name);
             if (error.message) console.error("Error Message:", error.message);
             if (error.stack) console.error("Stack Trace:", error.stack);
-            if (error.data) console.error("PB Data:", error.data);  // Validation-Details
-            if (error.status) console.error("Status:", error.status);  // 400 usw.
-            alert(`Fehler beim Erstellen: ${error.message || 'Unbekannt'}`);  // UI-Feedback
-            loadAllData();  // Optional: Reload auf Error
+            if (error.data) console.error("PB Data:", error.data);
+            if (error.status) console.error("Status:", error.status);
+            alert(`Fehler beim Erstellen: ${error.message || 'Unbekannt'}`);
+            loadAllData();  // Optional: Reload auf Error, falls definiert
         }
     };
     
@@ -166,11 +166,22 @@ export default function ClassesSettings({ classes, refreshData }) {
         if (!activeClassId || !newStudent.first_name.trim() || !newStudent.last_name.trim()) return;
         try {
             const fullName = `${newStudent.first_name.trim()} ${newStudent.last_name.trim()}`;
-            await Student.create({ name: fullName, class_id: activeClassId });
+            const currentUserId = pb.authStore.model.id;  // Aktueller User für user_id
+            const generatedEmail = `${fullName.replace(/\s+/g, '.').toLowerCase()}@school.example.com`;  // Generiere unique email (required & unique in PB)
+            const payload = {
+                name: fullName,
+                class_id: activeClassId,
+                user_id: currentUserId,  // Required
+                email: generatedEmail  // Required, unique – passe an, wenn du echte Emails willst
+            };
+            console.log("Student Payload:", payload);  // Debug
+
+            await Student.create(payload, { $cancelKey: `student-create-${Date.now()}` });  // Neu: $cancelKey für unique
             setNewStudent({ first_name: '', last_name: '' });
             await loadStudents();
         } catch (error) {
-            console.error("Error adding student:", error);
+            console.error("Full Error adding student:", error);
+            if (error.data) console.error("Error Data:", error.data);  // Zeigt Validation-Details (z. B. { email: { code: 'validation_not_unique' } })
         }
     };
 
@@ -217,6 +228,7 @@ export default function ClassesSettings({ classes, refreshData }) {
         
         try {
             const lines = studentList.split('\n').filter(line => line.trim());
+            const currentUserId = pb.authStore.model.id;
             const newStudents = [];
             
             for (const line of lines) {
@@ -229,15 +241,18 @@ export default function ClassesSettings({ classes, refreshData }) {
                         name = `${parts[0]} ${parts[1]}`;
                     }
                     
+                    const email = `${name.replace(/\s+/g, '.').toLowerCase()}@school.example.com`;
                     newStudents.push({
                         name: name,
-                        class_id: activeClassId
+                        class_id: activeClassId,
+                        user_id: currentUserId,  // Required
+                        email  // Required
                     });
                 }
             }
             
             if (newStudents.length > 0) {
-                await Student.bulkCreate(newStudents);
+                await Student.bulkCreate(newStudents, { $cancelKey: `students-bulk-${Date.now()}` });
                 await loadStudents();
                 setStudentList('');
                 setShowImportDialog(false);
