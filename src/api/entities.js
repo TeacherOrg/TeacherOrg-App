@@ -3,7 +3,7 @@ import pb from '@/api/pb';
 class PbEntity {
   constructor(name) {
     this.name = name.toLowerCase();
-    this.collection = pb.collection(`${this.name}s`); // Plural-Namen, z. B. 'lessons' für Lesson
+    this.collection = pb.collection(`${this.name}s`);
   }
 
   normalizeData(item) {
@@ -14,7 +14,11 @@ class PbEntity {
   }
 
   async list(query = {}) {
-    const params = { filter: this.buildFilter(query), perPage: 500 }; // Passe Limit an Bedarf an
+    const params = { 
+      filter: this.buildFilter(query), 
+      perPage: 500,
+      $cancelKey: `list-${this.name}-${Date.now()}`  // Neu: Unique Key für list
+    }; 
     const { items } = await this.collection.getList(1, params.perPage, params);
     return items.map(this.normalizeData);
   }
@@ -34,7 +38,8 @@ class PbEntity {
 
   async findById(id) {
     try {
-      const item = await this.collection.getOne(id);
+      const params = { $cancelKey: `getOne-${this.name}-${id}-${Date.now()}` };  // Neu: Unique für getOne
+      const item = await this.collection.getOne(id, params);
       return this.normalizeData(item);
     } catch {
       return null;
@@ -43,23 +48,26 @@ class PbEntity {
 
   async create(newData) {
     const entity = this.normalizeData(newData);
+    const params = { $cancelKey: `create-${this.name}-${Date.now()}` };  // Neu: Unique für create
     try {
-      const created = await this.collection.create(entity);
+      const created = await this.collection.create(entity, params);
       return this.normalizeData(created);
     } catch (error) {
-      console.error(`Error creating in ${this.name}:`, error.data || error);  // Neu: Log detailliertes error.data
+      console.error(`Error creating in ${this.name}:`, error.data || error);
       throw error;
     }
   }
 
   async update(id, updates) {
-    const updated = await this.collection.update(id, this.normalizeData(updates));
+    const params = { $cancelKey: `update-${this.name}-${id}-${Date.now()}` };  // Neu: Unique für update
+    const updated = await this.collection.update(id, this.normalizeData(updates), params);
     return this.normalizeData(updated);
   }
 
   async delete(id) {
     try {
-      await this.collection.delete(id);
+      const params = { $cancelKey: `delete-${this.name}-${id}-${Date.now()}` };  // Neu: Unique für delete
+      await this.collection.delete(id, params);
       return true;
     } catch {
       return false;
@@ -100,7 +108,6 @@ class PbEntity {
     }).join(' && ');
   };
 
-  // Neue Hilfsfunktion hinzufügen (direkt unter buildFilter)
   formatValue(value) {
     if (typeof value === 'string') return `'${value.replace(/'/g, "\\'")}'`; // Escape single quotes
     if (typeof value === 'number' || typeof value === 'boolean') return value;
