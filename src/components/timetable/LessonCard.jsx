@@ -5,7 +5,7 @@ const LessonCard = ({ lesson, isDragging, onEdit, onMouseEnter, onMouseLeave, on
   if (!lesson) return null;
 
   const {
-    subject,
+    expand,  // Neu: Verwende expand für Relations
     description,
     topic,
     color,
@@ -15,6 +15,8 @@ const LessonCard = ({ lesson, isDragging, onEdit, onMouseEnter, onMouseLeave, on
     is_half_class,
     isGradient,
   } = lesson;
+
+  const subjectName = expand?.subject?.name || 'Unbekannt';  // Neu: Hole Name aus expand (Fallback, falls nicht geladen)
 
   const cardStyle = {
     background: isGradient ? color : `linear-gradient(135deg, ${color} 0%, ${adjustColor(color, -20)} 100%)`,
@@ -40,7 +42,7 @@ const LessonCard = ({ lesson, isDragging, onEdit, onMouseEnter, onMouseLeave, on
         </div>
       )}
       <div className={`font-bold text-sm ${is_allerlei ? 'mb-1' : ''}`}>
-        {is_allerlei ? 'Allerlei' : subject}
+        {is_allerlei ? 'Allerlei' : subjectName}  {/* Geändert: subjectName statt subject */}
       </div>
       {is_allerlei && (
         <div className="text-[10px] opacity-80 leading-tight">

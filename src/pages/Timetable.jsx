@@ -21,6 +21,7 @@ import { adjustColor } from '@/utils/colorUtils';
 import { useLessonStore } from '@/store'; // Passe den Pfad an, falls nötig
 import { QueryClient, QueryClientProvider, useQuery, useQueryClient } from '@tanstack/react-query';
 import pb from '@/api/pb';
+
 const ACADEMIC_WEEKS = 52; // Increased to 52 for full year cycle
 function getCurrentWeek() {
   const now = new Date();
@@ -32,15 +33,15 @@ function getCurrentWeek() {
 function getWeekInfo(week, year) {
     // Create January 4th of the given year (always in week 1)
     const jan4 = new Date(year, 0, 4);
-  
+ 
     // Get the Monday of week 1
     const mondayOfWeek1 = new Date(jan4);
     mondayOfWeek1.setDate(jan4.getDate() - ((jan4.getDay() + 6) % 7));
-  
+ 
     // Calculate the Monday of the requested week
     const monday = new Date(mondayOfWeek1);
     monday.setDate(mondayOfWeek1.getDate() + (week - 1) * 7);
-  
+ 
     // Calculate Friday of the same week
     const friday = new Date(monday);
     friday.setDate(monday.getDate() + 4);
@@ -51,7 +52,7 @@ function getWeekInfo(week, year) {
     mondayForHolidayCheck.setHours(0, 0, 0, 0);
     const fridayForHolidayCheck = new Date(friday);
     fridayForHolidayCheck.setHours(23, 59, 59, 999);
-  
+ 
     return {
         start: mondayForHolidayCheck,
         end: fridayForHolidayCheck,
@@ -84,7 +85,7 @@ function generateTimeSlots(settings) {
     let currentTime = new Date(2000, 0, 1, startHour, startMinute, 0);
     for (let i = 1; i <= lessonsPerDay; i++) {
         const slotStartTime = new Date(currentTime);
-      
+     
         currentTime.setMinutes(currentTime.getMinutes() + lessonDuration);
         const slotEndTime = new Date(currentTime);
         slots.push({
@@ -227,9 +228,7 @@ function InnerTimetablePage() {
       coordinateGetter: sortableKeyboardCoordinates,
     })
   );
-
   const gridRef = useRef(null);
-
   useEffect(() => {
     if (viewMode !== 'week') {
       const applyCellHeight = () => {
@@ -313,7 +312,6 @@ function InnerTimetablePage() {
       }
     }
   }, [currentView]);
-
   const handlePrint = () => {
     if (!gridRef.current) return;
     const printWin = window.open('', '', 'width=800,height=600');
@@ -329,7 +327,6 @@ function InnerTimetablePage() {
     printWin.document.close();
     printWin.focus(); // Optional: Fokussiert das Fenster, um Popups zu vermeiden
   };
-
   const handleViewChange = (view) => {
     setCurrentView(view);
     if (view === 'Tag') {
@@ -344,7 +341,7 @@ function InnerTimetablePage() {
   const reassignYearlyLessonLinks = useCallback(async (subjectName, currentLessons, yearlyLessonsParam = yearlyLessons) => {
     const dayOrder = { monday: 1, tuesday: 2, wednesday: 3, thursday: 4, friday: 5 };
     const lessonsForSubject = currentLessons
-      .filter(l => l.subject === subjectName && !l.is_allerlei && l.week_number === currentWeek)
+      .filter(l => l.expand?.subject?.name === subjectName && !l.is_allerlei && l.week_number === currentWeek)
       .sort((a, b) => {
         const dayDiff = dayOrder[a.day_of_week] - dayOrder[b.day_of_week];
         if (dayDiff !== 0) return dayDiff;
@@ -357,7 +354,7 @@ function InnerTimetablePage() {
         if (id) integratedYearlyIds.add(id);
       }));
     const yearlyLessonsForSubject = yearlyLessonsParam
-      .filter(yl => yl.subject === subjectName && yl.week_number === currentWeek)
+      .filter(yl => yl.expand?.subject?.name === subjectName && yl.week_number === currentWeek)
       .sort((a, b) => Number(a.lesson_number) - Number(b.lesson_number));
     const normalYearlies = yearlyLessonsForSubject.filter(yl => !yl.is_half_class);
     const halfYearlies = yearlyLessonsForSubject.filter(yl => yl.is_half_class);
@@ -482,12 +479,11 @@ function InnerTimetablePage() {
     setAllLessons(Array.from(updatedLessonsMap.values()));
     return Array.from(updatedLessonsMap.values());
   }, [currentWeek, yearlyLessons, setAllLessons, currentYear]);
-
   const updateYearlyLessonOrder = useCallback(async (subjectName, currentLessons, yearlyLessonsParam = yearlyLessons) => {
     const dayOrder = { monday: 1, tuesday: 2, wednesday: 3, thursday: 4, friday: 5 };
     const contributingEvents = [];
     currentLessons
-      .filter(l => l.subject === subjectName && !l.is_allerlei && l.week_number === currentWeek)
+      .filter(l => l.expand?.subject?.name === subjectName && !l.is_allerlei && l.week_number === currentWeek)
       .forEach(l => {
         contributingEvents.push({
           type: 'linked',
@@ -502,12 +498,12 @@ function InnerTimetablePage() {
     currentLessons
       .filter(l => l.is_allerlei && l.week_number === currentWeek && l.allerlei_yearly_lesson_ids?.some(id => {
         const yl = yearlyLessonsParam.find(y => y.id === id);
-        return yl && yl.subject === subjectName;
+        return yl && yl.expand?.subject?.name === subjectName;
       }))
       .forEach(l => {
         const ylIdForSubject = l.allerlei_yearly_lesson_ids.find(id => {
           const yl = yearlyLessonsParam.find(y => y.id === id);
-          return yl && yl.subject === subjectName;
+          return yl && yl.expand?.subject?.name === subjectName;
         });
         if (ylIdForSubject) {
           contributingEvents.push({
@@ -550,7 +546,7 @@ function InnerTimetablePage() {
       }
     }
     const allYearlyForSubject = yearlyLessonsParam
-      .filter(yl => yl.subject === subjectName && yl.week_number === currentWeek)
+      .filter(yl => yl.expand?.subject?.name === subjectName && yl.week_number === currentWeek)
       .sort((a, b) => Number(a.lesson_number) - Number(b.lesson_number));
     const unlinkedYearly = allYearlyForSubject
       .filter(yl => !orderedScheduledYearlyIds.includes(yl.id))
@@ -576,7 +572,6 @@ function InnerTimetablePage() {
     const refreshedYearly = await YearlyLesson.list();
     setYearlyLessons(refreshedYearly.map(l => ({ ...l, lesson_number: Number(l.lesson_number) })));
   }, [currentWeek, yearlyLessons, setYearlyLessons]);
-
   const handleCreateLesson = (dayOfWeek, periodSlot, subject = null) => {
     setSlotInfo({ day: dayOfWeek, period: periodSlot, week: currentWeek });
     setInitialSubjectForModal(subject);
@@ -632,14 +627,15 @@ function InnerTimetablePage() {
       if (!lessonData.isNew) {
         oldLesson = allLessons.find(l => l.id === lessonData.id);
       }
-    
+   
       if (lessonData.isNew) {
         const { isNew, steps, ...createDataWithoutSteps } = lessonData;
         if (lessonData.is_allerlei) {
           createDataWithoutSteps.steps = steps;
         }
-        subjectsToReassign.add(createDataWithoutSteps.subject);
-      
+        const subjectName = subjects.find(s => s.id === createDataWithoutSteps.subject)?.name; 
+        subjectsToReassign.add(subjectName);
+     
         if (!createDataWithoutSteps.start_time || !createDataWithoutSteps.end_time) {
           const timeSlot = timeSlots.find(ts => ts.period === createDataWithoutSteps.period_slot);
           if (timeSlot) {
@@ -652,11 +648,11 @@ function InnerTimetablePage() {
         // Neu: Log den Payload zum Debuggen
         console.log('Create payload for lesson:', createDataWithoutSteps);
         const newLesson = await Lesson.create(createDataWithoutSteps);
-      
+     
         if (!newLesson.yearly_lesson_id && !newLesson.is_allerlei && newLesson.subject) {
           const existingYearlyForSub = yearlyLessons
             .filter(yl => yl.subject === newLesson.subject && yl.week_number === newLesson.week_number);
-        
+       
           const nextLessonNumber = existingYearlyForSub.length > 0
             ? Math.max(...existingYearlyForSub.map(yl => yl.lesson_number)) + 1
             : 1;
@@ -673,14 +669,14 @@ function InnerTimetablePage() {
             is_allerlei: newLesson.is_allerlei || false,
             is_half_class: newLesson.is_half_class || false,
           };
-        
+       
           const createdYearlyLesson = await YearlyLesson.create(newYearlyLessonPayload);
-        
+       
           await Lesson.update(newLesson.id, { yearly_lesson_id: createdYearlyLesson.id });
           newLesson.yearly_lesson_id = createdYearlyLesson.id;
           optimisticUpdateYearlyLessons(createdYearlyLesson, true);
         }
-      
+     
         optimisticUpdateAllLessons(newLesson, true);
         if (newLesson.yearly_lesson_id && !newLesson.is_allerlei) {
           const yearlyLessonToUpdate = yearlyLessons.find(yl => yl.id === newLesson.yearly_lesson_id);
@@ -693,10 +689,10 @@ function InnerTimetablePage() {
               is_exam: newLesson.is_exam || false,
               is_half_class: newLesson.is_half_class || false
             };
-          
+         
             console.log('Syncing new weekly lesson back to yearly lesson:', yearlyLessonToUpdate.id, yearlyUpdateData);
             await YearlyLesson.update(yearlyLessonToUpdate.id, yearlyUpdateData);
-          
+         
             optimisticUpdateYearlyLessons(yearlyLessonToUpdate.id, yearlyUpdateData);
           }
         }
@@ -722,8 +718,14 @@ function InnerTimetablePage() {
         if (lessonData.is_allerlei) {
           updateDataWithoutSteps.steps = steps;
         }
-        if (oldLesson?.subject) subjectsToReassign.add(oldLesson.subject);
-        if (updateDataWithoutSteps.subject) subjectsToReassign.add(updateDataWithoutSteps.subject);
+        if (oldLesson?.subject) {  
+          const oldSubjectName = subjects.find(s => s.id === oldLesson.subject)?.name;  
+          subjectsToReassign.add(oldSubjectName);  
+        }
+        if (updateDataWithoutSteps.subject) {  
+          const updateSubjectName = subjects.find(s => s.id === updateDataWithoutSteps.subject)?.name;  
+          subjectsToReassign.add(updateSubjectName);  
+        }
         if (oldLesson && oldLesson.is_allerlei) {
             const oldSubs = oldLesson.allerlei_subjects || [];
             const newSubs = lessonData.is_allerlei ? (lessonData.allerlei_subjects || []) : [];
@@ -736,11 +738,12 @@ function InnerTimetablePage() {
               oldSubs.forEach(sub => subjectsToReassign.add(sub));
             }
         } else if (oldLesson && !oldLesson.is_allerlei && lessonData.is_allerlei) {
-            subjectsToReassign.add(oldLesson.subject);
+            const oldSubjectName = subjects.find(s => s.id === oldLesson.subject)?.name;  
+            subjectsToReassign.add(oldSubjectName);
         }
         console.log('Updating lesson with data:', updateDataWithoutSteps);
         await Lesson.update(id, updateDataWithoutSteps);
-      
+     
         const updatedLesson = { ...oldLesson, ...updateDataWithoutSteps };
         optimisticUpdateAllLessons(updatedLesson);
         if (updatedLesson.yearly_lesson_id && !updatedLesson.is_allerlei) {
@@ -754,10 +757,10 @@ function InnerTimetablePage() {
               is_exam: updatedLesson.is_exam || false,
               is_half_class: updatedLesson.is_half_class || false
             };
-          
+         
             console.log('Syncing updated weekly lesson back to yearly lesson:', yearlyLessonToUpdate.id, yearlyUpdateData);
             await YearlyLesson.update(yearlyLessonToUpdate.id, yearlyUpdateData);
-          
+         
             optimisticUpdateYearlyLessons(yearlyLessonToUpdate.id, yearlyUpdateData);
           }
         }
@@ -765,7 +768,14 @@ function InnerTimetablePage() {
       for (const deleteId of toDeleteIds) {
         const lessonToDelete = allLessons.find(l => l.id === deleteId);
         if (lessonToDelete) {
-          if (lessonToDelete.subject) subjectsToReassign.add(lessonToDelete.subject);
+          if (lessonToDelete.subject) {  
+            const deleteSubjectName = subjects.find(s => s.id === lessonToDelete.subject)?.name;  
+            if (deleteSubjectName) {  
+              subjectsToReassign.add(deleteSubjectName);  
+            } else {  
+              console.warn('Subject name not found for ID:', lessonToDelete.subject);  
+            }  
+          }
           if (lessonToDelete.is_allerlei && lessonToDelete.allerlei_subjects) {
             lessonToDelete.allerlei_subjects.forEach(sub => subjectsToReassign.add(sub));
           }
@@ -794,14 +804,14 @@ function InnerTimetablePage() {
           const allSteps = lessonData.steps || [];
           const pSteps = allSteps.filter(s => !s.id?.startsWith('second-'));
           const sSteps = allSteps.filter(s => s.id?.startsWith('second-')).map(s => ({ ...s, id: s.id.replace('second-', '') }));
-        
+       
           const primaryUpdate = {
             steps: pSteps,
             notes: lessonData.notes || primaryYL.notes || '',
             is_double_lesson: true,
             second_yearly_lesson_id: secondYL.id,
           };
-        
+       
           await YearlyLesson.update(primaryYL.id, primaryUpdate);
           await YearlyLesson.update(secondYL.id, { steps: sSteps, is_double_lesson: true });
           optimisticUpdateYearlyLessons(primaryYL.id, primaryUpdate);
@@ -824,12 +834,12 @@ function InnerTimetablePage() {
           }
         }
       }
-    
+   
       const refreshedYearly = await YearlyLesson.list();
       setYearlyLessons(refreshedYearly.map(l => ({ ...l, lesson_number: Number(l.lesson_number) })));
-    
+   
       let finalLessons = allLessons;
-    
+   
       setAllLessons(JSON.parse(JSON.stringify(finalLessons)));
       console.log('Set deep-copied finalLessons:', finalLessons);
       for (const sub of subjectsToReassign) {
@@ -838,7 +848,7 @@ function InnerTimetablePage() {
         }
       }
       setAllLessons(JSON.parse(JSON.stringify(finalLessons)));
-    
+   
       setIsModalOpen(false);
       setEditingLesson(null);
       setInitialSubjectForModal(null);
@@ -896,7 +906,14 @@ function InnerTimetablePage() {
       }
       removeAllLesson(lessonId);
       const subjectsToReassign = new Set();
-      if (lessonToDelete.subject) subjectsToReassign.add(lessonToDelete.subject);
+      if (lessonToDelete.subject) {  
+        const deleteSubjectName = subjects.find(s => s.id === lessonToDelete.subject)?.name;  
+        if (deleteSubjectName) {  
+          subjectsToReassign.add(deleteSubjectName);  
+        } else {  
+          console.warn('Subject name not found for ID:', lessonToDelete.subject);  
+        }  
+      }
       if (lessonToDelete.is_allerlei && lessonToDelete.allerlei_subjects) {
         lessonToDelete.allerlei_subjects.forEach(sub => subjectsToReassign.add(sub));
       }
@@ -927,7 +944,7 @@ function InnerTimetablePage() {
           setIsCopying(false);
           return;
       }
-    
+   
       const newLessonPayloads = lessonsToCopy.map(l => ({
           subject: l.subject,
           day_of_week: l.day_of_week,
@@ -949,8 +966,8 @@ function InnerTimetablePage() {
           if (newLessonPayloads.length > 0) {
             const createdLessons = await Lesson.bulkCreate(newLessonPayloads);
             let tempAllLessons = [...allLessons, ...createdLessons];
-          
-            const subjectsAffectedByCopy = new Set(createdLessons.map(l => l.subject));
+         
+            const subjectsAffectedByCopy = new Set(createdLessons.map(l => subjects.find(s => s.id === l.subject)?.name));  // Geändert: Hole Namen aus IDs
             for (const subjectName of subjectsAffectedByCopy) {
                 if (subjectName) {
                     tempAllLessons = await reassignYearlyLessonLinks(subjectName, tempAllLessons);
@@ -978,13 +995,15 @@ function InnerTimetablePage() {
     const subjectsByName = subjects.reduce((acc, s) => { acc[s.name] = s; return acc; }, {});
     const dayOrder = { monday: 1, tuesday: 2, wednesday: 3, thursday: 4, friday: 5 };
     const lessonsToRender = lessonsForCurrentWeek.map(lesson => {
-      const subjectDetail = subjectsByName[lesson.subject];
+      const subjectsById = new Map(subjects.map(s => [s.id, s]));
+      const subjectDetail = subjectsById.get(lesson.subject);
       const primaryYearlyLesson = lesson.yearly_lesson_id ? yearlyLessonsById.get(lesson.yearly_lesson_id) : null;
       const secondYearlyLesson = lesson.second_yearly_lesson_id ? yearlyLessonsById.get(lesson.second_yearly_lesson_id) : null;
-    
+   
       const topic = lesson.topic_id ? topicsById.get(lesson.topic_id) : (primaryYearlyLesson?.topic_id ? topicsById.get(primaryYearlyLesson.topic_id) : null);
       let lessonDetails = {
         ...lesson,
+        subject: subjectDetail?.name || 'Unbekannt',  // Neu: Speichert den Namen
         color: subjectDetail?.color || "#3b82f6",
         topic: topic,
         isGradient: false,
@@ -1011,10 +1030,10 @@ function InnerTimetablePage() {
         if (!lesson.description) {
             lessonDetails.description = `Allerlei: ${(lesson.allerlei_subjects || []).join(', ')}`;
         }
-      
-        const allSubjectsForGradient = [...new Set([lesson.subject, ...(lesson.allerlei_subjects || [])])];
+     
+        const allSubjectsForGradient = [...new Set([subjectDetail?.name || 'Unbekannt', ...(lesson.allerlei_subjects || [])])];  // Geändert: Name statt ID
         const colors = allSubjectsForGradient.map(name => subjectsByName[name]?.color).filter(Boolean);
-      
+     
         if (colors.length > 1) {
           const sortedColors = [...colors].sort();
           const gradientParts = sortedColors.map((color, index) => {
@@ -1055,7 +1074,7 @@ function InnerTimetablePage() {
       try {
         const timeSlot = timeSlots.find(ts => ts.period === targetPeriod);
         const subjectYearlyLessons = yearlyLessons
-          .filter(yl => yl.subject === subjectDetail.name && yl.week_number === currentWeek)
+          .filter(yl => yl.expand?.subject?.name === subjectDetail.name && yl.week_number === currentWeek)
           .sort((a, b) => Number(a.lesson_number) - Number(b.lesson_number));
         const scheduledYearlyIds = new Set(allLessons
           .filter(l => l.yearly_lesson_id && l.week_number === currentWeek)
@@ -1066,7 +1085,7 @@ function InnerTimetablePage() {
           }));
         const nextAvailableYearlyLesson = subjectYearlyLessons.find(yl => !scheduledYearlyIds.has(yl.id));
         const newLessonPayload = {
-          subject: subjectDetail.name,
+          subject: subjectDetail.id, // Geändert: ID statt Name
           day_of_week: targetDay,
           period_slot: targetPeriod,
           start_time: timeSlot?.start,
@@ -1081,9 +1100,9 @@ function InnerTimetablePage() {
           is_half_class: nextAvailableYearlyLesson?.is_half_class || false,
           allerlei_subjects: nextAvailableYearlyLesson?.allerlei_subjects || [],
           allerlei_yearly_lesson_ids: [],
-          class_id: activeClassId,  // Add this
-          school_year: currentYear  // Add this
+          user_id: pb.authStore.model.id // Neu: Required user_id
         };
+        console.log('Create payload from pool:', newLessonPayload); // Neu: Debug-Log
         const newLesson = await Lesson.create(newLessonPayload);
         if (!newLesson.yearly_lesson_id) {
           const existingYearlyForSub = yearlyLessons.filter(yl => yl.subject === newLesson.subject && yl.week_number === newLesson.week_number);
@@ -1095,7 +1114,7 @@ function InnerTimetablePage() {
             school_year: currentYear,
             is_double_lesson: newLesson.is_double_lesson,
             second_yearly_lesson_id: newLesson.second_yearly_lesson_id,
-            class_id: activeClassId  // Add this if YearlyLesson requires it (check schema; may not)
+            class_id: activeClassId // Add this if YearlyLesson requires it (check schema; may not)
           });
           await Lesson.update(newLesson.id, { yearly_lesson_id: newYearly.id });
           newLesson.yearly_lesson_id = newYearly.id;
@@ -1174,10 +1193,10 @@ function InnerTimetablePage() {
   }, [allLessons, currentWeek, yearlyLessons, timeSlots, currentYear, queryClientLocal, refetch]);
   const availableYearlyLessonsForPool = useMemo(() => {
     if (!activeClassId) return [];
-  
+ 
     const subjectsForClass = subjects.filter(s => s.class_id === activeClassId);
     const uniqueSubjectsForClass = [...new Map(subjectsForClass.map(s => [s.name, s])).values()];
-  
+ 
     const scheduledLessonsInWeek = allLessons.filter(l => l.week_number === currentWeek);
     const scheduledCounts = scheduledLessonsInWeek.reduce((acc, lesson) => {
         let lessonValue = lesson.is_double_lesson ? 2 : 1;
@@ -1185,9 +1204,9 @@ function InnerTimetablePage() {
             lessonValue *= 0.5;
         }
         const subjectsInvolved = lesson.is_allerlei && lesson.allerlei_subjects && lesson.allerlei_subjects.length > 0
-            ? [...new Set([lesson.subject, ...lesson.allerlei_subjects])]
-            : [lesson.subject];
-      
+            ? [...new Set([lesson.expand?.subject?.name, ...lesson.allerlei_subjects])]
+            : [lesson.expand?.subject?.name];
+     
         subjectsInvolved.forEach(subjectName => {
             if (subjectName) {
                 if (!acc[subjectName]) acc[subjectName] = 0;
@@ -1302,7 +1321,7 @@ function InnerTimetablePage() {
             onDragEnd={handleDragEnd}
             modifiers={[restrictToWindowEdges]}
           >
-            <div className="flex gap-4 w-fit max-w-full h-auto overflow-x-auto mx-auto justify-center"> 
+            <div className="flex gap-4 w-fit max-w-full h-auto overflow-x-auto mx-auto justify-center">
               <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -1327,7 +1346,7 @@ function InnerTimetablePage() {
                   />
                 )}
               </motion.div>
-            
+           
               <div className="w-[250px] min-w-[200px] flex-shrink-0">
                 <CopyWeekLayout
                   currentWeek={currentWeek}
@@ -1342,7 +1361,7 @@ function InnerTimetablePage() {
                   className="bg-white dark:bg-slate-800 backdrop-blur-xl rounded-2xl shadow-xl border border-slate-200 dark:border-slate-700 p-4 h-fit"
                 >
                   <h3 className="text-lg font-bold text-slate-800 dark:text-white mb-4">Stundenpool</h3>
-                
+               
                   {classes.length > 0 && (
                     <div className="mb-4">
                       <select
@@ -1356,7 +1375,7 @@ function InnerTimetablePage() {
                       </select>
                     </div>
                   )}
-                
+               
                   <div className="space-y-2">
                     {availableYearlyLessonsForPool.length > 0 ? (
                       availableYearlyLessonsForPool.map((subjectData) => (
@@ -1435,7 +1454,7 @@ function InnerTimetablePage() {
           allLessons={allLessons}
           allYearlyLessons={yearlyLessons}
           timeSlots={timeSlots}
-          subjectColor={subjects.find(s => s.name === (editingLesson?.subject || initialSubjectForModal))?.color}
+          subjectColor={subjects.find(s => s.id === (editingLesson?.subject || initialSubjectForModal))?.color}  // Geändert: Suche per ID
           initialSubject={initialSubjectForModal}
           subjects={subjects}
           topics={topics}

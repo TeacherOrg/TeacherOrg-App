@@ -97,13 +97,11 @@ export default function LessonModal({
   
   const subjectTopics = useMemo(() => {
     // Also filter topics by subjects that belong to the active class
-    const validSubjectNames = subjectOptions.map(s => s.name);
+    const validSubjectIds = subjectOptions.map(s => s.id);  // Geändert: IDs statt Namen für Filter
     return topics?.filter(topic => 
-      validSubjectNames.includes(topic.subject) && 
-      topic.subject === selectedSubject
+      validSubjectIds.includes(topic.subject)  // Geändert: topic.subject ist ID, filter per ID
     ) || [];
-  }, [topics, selectedSubject, subjectOptions]);
-
+  }, [topics, subjectOptions]);
 
   // Calculate the current lesson's position in the weekly sequence
   const getCurrentLessonPosition = useCallback(() => {
@@ -127,7 +125,7 @@ export default function LessonModal({
       .map(l => ({
         dayOrder: { monday: 1, tuesday: 2, wednesday: 3, thursday: 4, friday: 5 }[l.day_of_week] || 0,
         period: l.period_slot,
-        subject: l.subject
+        subject: l.expand?.subject?.name  // Geändert: Name aus expand
       }))
       .sort((a, b) => {
         const dayDiff = a.dayOrder - b.dayOrder;
@@ -177,12 +175,12 @@ export default function LessonModal({
 
     const currentPosition = getCurrentLessonPosition();
     const subjectYearlyLessons = allYearlyLessons
-      .filter(yl => yl.subject === subjectName && yl.week_number === currentWeek)
+      .filter(yl => yl.expand?.subject?.name === subjectName && yl.week_number === currentWeek)  // Geändert: expand.subject.name
       .sort((a, b) => a.lesson_number - b.lesson_number);
 
     // Get all lessons for this subject that are already scheduled this week
     const scheduledLessonsForSubject = allLessons
-      .filter(l => l.subject === subjectName && l.week_number === currentWeek && l.yearly_lesson_id)
+      .filter(l => l.expand?.subject?.name === subjectName && l.week_number === currentWeek && l.yearly_lesson_id)  // Geändert: expand.subject.name
       .map(l => {
         const dayOrderMap = { monday: 1, tuesday: 2, wednesday: 3, thursday: 4, friday: 5 };
         const dayOrder = dayOrderMap[l.day_of_week.toLowerCase()] || 0;
@@ -318,7 +316,7 @@ export default function LessonModal({
 
     if (selectedSubject) {
       const availableYearlyLessons = allYearlyLessons.filter(
-          yl => yl.week_number === currentWeek && yl.subject === selectedSubject && !scheduledLessonIds.has(yl.id)
+          yl => yl.subject === selectedSubject && yl.week_number === currentWeek && !scheduledLessonIds.has(yl.id)
       ).sort((a,b) => a.lesson_number - b.lesson_number);
 
       if (availableYearlyLessons.length > 0) {
@@ -339,6 +337,7 @@ export default function LessonModal({
         if (yearlyLessonToUse.is_double_lesson && yearlyLessonToUse.second_yearly_lesson_id) {
           setAddSecondLesson(true);  // Erweitert: Force true if suggested
           setSelectedSecondLesson(yearlyLessonToUse.second_yearly_lesson_id);
+          const secondYLForPreload = allYearlyLessons.find(yl => yl.id === yearlyLessonToUse.second_yearly_lesson_id);  // Korrigiert: Definiere secondYLForPreload
           setSecondSteps(secondYLForPreload?.steps?.map(s => ({...s, id: `second-${s.id || generateId()}` })) || []);
         } else {
           setAddSecondLesson(false);
@@ -655,10 +654,6 @@ export default function LessonModal({
           yearly_lesson_id: formData.is_allerlei ? null : null,
           second_yearly_lesson_id: (formData.is_double_lesson && addSecondLesson && selectedSecondLesson) ? selectedSecondLesson : null
         };
-        // Hier einfügen:
-        if (isNew) {
-        
-        }
       }
 
       console.log('Final lesson data:', lessonData);
@@ -676,7 +671,7 @@ export default function LessonModal({
 
   const displayModalColor = useMemo(() => {
       if (formData.is_allerlei && allerleiFaecher.length > 0) {
-        const allSubjects = [selectedSubject, ...allerleiFaecher].filter(Boolean);
+        const allSubjects = [subjects.find(s => s.id === selectedSubject)?.name, ...allerleiFaecher].filter(Boolean);  // Geändert: Hole Name aus ID
         const colors = allSubjects.map(name => subjects.find(s => s.name === name)?.color).filter(Boolean);
         if (colors.length > 1) {
             const uniqueColors = [...new Set(colors)];
@@ -715,7 +710,7 @@ export default function LessonModal({
             {isEditing ? "Lektion bearbeiten" : (copiedLesson ? "Kopierte Lektion einfügen" : "Neue Lektion planen")}
           </DialogTitle>
           <DialogDescription className="text-slate-500 dark:text-slate-400">
-            {isEditing ? `${lesson.subject} • ${lesson.day_of_week} • Period ${lesson.period_slot}` : `${slotInfo.day} • Period ${slotInfo.period}`}
+            {isEditing ? `${lesson.expand?.subject?.name || lesson.subject} • ${lesson.day_of_week} • Period ${lesson.period_slot}` : `${slotInfo.day} • Period ${slotInfo.period}`}
           </DialogDescription>
         </DialogHeader>
         
@@ -750,7 +745,7 @@ export default function LessonModal({
               >
                 <SelectTrigger className="bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white"><SelectValue placeholder="Fach auswählen" /></SelectTrigger>
                 <SelectContent>
-                  {subjectOptions.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}  {/* Geändert: value={s.id} */}
+                  {subjectOptions.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
@@ -804,7 +799,7 @@ export default function LessonModal({
                   </Select>
                   {availableSecondLessons.length === 0 && (
                     <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                      Alle nachfolgenden Lektionen für {selectedSubject} sind bereits geplant oder nicht verfügbar.
+                      Alle nachfolgenden Lektionen für {subjects.find(s => s.id === selectedSubject)?.name} sind bereits geplant oder nicht verfügbar.  {/* Geändert: Name aus ID */}
                     </p>
                   )}
                 </div>
