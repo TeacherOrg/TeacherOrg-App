@@ -6,7 +6,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Plus, Trash2, ChevronDown, ChevronUp, FileText, Loader2 } from 'lucide-react';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import pb from '@/api/pb'; // Neu: Importiere pb hier
+import pb from '@/api/pb'; // Import pb
 
 // Utility functions for cascading deletes with rate limiting
 const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
@@ -52,10 +52,11 @@ export default function ClassesSettings({ classes, refreshData }) {
     const loadStudents = async () => {
         if (!activeClassId) return;
         try {
-            const studentsData = await Student.filter({ class_id: activeClassId }, { $cancelKey: `students-load-${activeClassId}` });
+            const studentsData = await Student.filter({ class_id: activeClassId });
             setStudents(studentsData);
         } catch (error) {
             console.error("Error loading students:", error);
+            if (error.data) console.error("Error Data:", error.data);
             setStudents([]);
         }
     };
@@ -252,15 +253,20 @@ export default function ClassesSettings({ classes, refreshData }) {
             }
             
             if (newStudents.length > 0) {
-                await Student.bulkCreate(newStudents, { $cancelKey: `students-bulk-${Date.now()}` });
+                // Sequentielles Create statt parallel, um Rate-Limits zu vermeiden
+                for (const student of newStudents) {
+                    await Student.create(student, { $cancelKey: `student-import-${Date.now()}` });
+                    await delay(200);  // Delay zwischen Creates
+                }
                 await loadStudents();
                 setStudentList('');
                 setShowImportDialog(false);
                 alert(`${newStudents.length} Schüler erfolgreich hinzugefügt!`);
             }
         } catch (error) {
-            console.error("Error adding students from list:", error);
-            alert(`Fehler beim Hinzufügen: ${error.message}`);
+            console.error("Full Error adding students from list:", error);
+            if (error.data) console.error("Error Data:", error.data);
+            alert(`Fehler beim Hinzufügen: ${error.message || 'Unbekannt'}`);
         }
     };
 
