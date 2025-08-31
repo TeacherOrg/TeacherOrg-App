@@ -97,6 +97,7 @@ class PbEntity {
 
   buildFilter(query) {
     if (Object.keys(query).length === 0) return '';
+    console.log('Building filter with query:', query);  // Neu: Log den input query, um ungültige Werte (z. B. class_id undefined) zu debuggen – hier siehst du den ":1"-Fehler-Ursprung
     return Object.entries(query).map(([key, value]) => {
       if (typeof value === 'object' && value !== null) {
         if (value.$gt) return `${key} > ${value.$gt}`;
@@ -126,10 +127,8 @@ export const Subject = new PbEntity('Subject'); // Generiert 'subjects'
 export const Holiday = new PbEntity('Holiday'); // Generiert 'holidays'
 export const Performance = new PbEntity('Performance'); // Generiert 'performances'
 export const UeberfachlichKompetenz = new PbEntity('Ueberfachliche_kompetenz');
-UeberfachlichKompetenz.collection = pb.collection('ueberfachliche_kompetenzs');// Generiert 'ueberfachliche_kompetenzs' – passe bei Bedarf in PocketBase zu diesem Namen um, oder erweitere die Logic
 export const Competency = new PbEntity('Competencie'); // Generiert 'competencies' – korrigiert für 'ies'-Plural
 export const Fachbereich = new PbEntity('Fachbereich');
-Fachbereich.collection = pb.collection('fachbereiche');
 export const DailyNote = new PbEntity('Daily_note'); // Generiert 'daily_notes' – korrigiert mit Underscore
 export const Announcement = new PbEntity('Announcement'); // Generiert 'announcements'
 export const Chore = new PbEntity('Chore'); // Generiert 'chores'
