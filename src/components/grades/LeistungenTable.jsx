@@ -472,9 +472,7 @@ const LeistungenTable = ({ performances = [], students = [], subjects = [], onDa
                                   ) : (
                                     <span className={`font-bold text-sm px-2 py-1 rounded ${
                                       perf && typeof perf.grade === 'number'
-                                        ? perf.grade >= 4
-                                        ? 'text-green-400 bg-green-900/30'
-                                        : 'text-red-400 bg-red-900/30'
+                                        ? (perf.grade >= 5 ? 'text-red-400 bg-red-900/30' : '')
                                         : 'text-slate-500'
                                     }`}>
                                       {perf && typeof perf.grade === 'number' ? perf.grade : '-'}
@@ -515,3 +513,5 @@ const LeistungenTable = ({ performances = [], students = [], subjects = [], onDa
     </div>
   );
 };
+
+export default LeistungenTable;
