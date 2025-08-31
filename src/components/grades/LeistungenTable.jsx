@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -16,7 +16,7 @@ const LeistungenTable = ({ performances = [], students = [], subjects = [], onDa
   const [currentPage, setCurrentPage] = useState(1);
   const ITEMS_PER_PAGE = 10;
 
-  // Group performances by assessment
+  // Grouped Performances (ohne side-effects)
   const groupedPerformances = useMemo(() => {
     if (!Array.isArray(performances)) return [];
     
@@ -59,21 +59,22 @@ const LeistungenTable = ({ performances = [], students = [], subjects = [], onDa
     });
   }, [performances, filterSubject, sortBy]);
 
-  // Paginierung
+  // Paginierung (ohne side-effects in useMemo)
   const paginatedPerformances = useMemo(() => {
-    // Reset current page if filters change and current page is out of bounds
-    const maxPage = Math.ceil(groupedPerformances.length / ITEMS_PER_PAGE);
-    if (currentPage > maxPage && maxPage > 0) {
-      setCurrentPage(maxPage);
-    } else if (currentPage === 0 && groupedPerformances.length > 0) {
-      // Handle initial load when no items, then items appear
-      setCurrentPage(1);
-    }
-    
     const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
     return groupedPerformances.slice(startIndex, startIndex + ITEMS_PER_PAGE);
   }, [groupedPerformances, currentPage]);
-  
+
+  // Page-Reset in useEffect (hierhin verschoben!)
+  useEffect(() => {
+    const maxPage = Math.ceil(groupedPerformances.length / ITEMS_PER_PAGE);
+    if (currentPage > maxPage && maxPage > 0) {
+      setCurrentPage(maxPage);
+    } else if (groupedPerformances.length > 0 && currentPage < 1) {
+      setCurrentPage(1);
+    }
+  }, [groupedPerformances, currentPage]);
+
   const totalPages = Math.ceil(groupedPerformances.length / ITEMS_PER_PAGE);
 
   const subjectOptions = useMemo(() => {
@@ -409,7 +410,7 @@ const LeistungenTable = ({ performances = [], students = [], subjects = [], onDa
                       <div className="px-4 pb-4">
                         <div className="bg-slate-100/30 dark:bg-slate-700/30 rounded-lg p-4">
                           {isEditing && (
-                            <div key={student.id} className="flex items-center justify-between p-2 bg-slate-100 dark:bg-slate-800 rounded">
+                            <div className="mb-4">
                               <h5 className="text-white font-medium mb-2">Fachbereiche bearbeiten</h5>
                               <div className="flex gap-2 mb-2">
                                 <Input
@@ -514,5 +515,3 @@ const LeistungenTable = ({ performances = [], students = [], subjects = [], onDa
     </div>
   );
 };
-
-export default LeistungenTable;

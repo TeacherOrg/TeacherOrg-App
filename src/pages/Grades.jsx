@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback } from "react";
 import { Student, Performance, UeberfachlichKompetenz, Class } from "@/api/entities";
 import { Button } from "@/components/ui/button";
@@ -34,13 +33,12 @@ export default function GradesPage() {
         Class.list()
       ]);
       
-      // KORREKTUR: Fallback auf leeres Array, um 'map' of null Fehler zu verhindern
       setStudents(studentsData || []);
       setPerformances(performancesData || []);
       setUeberfachlich(ueberfachlichData || []);
       setClasses(classesData || []);
       
-      if (classesData && classesData.length > 0 && !activeClassId) {
+      if (classesData?.length > 0 && !activeClassId) {
         setActiveClassId(classesData[0].id);
       }
     } catch (error) {

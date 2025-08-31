@@ -59,18 +59,24 @@ const PerformanceModal = ({ isOpen, onClose, onSave, students = [], subjects = [
                 setDate(editingPerformance.date ? editingPerformance.date.slice(0, 10) : new Date().toISOString().slice(0, 10));
                 setSelectedSubject(editingPerformance.subject || '');
                 setSelectedFachbereiche(editingPerformance.fachbereiche || []);
-                const gradesForEdit = students.map(s => {
-                    return { student_id: s.id, name: s.name, grade: s.id === editingPerformance.student_id ? editingPerformance.grade : ''};
-                });
+                const gradesForEdit = (students || []).map(s => ({
+                    student_id: s.id,
+                    name: s.name,
+                    grade: s.id === editingPerformance.student_id ? editingPerformance.grade : ''
+                }));
                 setStudentGrades(gradesForEdit);
             } else {
                 // Reset state for new entry
                 setAssessmentName('');
                 setDate(new Date().toISOString().slice(0, 10));
-                const firstSubject = subjects.find(s => s.class_id === activeClassId);
-                setSelectedSubject(firstSubject ? firstSubject.name : (subjects.length > 0 ? subjects[0].name : ''));
+                const firstSubject = (subjects || []).find(s => s.class_id === activeClassId);
+                setSelectedSubject(firstSubject ? firstSubject.name : ((subjects || []).length > 0 ? (subjects[0].name || '') : ''));
                 setSelectedFachbereiche([]);
-                setStudentGrades(students.map(s => ({ student_id: s.id, name: s.name || `${s.firstName || ''} ${s.lastName || ''}`.trim(), grade: '' })));
+                setStudentGrades((students || []).map(s => ({
+                    student_id: s.id,
+                    name: s.name || `${s.firstName || ''} ${s.lastName || ''}`.trim(),
+                    grade: ''
+                })));
             }
         }
     }, [isOpen, students, subjects, activeClassId, editingPerformance]);

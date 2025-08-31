@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Performance, UeberfachlichKompetenz, Subject, Competency } from '@/api/entities';
+import { Performance, UeberfachlichKompetenz, Subject, Competency, Fachbereich } from '@/api/entities'; // Added Fachbereich
 import { Plus, Filter, BarChart3, ChevronDown, ChevronUp, Star, Activity } from 'lucide-react';
 import LeistungenTable from './LeistungenTable';
 import UeberfachlichTable from './UeberfachlichTable';
@@ -40,7 +40,7 @@ const PerformanceView = ({ students = [], performances = [], ueberfachlich = [],
   const [allCompetencies, setAllCompetencies] = useState([]);
   const [studentDropdownOpen, setStudentDropdownOpen] = useState(false);
   const [diagramView, setDiagramView] = useState('leistung');
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [expandedLeistungenRows, setExpandedLeistungenRows] = useState(new Set());
   const [expandedUeberfachlichHistories, setExpandedUeberfachlichHistories] = useState(new Set());
   const [expandedUeberfachlichCompetencies, setExpandedUeberfachlichCompetencies] = useState(new Set());
@@ -59,12 +59,14 @@ const PerformanceView = ({ students = [], performances = [], ueberfachlich = [],
       try {
         if (activeClassId) {
           setIsLoading(true);
-          const [subjectsData, competenciesData] = await Promise.all([
+          const [subjectsData, competenciesData, fachbereicheData] = await Promise.all([
             Subject.filter({ class_id: activeClassId }),
-            Competency.filter({ class_id: activeClassId })
+            Competency.filter({ class_id: activeClassId }),
+            Fachbereich.filter({ class_id: activeClassId })  // Neu: Lade fachbereiche
           ]);
           setSubjects(subjectsData || []);
           setAllCompetencies(competenciesData || []);
+          // Setze fachbereiche, falls benötigt (in fachbereichData useMemo)
         }
       } catch (error) {
         console.error("Error loading class-specific data:", error);
