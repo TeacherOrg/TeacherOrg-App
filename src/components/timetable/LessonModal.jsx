@@ -657,9 +657,7 @@ export default function LessonModal({
         };
         // Hier einfügen:
         if (isNew) {
-          lessonData.class_id = activeClassId; // Add this
-          lessonData.school_year = new Date().getFullYear(); // Add this
-          // ... rest of code
+        
         }
       }
 
@@ -751,7 +749,9 @@ export default function LessonModal({
                 disabled={isEditing}
               >
                 <SelectTrigger className="bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white"><SelectValue placeholder="Fach auswählen" /></SelectTrigger>
-                <SelectContent>{subjectOptions.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent>
+                <SelectContent>
+                  {subjectOptions.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}  {/* Geändert: value={s.id} */}
+                </SelectContent>
               </Select>
             </div>
             <div className="space-y-2">

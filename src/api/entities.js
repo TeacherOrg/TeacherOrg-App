@@ -17,7 +17,8 @@ class PbEntity {
     const params = { 
       filter: this.buildFilter(query), 
       perPage: 500,
-      $cancelKey: `list-${this.name}-${Date.now()}`  // Neu: Unique Key für list
+      expand: 'subject,user_id,yearly_lesson_id,second_yearly_lesson_id,topic_id',  // Neu: Erweitert die Relations
+      $cancelKey: `list-${this.name}-${Date.now()}`
     }; 
     const { items } = await this.collection.getList(1, params.perPage, params);
     return items.map(this.normalizeData);
@@ -38,7 +39,10 @@ class PbEntity {
 
   async findById(id) {
     try {
-      const params = { $cancelKey: `getOne-${this.name}-${id}-${Date.now()}` };  // Neu: Unique für getOne
+      const params = { 
+        expand: 'subject,user_id,yearly_lesson_id,second_yearly_lesson_id,topic_id',  // Neu: Erweitert die Relations
+        $cancelKey: `getOne-${this.name}-${id}-${Date.now()}`
+      };  
       const item = await this.collection.getOne(id, params);
       return this.normalizeData(item);
     } catch {

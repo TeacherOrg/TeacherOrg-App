@@ -20,6 +20,7 @@ import OverlayView from "../components/timetable/OverlayView";
 import { adjustColor } from '@/utils/colorUtils';
 import { useLessonStore } from '@/store'; // Passe den Pfad an, falls nötig
 import { QueryClient, QueryClientProvider, useQuery, useQueryClient } from '@tanstack/react-query';
+import pb from '@/api/pb';
 const ACADEMIC_WEEKS = 52; // Increased to 52 for full year cycle
 function getCurrentWeek() {
   const now = new Date();
@@ -646,6 +647,10 @@ function InnerTimetablePage() {
             createDataWithoutSteps.end_time = timeSlot.end;
           }
         }
+        // Neu: Setze user_id (required Feld)
+        createDataWithoutSteps.user_id = pb.authStore.model.id;
+        // Neu: Log den Payload zum Debuggen
+        console.log('Create payload for lesson:', createDataWithoutSteps);
         const newLesson = await Lesson.create(createDataWithoutSteps);
       
         if (!newLesson.yearly_lesson_id && !newLesson.is_allerlei && newLesson.subject) {
