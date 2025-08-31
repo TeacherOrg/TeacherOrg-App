@@ -655,6 +655,12 @@ export default function LessonModal({
           yearly_lesson_id: formData.is_allerlei ? null : null,
           second_yearly_lesson_id: (formData.is_double_lesson && addSecondLesson && selectedSecondLesson) ? selectedSecondLesson : null
         };
+        // Hier einfügen:
+        if (isNew) {
+          lessonData.class_id = activeClassId; // Add this
+          lessonData.school_year = new Date().getFullYear(); // Add this
+          // ... rest of code
+        }
       }
 
       console.log('Final lesson data:', lessonData);

@@ -450,7 +450,12 @@ function InnerYearlyOverviewPage() {
       if (editingTopic) {
         await Topic.update(editingTopic.id, topicData);
       } else {
-        await Topic.create({ ...topicData, subject: activeSubjectName });
+        await Topic.create({ 
+          ...topicData, 
+          subject: activeSubjectName,
+          class_id: activeClassId,  // Add this
+          school_year: currentYear  // Add this
+        });
       }
       setIsTopicModalOpen(false);
       setEditingTopic(null);
@@ -459,7 +464,7 @@ function InnerYearlyOverviewPage() {
     } catch (error) {
       console.error("Error saving topic:", error);
     }
-  }, [editingTopic, activeSubjectName, queryClientLocal, currentYear]);
+  }, [editingTopic, activeSubjectName, activeClassId, currentYear, queryClientLocal]);
 
   const handleDeleteTopic = useCallback(async (topicId) => {
     try {

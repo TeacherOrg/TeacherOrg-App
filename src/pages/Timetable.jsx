@@ -1075,7 +1075,9 @@ function InnerTimetablePage() {
           is_allerlei: nextAvailableYearlyLesson?.is_allerlei || false,
           is_half_class: nextAvailableYearlyLesson?.is_half_class || false,
           allerlei_subjects: nextAvailableYearlyLesson?.allerlei_subjects || [],
-          allerlei_yearly_lesson_ids: []
+          allerlei_yearly_lesson_ids: [],
+          class_id: activeClassId,  // Add this
+          school_year: currentYear  // Add this
         };
         const newLesson = await Lesson.create(newLessonPayload);
         if (!newLesson.yearly_lesson_id) {
@@ -1087,7 +1089,8 @@ function InnerTimetablePage() {
             lesson_number: nextLessonNum,
             school_year: currentYear,
             is_double_lesson: newLesson.is_double_lesson,
-            second_yearly_lesson_id: newLesson.second_yearly_lesson_id
+            second_yearly_lesson_id: newLesson.second_yearly_lesson_id,
+            class_id: activeClassId  // Add this if YearlyLesson requires it (check schema; may not)
           });
           await Lesson.update(newLesson.id, { yearly_lesson_id: newYearly.id });
           newLesson.yearly_lesson_id = newYearly.id;
