@@ -652,7 +652,7 @@ function InnerTimetablePage() {
         if (!newLesson.yearly_lesson_id && !newLesson.is_allerlei && newLesson.subject) {
           const existingYearlyForSub = yearlyLessons
             .filter(yl => yl.subject === newLesson.subject && yl.week_number === newLesson.week_number);
-       
+        
           const nextLessonNumber = existingYearlyForSub.length > 0
             ? Math.max(...existingYearlyForSub.map(yl => yl.lesson_number)) + 1
             : 1;
@@ -669,9 +669,13 @@ function InnerTimetablePage() {
             is_allerlei: newLesson.is_allerlei || false,
             is_half_class: newLesson.is_half_class || false,
           };
-       
-          const createdYearlyLesson = await YearlyLesson.create(newYearlyLessonPayload);
-       
+        
+          const createdYearlyLesson = await YearlyLesson.create({
+            ...newYearlyLessonPayload,
+            name: `Lektion ${nextLessonNumber} für ${subjects.find(s => s.id === newLesson.subject)?.name || 'Unbekannt'}`, // Hinzugefügt: Required name
+            description: '' // Optional, aber gesetzt für Klarheit
+          });
+        
           await Lesson.update(newLesson.id, { yearly_lesson_id: createdYearlyLesson.id });
           newLesson.yearly_lesson_id = createdYearlyLesson.id;
           optimisticUpdateYearlyLessons(createdYearlyLesson, true);
@@ -1114,7 +1118,9 @@ function InnerTimetablePage() {
             school_year: currentYear,
             is_double_lesson: newLesson.is_double_lesson,
             second_yearly_lesson_id: newLesson.second_yearly_lesson_id,
-            class_id: activeClassId // Add this if YearlyLesson requires it (check schema; may not)
+            class_id: activeClassId, // Add this if YearlyLesson requires it (check schema; may not)
+            name: `Lektion ${nextLessonNum} für ${subjects.find(s => s.id === newLesson.subject)?.name || 'Unbekannt'}`,  // Hinzugefügt: Required name
+            description: ''  // Optional, aber setze leer
           });
           await Lesson.update(newLesson.id, { yearly_lesson_id: newYearly.id });
           newLesson.yearly_lesson_id = newYearly.id;

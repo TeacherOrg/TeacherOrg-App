@@ -57,15 +57,20 @@ class PbEntity {
       const created = await this.collection.create(entity, params);
       return this.normalizeData(created);
     } catch (error) {
-      console.error(`Error creating in ${this.name}:`, error.data || error);
+      console.error(`Error creating in ${this.name}:`, error?.data || error);  // Erweitert: Loggt detaillierte Validation-Errors
       throw error;
     }
   }
 
   async update(id, updates) {
     const params = { $cancelKey: `update-${this.name}-${id}-${Date.now()}` };  // Neu: Unique für update
-    const updated = await this.collection.update(id, this.normalizeData(updates), params);
-    return this.normalizeData(updated);
+    try {
+      const updated = await this.collection.update(id, this.normalizeData(updates), params);
+      return this.normalizeData(updated);
+    } catch (error) {
+      console.error(`Error updating in ${this.name}:`, error?.data || error);  // Erweitert: Loggt detaillierte Validation-Errors
+      throw error;
+    }
   }
 
   async delete(id) {

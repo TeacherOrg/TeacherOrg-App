@@ -621,14 +621,14 @@ export default function LessonModal({
         lessonData = { 
           id: lesson.id,  // Behalte ID für Update
           ...formData,    // Form-Felder (is_double_lesson, etc.)
-          steps: [...primarySteps, ...secondSteps],
+          steps: [...primarySteps, ...secondSteps],  // Stelle sicher, dass steps ein Array ist
           subject: finalSubject,
           yearly_lesson_id: lesson.yearly_lesson_id,
           second_yearly_lesson_id: (formData.is_double_lesson && addSecondLesson && selectedSecondLesson) ? selectedSecondLesson : null,
-          allerlei_subjects: formData.is_allerlei ? allerleiFaecher.filter(Boolean) : [],
+          allerlei_subjects: formData.is_allerlei ? allerleiFaecher.filter(Boolean) : [],  // Immer Array
           allerlei_yearly_lesson_ids: formData.is_allerlei ? 
-            allerleiFaecher.map((_, index) => selectedLessonsForAllerlei[index] || null) : [],
-          topic_id: formData.is_allerlei ? null : (formData.topic_id === 'no_topic' ? null : formData.topic_id),
+            allerleiFaecher.map((_, index) => selectedLessonsForAllerlei[index] || null) : [],  // Immer Array
+          topic_id: formData.is_allerlei ? undefined : (formData.topic_id === 'no_topic' ? undefined : formData.topic_id),  // Undefined statt null, um nicht zu senden
         };  
       } else {
         const timeSlotForNewLesson = timeSlots.find(ts => ts.period === slotInfo.period);
@@ -646,14 +646,17 @@ export default function LessonModal({
           week_number: currentWeek,
           start_time: timeSlotForNewLesson?.start,
           end_time: timeSlotForNewLesson?.end,
-          allerlei_subjects: formData.is_allerlei ? allerleiFaecher.filter(Boolean) : [],
+          allerlei_subjects: formData.is_allerlei ? allerleiFaecher.filter(Boolean) : [],  // Immer Array
           allerlei_yearly_lesson_ids: formData.is_allerlei ? 
-            allerleiFaecher.map((_, index) => selectedLessonsForAllerlei[index] || null) : [],
-          topic_id: formData.is_allerlei ? null : (formData.topic_id === 'no_topic' ? null : formData.topic_id),
+            allerleiFaecher.map((_, index) => selectedLessonsForAllerlei[index] || null) : [],  // Immer Array
+          topic_id: formData.is_allerlei ? undefined : (formData.topic_id === 'no_topic' ? undefined : formData.topic_id),  // Undefined statt null
           yearly_lesson_id: formData.is_allerlei ? null : null,
           second_yearly_lesson_id: (formData.is_double_lesson && addSecondLesson && selectedSecondLesson) ? selectedSecondLesson : null
         };
       }
+
+      // Debug: Logge steps als JSON vor dem Speichern
+      console.log('Steps as JSON:', JSON.stringify(lessonData.steps));
 
       console.log('Final lesson data:', lessonData);
       await saveLesson(lessonData, toDeleteIds);
