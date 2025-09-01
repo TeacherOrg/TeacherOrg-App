@@ -1,10 +1,10 @@
-
 import React, { useState, useEffect } from "react";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,  // Neu: Importiert für Accessibility
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -23,7 +23,7 @@ export default function TopicModal({ isOpen, onClose, onSave, onDelete, topic, s
   useEffect(() => {
     if (isOpen) {
       setFormData({
-        title: topic?.title || "",
+        name: topic?.name || "",
         description: topic?.description || "",
         color: topic?.color || subjectColor || "#3b82f6",
       });
@@ -54,6 +54,9 @@ export default function TopicModal({ isOpen, onClose, onSave, onDelete, topic, s
             </div>
             {topic ? "Thema bearbeiten" : "Neues Thema erstellen"}
           </DialogTitle>
+          <DialogDescription className="text-slate-300">  {/* Neu: Beschreibung für Barrierefreiheit */}
+            {topic ? "Bearbeiten Sie die Details des bestehenden Themas." : "Erstellen Sie ein neues Thema für Ihr Fach."}
+          </DialogDescription>
         </DialogHeader>
         
         <form onSubmit={handleSubmit} className="space-y-6">
@@ -61,8 +64,8 @@ export default function TopicModal({ isOpen, onClose, onSave, onDelete, topic, s
             <Label htmlFor="title" className="text-sm font-semibold text-slate-300">Thema Titel</Label>
             <Input
               id="title"
-              value={formData.title || ""}
-              onChange={(e) => setFormData({...formData, title: e.target.value})}
+              value={formData.name || ""}
+              onChange={(e) => setFormData({...formData, name: e.target.value})}
               placeholder="z.B. Quadratische Gleichungen, Zweiter Weltkrieg"
               required
               className="bg-slate-800 border-slate-600"
@@ -132,7 +135,7 @@ export default function TopicModal({ isOpen, onClose, onSave, onDelete, topic, s
                 type="submit"
                 className="text-white shadow-md"
                 style={{ backgroundColor: formData.color || subjectColor || '#3b82f6' }}
-                disabled={!formData.title?.trim()}
+                disabled={!formData.name?.trim()}
               >
                 <Save className="w-4 h-4 mr-2" />
                 {topic ? "Aktualisieren" : "Erstellen"}

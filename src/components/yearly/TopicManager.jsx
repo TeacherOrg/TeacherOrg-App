@@ -84,7 +84,7 @@ export default function TopicManager({
                   <SelectItem key={topic.id} value={topic.id} style={{ color: topic.color }}>
                     <div className="flex items-center">
                         <div className="w-2 h-2 rounded-full mr-2" style={{backgroundColor: topic.color}}></div>
-                        {topic.title}
+                        {topic.name}
                     </div>
                   </SelectItem>
                 ))}
@@ -112,9 +112,9 @@ export default function TopicManager({
                     <div className="flex-1">
                       <div className="font-bold text-gray-800 dark:text-white flex items-center">
                         {isSelected ? <CheckCircle className="w-4 h-4 mr-2 text-blue-600 dark:text-blue-400" /> : <Circle className="w-4 h-4 mr-2 text-gray-400 dark:text-slate-400" />}
-                        {topic.title}
+                        {topic.name}
                       </div>
-                      <p className="text-xs text-gray-500 dark:text-slate-400 mt-1">{lessonCount} / {topic.estimated_lessons || '?'} Lektionen zugewiesen</p>
+                      <p className="text-xs text-gray-500 dark:text-slate-400 mt-1">{lessonCount} Lektionen zugewiesen</p>
                     </div>
                     <Button
                       variant="ghost"

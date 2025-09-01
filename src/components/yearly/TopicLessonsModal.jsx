@@ -247,7 +247,7 @@ export default function TopicLessonsModal({
     }
   };
 
-  const safeTopicTitle = ultraSafeString(topic?.title) || 'Thema';
+  const safeTopicTitle = ultraSafeString(topic?.name) || 'Thema';
   const safeSubject = ultraSafeString(subject) || 'Fach';
   const safeWeek = parseInt(week) || 0;
 

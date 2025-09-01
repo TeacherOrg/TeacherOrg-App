@@ -385,7 +385,7 @@ const YearlyGrid = React.memo(({ lessons, topics, subjects, academicWeeks, onLes
                             }}
                           >
                             <div className="text-xs font-bold leading-tight">
-                              <div>{topic.title}</div>
+                              <div>{topic.name}</div>
                             </div>
                           </div>
                         </div>

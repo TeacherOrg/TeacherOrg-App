@@ -235,6 +235,8 @@ function InnerYearlyOverviewPage() {
             ...slot,
             topic_id: activeTopicId,
             school_year: currentYear,
+            name: 'Neue Lektion',  // Default für required name
+            description: '',  // Oder ein Default, aber da es required ist, mache es non-empty wenn nötig (z.B. 'Beschreibung folgt')
             notes: '',
             is_double_lesson: false,
             second_yearly_lesson_id: null
@@ -451,7 +453,7 @@ function InnerYearlyOverviewPage() {
         await Topic.update(editingTopic.id, topicData);
       } else {
         await Topic.create({ 
-          name: topicData.title,
+          name: topicData.name,
           description: topicData.description,
           color: topicData.color,
           subject: activeSubjectName,
