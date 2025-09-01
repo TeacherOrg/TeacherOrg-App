@@ -619,8 +619,8 @@ export default function LessonModal({
 
       if (isEditing) {
         lessonData = { 
-          ...lesson, 
-          ...formData, 
+          id: lesson.id,  // Behalte ID für Update
+          ...formData,    // Form-Felder (is_double_lesson, etc.)
           steps: [...primarySteps, ...secondSteps],
           subject: finalSubject,
           yearly_lesson_id: lesson.yearly_lesson_id,
@@ -629,8 +629,7 @@ export default function LessonModal({
           allerlei_yearly_lesson_ids: formData.is_allerlei ? 
             allerleiFaecher.map((_, index) => selectedLessonsForAllerlei[index] || null) : [],
           topic_id: formData.is_allerlei ? null : (formData.topic_id === 'no_topic' ? null : formData.topic_id),
-        };
-        
+        };  
       } else {
         const timeSlotForNewLesson = timeSlots.find(ts => ts.period === slotInfo.period);
 

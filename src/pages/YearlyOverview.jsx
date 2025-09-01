@@ -451,10 +451,12 @@ function InnerYearlyOverviewPage() {
         await Topic.update(editingTopic.id, topicData);
       } else {
         await Topic.create({ 
-          ...topicData, 
+          name: topicData.title,
+          description: topicData.description,
+          color: topicData.color,
           subject: activeSubjectName,
-          class_id: activeClassId,  // Add this
-          school_year: currentYear  // Add this
+          class_id: activeClassId,
+          school_year: currentYear
         });
       }
       setIsTopicModalOpen(false);
