@@ -16,6 +16,7 @@ import debounce from 'lodash/debounce';
 import YearLessonOverlay from "../components/yearly/YearLessonOverlay";
 import { adjustColor } from '@/utils/colorUtils';
 import { useLessonStore } from '@/store'; // Passe den Pfad an, falls nötig
+import pb from '@/api/pb';
 
 const ACADEMIC_WEEKS = 52;
 
