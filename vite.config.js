@@ -7,11 +7,12 @@ export default defineConfig({
   plugins: [react()],
   server: {
     host: true, // Exponiert auf 0.0.0.0 für Dev
-    port: 5173, // Optional: Standardport explizit setzen
+    port: 5173, // Standardport explizit setzen
   },
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
+      '@/components': path.resolve(__dirname, './src/components'), // Expliziter Alias für Komponenten
     },
     extensions: ['.mjs', '.js', '.jsx', '.ts', '.tsx', '.json'],
   },
@@ -23,17 +24,16 @@ export default defineConfig({
     },
   },
   build: {
-    minify: false, // Deaktiviert Minification für Debugging (zeigt echte Variablennamen)
-    sourcemap: true, // Aktiviert Sourcemaps für besseres Debugging
+    minify: false, // Deaktiviert Minification für Debugging
+    sourcemap: true, // Aktiviert Sourcemaps
     rollupOptions: {
-      // Optional: Begrenzt Chunk-Größe, um Bundle-Probleme zu vermeiden
       output: {
         manualChunks: {
           vendor: ['react', 'react-dom', '@tanstack/react-query'],
           components: [
             './src/components/yearly/YearlyGrid.jsx',
             './src/components/yearly/LessonModal.jsx',
-            './src/components/yearly/TopicModal.jsx',
+            './src/components/topics/TopicModal.jsx', // Korrigierter Pfad
             './src/components/yearly/TopicLessonsModal.jsx',
             './src/components/yearly/YearLessonCell.jsx',
             './src/components/yearly/YearLessonOverlay.jsx',
@@ -42,7 +42,6 @@ export default defineConfig({
       },
     },
   },
-  // Polyfill für process.env
   define: {
     'process.env': {}, // Leerer Fallback
   },

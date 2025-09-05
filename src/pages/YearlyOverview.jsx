@@ -6,7 +6,7 @@ import { motion } from "framer-motion";
 import { useRef } from 'react';
 import { useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
-import TopicModal from "../components/topics/TopicModal";
+import TopicModal from "@/components/topics/TopicModal";
 import LessonModal from "../components/yearly/LessonModal";
 import YearlyGrid from "../components/yearly/YearlyGrid";
 import TopicManager from "../components/yearly/TopicManager";
