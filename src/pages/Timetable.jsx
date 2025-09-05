@@ -668,12 +668,13 @@ function InnerTimetablePage() {
             is_exam: newLesson.is_exam || false,
             is_allerlei: newLesson.is_allerlei || false,
             is_half_class: newLesson.is_half_class || false,
+            user_id: pb.authStore.model.id  // Hinzugefügt: Falls du es im Schema required machst
           };
         
           const createdYearlyLesson = await YearlyLesson.create({
             ...newYearlyLessonPayload,
-            name: `Lektion ${nextLessonNumber} für ${subjects.find(s => s.id === newLesson.subject)?.name || 'Unbekannt'}`, // Hinzugefügt: Required name
-            description: '' // Optional, aber gesetzt für Klarheit
+            name: `Lektion ${nextLessonNumber} für ${subjects.find(s => s.id === newLesson.subject)?.name || 'Unbekannt'}`,  // Hinzugefügt: Required name
+            description: ''  // Hinzugefügt: Optional, aber gesetzt
           });
         
           await Lesson.update(newLesson.id, { yearly_lesson_id: createdYearlyLesson.id });
@@ -1071,81 +1072,82 @@ function InnerTimetablePage() {
     const targetPeriod = parseInt(targetPeriodStr, 10);
     let tempLessons = [...allLessons];
     if (active.data.current.type === 'pool') {
-      const subjectDetail = active.data.current.subject;
-      if (allLessons.some(l => l.day_of_week === targetDay && l.period_slot === targetPeriod && l.week_number === currentWeek)) {
-        return;
+    const subjectDetail = active.data.current.subject;
+    if (allLessons.some(l => l.day_of_week === targetDay && l.period_slot === targetPeriod && l.week_number === currentWeek)) {
+      return;
+    }
+    try {
+      const timeSlot = timeSlots.find(ts => ts.period === targetPeriod);
+      const subjectYearlyLessons = yearlyLessons
+        .filter(yl => yl.expand?.subject?.name === subjectDetail.name && yl.week_number === currentWeek)
+        .sort((a, b) => Number(a.lesson_number) - Number(b.lesson_number));
+      const scheduledYearlyIds = new Set(allLessons
+        .filter(l => l.yearly_lesson_id && l.week_number === currentWeek)
+        .map(l => l.yearly_lesson_id));
+      allLessons.filter(l => l.is_allerlei && l.week_number === currentWeek)
+        .forEach(l => l.allerlei_yearly_lesson_ids?.forEach(id => {
+          if (id) scheduledYearlyIds.add(id);
+        }));
+      const nextAvailableYearlyLesson = subjectYearlyLessons.find(yl => !scheduledYearlyIds.has(yl.id));
+      const newLessonPayload = {
+        subject: subjectDetail.id, // Geändert: ID statt Name
+        day_of_week: targetDay,
+        period_slot: targetPeriod,
+        start_time: timeSlot?.start,
+        end_time: timeSlot?.end,
+        week_number: currentWeek,
+        description: "",
+        yearly_lesson_id: nextAvailableYearlyLesson?.id || null,
+        second_yearly_lesson_id: nextAvailableYearlyLesson?.second_yearly_lesson_id || null,
+        is_double_lesson: nextAvailableYearlyLesson?.is_double_lesson || false,
+        is_exam: nextAvailableYearlyLesson?.is_exam || false,
+        is_allerlei: nextAvailableYearlyLesson?.is_allerlei || false,
+        is_half_class: nextAvailableYearlyLesson?.is_half_class || false,
+        allerlei_subjects: nextAvailableYearlyLesson?.allerlei_subjects || [],
+        allerlei_yearly_lesson_ids: [],
+        user_id: pb.authStore.model.id // Neu: Required user_id
+      };
+      console.log('Create payload from pool:', newLessonPayload); // Neu: Debug-Log
+      const newLesson = await Lesson.create(newLessonPayload);
+      if (!newLesson.yearly_lesson_id) {
+        const existingYearlyForSub = yearlyLessons.filter(yl => yl.subject === newLesson.subject && yl.week_number === newLesson.week_number);
+        const nextLessonNum = existingYearlyForSub.length > 0 ? Math.max(...existingYearlyForSub.map(yl => yl.lesson_number)) + 1 : 1;
+        const newYearly = await YearlyLesson.create({
+          subject: newLesson.subject,
+          week_number: newLesson.week_number,
+          lesson_number: nextLessonNum,
+          school_year: currentYear,
+          is_double_lesson: newLesson.is_double_lesson,
+          second_yearly_lesson_id: newLesson.second_yearly_lesson_id,
+          class_id: activeClassId, // Add this if YearlyLesson requires it (check schema; may not)
+          user_id: pb.authStore.model.id,  // Hinzugefügt: Falls required
+          name: `Lektion ${nextLessonNum} für ${subjects.find(s => s.id === newLesson.subject)?.name || 'Unbekannt'}`,  // Hinzugefügt: Required name
+          description: ''  // Hinzugefügt: Optional, aber gesetzt
+        });
+        await Lesson.update(newLesson.id, { yearly_lesson_id: newYearly.id });
+        newLesson.yearly_lesson_id = newYearly.id;
+        optimisticUpdateYearlyLessons(newYearly, true);
+      } else if (newLesson.is_double_lesson && newLesson.second_yearly_lesson_id) {
+        await YearlyLesson.update(newLesson.second_yearly_lesson_id, { is_double_lesson: true });
+        optimisticUpdateYearlyLessons(newLesson.second_yearly_lesson_id, { is_double_lesson: true });
       }
-      try {
-        const timeSlot = timeSlots.find(ts => ts.period === targetPeriod);
-        const subjectYearlyLessons = yearlyLessons
-          .filter(yl => yl.expand?.subject?.name === subjectDetail.name && yl.week_number === currentWeek)
-          .sort((a, b) => Number(a.lesson_number) - Number(b.lesson_number));
-        const scheduledYearlyIds = new Set(allLessons
-          .filter(l => l.yearly_lesson_id && l.week_number === currentWeek)
-          .map(l => l.yearly_lesson_id));
-        allLessons.filter(l => l.is_allerlei && l.week_number === currentWeek)
-          .forEach(l => l.allerlei_yearly_lesson_ids?.forEach(id => {
-            if (id) scheduledYearlyIds.add(id);
-          }));
-        const nextAvailableYearlyLesson = subjectYearlyLessons.find(yl => !scheduledYearlyIds.has(yl.id));
-        const newLessonPayload = {
-          subject: subjectDetail.id, // Geändert: ID statt Name
-          day_of_week: targetDay,
-          period_slot: targetPeriod,
-          start_time: timeSlot?.start,
-          end_time: timeSlot?.end,
-          week_number: currentWeek,
-          description: "",
-          yearly_lesson_id: nextAvailableYearlyLesson?.id || null,
-          second_yearly_lesson_id: nextAvailableYearlyLesson?.second_yearly_lesson_id || null,
-          is_double_lesson: nextAvailableYearlyLesson?.is_double_lesson || false,
-          is_exam: nextAvailableYearlyLesson?.is_exam || false,
-          is_allerlei: nextAvailableYearlyLesson?.is_allerlei || false,
-          is_half_class: nextAvailableYearlyLesson?.is_half_class || false,
-          allerlei_subjects: nextAvailableYearlyLesson?.allerlei_subjects || [],
-          allerlei_yearly_lesson_ids: [],
-          user_id: pb.authStore.model.id // Neu: Required user_id
-        };
-        console.log('Create payload from pool:', newLessonPayload); // Neu: Debug-Log
-        const newLesson = await Lesson.create(newLessonPayload);
-        if (!newLesson.yearly_lesson_id) {
-          const existingYearlyForSub = yearlyLessons.filter(yl => yl.subject === newLesson.subject && yl.week_number === newLesson.week_number);
-          const nextLessonNum = existingYearlyForSub.length > 0 ? Math.max(...existingYearlyForSub.map(yl => yl.lesson_number)) + 1 : 1;
-          const newYearly = await YearlyLesson.create({
-            subject: newLesson.subject,
-            week_number: newLesson.week_number,
-            lesson_number: nextLessonNum,
-            school_year: currentYear,
-            is_double_lesson: newLesson.is_double_lesson,
-            second_yearly_lesson_id: newLesson.second_yearly_lesson_id,
-            class_id: activeClassId, // Add this if YearlyLesson requires it (check schema; may not)
-            name: `Lektion ${nextLessonNum} für ${subjects.find(s => s.id === newLesson.subject)?.name || 'Unbekannt'}`,  // Hinzugefügt: Required name
-            description: ''  // Optional, aber setze leer
-          });
-          await Lesson.update(newLesson.id, { yearly_lesson_id: newYearly.id });
-          newLesson.yearly_lesson_id = newYearly.id;
-          optimisticUpdateYearlyLessons(newYearly, true);
-        } else if (newLesson.is_double_lesson && newLesson.second_yearly_lesson_id) {
-          await YearlyLesson.update(newLesson.second_yearly_lesson_id, { is_double_lesson: true });
-          optimisticUpdateYearlyLessons(newLesson.second_yearly_lesson_id, { is_double_lesson: true });
+      if (newLesson.is_half_class) {
+        const nextPeriod = targetPeriod + 1;
+        if (nextPeriod <= timeSlots.length && !allLessons.some(l => l.day_of_week === targetDay && l.period_slot === nextPeriod && l.week_number === currentWeek)) {
+          const copyPayload = { ...newLessonPayload, period_slot: nextPeriod, id: null, yearly_lesson_id: newLesson.yearly_lesson_id };
+          const copyLesson = await Lesson.create(copyPayload);
+          tempLessons.push(copyLesson);
+          optimisticUpdateAllLessons(copyLesson, true);
         }
-        if (newLesson.is_half_class) {
-          const nextPeriod = targetPeriod + 1;
-          if (nextPeriod <= timeSlots.length && !allLessons.some(l => l.day_of_week === targetDay && l.period_slot === nextPeriod && l.week_number === currentWeek)) {
-            const copyPayload = { ...newLessonPayload, period_slot: nextPeriod, id: null, yearly_lesson_id: newLesson.yearly_lesson_id };
-            const copyLesson = await Lesson.create(copyPayload);
-            tempLessons.push(copyLesson);
-            optimisticUpdateAllLessons(copyLesson, true);
-          }
-        }
-        tempLessons.push(newLesson);
-        affectedSubjects.add(subjectDetail.name);
-      } catch (error) {
-        console.error("Error creating lesson from pool:", error);
-        queryClientLocal.invalidateQueries(['timetableData', currentYear, currentWeek]);
-        return;
       }
-    } else {
+      tempLessons.push(newLesson);
+      affectedSubjects.add(subjectDetail.name);
+    } catch (error) {
+      console.error("Error creating lesson from pool:", error);
+      queryClientLocal.invalidateQueries(['timetableData', currentYear, currentWeek]);
+      return;
+    }
+  } else {
       const draggedLesson = active.data.current.lesson;
       const targetLesson = allLessons.find(l => l.day_of_week === targetDay && l.period_slot === targetPeriod && l.week_number === currentWeek);
       if (targetLesson) {

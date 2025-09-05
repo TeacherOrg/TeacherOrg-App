@@ -363,7 +363,16 @@ function InnerYearlyOverviewPage() {
       if (primaryId) {
         await YearlyLesson.update(primaryId, { ...finalLessonData, steps: finalLessonData.steps });  // Only primary steps
       } else if (newLessonSlot) {
-        const created = await YearlyLesson.create({ ...newLessonSlot, ...finalLessonData, steps: finalLessonData.steps });
+        const created = await YearlyLesson.create({
+          ...newLessonSlot,
+          ...finalLessonData,
+          steps: finalLessonData.steps,
+          name: finalLessonData.name || 'Neue Lektion', // Wenn du name im Modal hinzufügst, sonst default
+          description: finalLessonData.description || '',
+          user_id: pb.authStore.model.id,
+          class_id: activeClassId,
+          subject: subjects.find(s => s.name === newLessonSlot.subject)?.id // ID statt Name
+        });
         primaryId = created.id;
         optimisticUpdateYearlyLessons(created, true);
       }

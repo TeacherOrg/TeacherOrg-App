@@ -52,23 +52,23 @@ class PbEntity {
 
   async create(newData) {
     const entity = this.normalizeData(newData);
-    const params = { $cancelKey: `create-${this.name}-${Date.now()}` };  // Neu: Unique für create
+    const params = { $cancelKey: `create-${this.name}-${Date.now()}` };
     try {
       const created = await this.collection.create(entity, params);
       return this.normalizeData(created);
     } catch (error) {
-      console.error(`Error creating in ${this.name}:`, error?.data || error);  // Erweitert: Loggt detaillierte Validation-Errors
+      console.error(`Error creating in ${this.name}:`, error?.data ? JSON.stringify(error.data) : error);  // Erweitert: Stringify data für Details
       throw error;
     }
   }
 
   async update(id, updates) {
-    const params = { $cancelKey: `update-${this.name}-${id}-${Date.now()}` };  // Neu: Unique für update
+    const params = { $cancelKey: `update-${this.name}-${id}-${Date.now()}` };
     try {
       const updated = await this.collection.update(id, this.normalizeData(updates), params);
       return this.normalizeData(updated);
     } catch (error) {
-      console.error(`Error updating in ${this.name}:`, error?.data || error);  // Erweitert: Loggt detaillierte Validation-Errors
+      console.error(`Error updating in ${this.name}:`, error?.data ? JSON.stringify(error.data) : error);  // Erweitert: Stringify data für Details
       throw error;
     }
   }
