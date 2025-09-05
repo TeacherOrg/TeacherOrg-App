@@ -4,7 +4,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogDescription,  // Neu: Importiert für Accessibility
+  DialogDescription,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -54,7 +54,7 @@ export default function TopicModal({ isOpen, onClose, onSave, onDelete, topic, s
             </div>
             {topic ? "Thema bearbeiten" : "Neues Thema erstellen"}
           </DialogTitle>
-          <DialogDescription className="text-slate-300">  {/* Neu: Beschreibung für Barrierefreiheit */}
+          <DialogDescription className="text-slate-300">
             {topic ? "Bearbeiten Sie die Details des bestehenden Themas." : "Erstellen Sie ein neues Thema für Ihr Fach."}
           </DialogDescription>
         </DialogHeader>

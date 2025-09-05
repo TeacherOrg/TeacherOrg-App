@@ -235,11 +235,18 @@ function InnerYearlyOverviewPage() {
             ...slot,
             topic_id: activeTopicId,
             school_year: currentYear,
-            name: 'Neue Lektion',  // Default für required name
-            description: '',  // Oder ein Default, aber da es required ist, mache es non-empty wenn nötig (z.B. 'Beschreibung folgt')
+            name: 'Neue Lektion',  // Required non empty
+            description: '',  // Optional, aber setze leer
+            user_id: pb.authStore.model.id,  // Angenommen pb ist importiert; passe an dein Auth-Setup
+            class_id: activeClassId,  // Aus State
+            subject: subjects.find(s => s.name === slot.subject)?.id,  // Relation braucht ID, nicht Name!
             notes: '',
             is_double_lesson: false,
-            second_yearly_lesson_id: null
+            second_yearly_lesson_id: null,
+            is_exam: false,
+            is_half_class: false,
+            is_allerlei: false,
+            allerlei_subjects: []  // Default empty array
           });
 
           let tempUpdatedPrev = yearlyLessons.map(l => l.id === newLesson.id ? {...createdLesson, lesson_number: Number(createdLesson.lesson_number)} : l);
