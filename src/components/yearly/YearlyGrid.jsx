@@ -292,13 +292,13 @@ const YearlyGrid = React.memo(({ lessons, topics, subjects, academicWeeks, onLes
                   
                   if (!lesson) {
                     cells.push(
-                      <div key={lessonKey} className="h-16 p-0.5"> 
+                      <div key={lessonKey} className="h-16">
                         <YearLessonCell
-                          lesson={null}
-                          onClick={() => handleCellClick(null, slot)}
+                          lesson={lessonToPass}
+                          onClick={() => handleCellClick(lessonToPass, slot)}
                           activeTopicId={activeTopicId}
                           defaultColor={subjectColor}
-                          onMouseEnter={(e) => onShowHover(null, e)}
+                          onMouseEnter={(e) => onShowHover(lessonToPass, e)}
                           onMouseLeave={onHideHover}
                         />
                       </div>

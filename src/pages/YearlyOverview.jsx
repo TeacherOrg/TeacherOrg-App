@@ -145,13 +145,7 @@ function InnerYearlyOverviewPage() {
     if (activeTopicId) {
       if (lesson && lesson.id) {
         const newTopicId = lesson.topic_id === activeTopicId ? null : activeTopicId;
-        
-        // Alle Lektionen im merged Block updaten
         let lessonsToUpdate = lesson.mergedLessons || [lesson];
-        
-        const gapPromises = [];
-        
-        // Optimistisches Update und Gap-Filling
         let tempUpdatedPrev = yearlyLessons.map(p => {
           const toUpdate = lessonsToUpdate.find(l => l.id === p.id);
           if (toUpdate) {
@@ -160,6 +154,7 @@ function InnerYearlyOverviewPage() {
           return p;
         });
 
+        const gapPromises = [];
         if (newTopicId) {
           const weekLessons = tempUpdatedPrev
             .filter(l => l.week_number === lesson.week_number && l.subject === lesson.subject && l.topic_id === newTopicId)
@@ -187,13 +182,18 @@ function InnerYearlyOverviewPage() {
                   topic_id: newTopicId,
                   notes: '',
                   is_double_lesson: false,
-                  second_yearly_lesson_id: null
+                  second_yearly_lesson_id: null,
+                  name: 'Neue Lektion', // Erforderlich
+                  description: '',
+                  user_id: pb.authStore.model.id,
+                  class_id: activeClassId,
+                  subject: subjects.find(s => s.name === slot.subject)?.id
                 }).then(gapCreated => {
-                  optimisticUpdateYearlyLessons(gapLesson, false, true); // Remove temp
-                  optimisticUpdateYearlyLessons(gapCreated, true); // Add real
+                  optimisticUpdateYearlyLessons(gapLesson, false, true); // Entferne temp
+                  optimisticUpdateYearlyLessons(gapCreated, true); // Füge reale Lektion hinzu
                 }).catch(err => {
                   console.error("Error creating gap lesson:", err);
-                  optimisticUpdateYearlyLessons(gapLesson, false, true); // Remove temp on error
+                  optimisticUpdateYearlyLessons(gapLesson, false, true); // Entferne temp bei Fehler
                 });
                 
                 gapPromises.push(createPromise);
@@ -211,14 +211,12 @@ function InnerYearlyOverviewPage() {
             )
           );
           await Promise.all(gapPromises);
-          queryClientLocal.invalidateQueries(['yearlyData', currentYear]);
+          await refetch(); // Explizites Neuladen der Daten
         } catch (error) {
           console.error("Error updating block lesson topics:", error);
-          // Rollback
-          setYearlyLessons(yearlyLessons);
+          setYearlyLessons(yearlyLessons); // Rollback
         }
       } else if (slot) {
-        // Neue Lektion erstellen und gaps füllen für merge
         const newLesson = {
           id: `temp-${Date.now()}`,
           ...slot,
@@ -236,23 +234,22 @@ function InnerYearlyOverviewPage() {
             ...slot,
             topic_id: activeTopicId,
             school_year: currentYear,
-            name: 'Neue Lektion',  // Required non empty
-            description: '',  // Optional, aber setze leer
-            user_id: pb.authStore.model.id,  // Angenommen pb ist importiert; passe an dein Auth-Setup
-            class_id: activeClassId,  // Aus State
-            subject: subjects.find(s => s.name === slot.subject)?.id,  // Relation braucht ID, nicht Name!
+            name: 'Neue Lektion',
+            description: '',
+            user_id: pb.authStore.model.id,
+            class_id: activeClassId,
+            subject: subjects.find(s => s.name === slot.subject)?.id,
             notes: '',
             is_double_lesson: false,
             second_yearly_lesson_id: null,
             is_exam: false,
             is_half_class: false,
             is_allerlei: false,
-            allerlei_subjects: []  // Default empty array
+            allerlei_subjects: []
           });
 
-          let tempUpdatedPrev = yearlyLessons.map(l => l.id === newLesson.id ? {...createdLesson, lesson_number: Number(createdLesson.lesson_number)} : l);
+          let tempUpdatedPrev = [...yearlyLessons, { ...createdLesson, lesson_number: Number(createdLesson.lesson_number) }]; // Sofortige State-Aktualisierung
           
-          // Fill gaps for merge: Find all lessons in week for subject with activeTopicId, including new
           const weekLessons = tempUpdatedPrev
             .filter(l => l.week_number === slot.week_number && l.subject === slot.subject && l.topic_id === activeTopicId)
             .sort((a, b) => Number(a.lesson_number) - Number(b.lesson_number));
@@ -279,13 +276,18 @@ function InnerYearlyOverviewPage() {
                   topic_id: activeTopicId,
                   notes: '',
                   is_double_lesson: false,
-                  second_yearly_lesson_id: null
+                  second_yearly_lesson_id: null,
+                  name: 'Neue Lektion',
+                  description: '',
+                  user_id: pb.authStore.model.id,
+                  class_id: activeClassId,
+                  subject: subjects.find(s => s.name === slot.subject)?.id
                 }).then(gapCreated => {
-                  optimisticUpdateYearlyLessons(gapLesson, false, true); // Remove temp
-                  optimisticUpdateYearlyLessons(gapCreated, true); // Add real
+                  optimisticUpdateYearlyLessons(gapLesson, false, true);
+                  optimisticUpdateYearlyLessons(gapCreated, true);
                 }).catch(err => {
                   console.error("Error creating gap lesson:", err);
-                  optimisticUpdateYearlyLessons(gapLesson, false, true); // Remove temp on error
+                  optimisticUpdateYearlyLessons(gapLesson, false, true);
                 });
                 
                 gapPromises.push(createPromise);
@@ -295,14 +297,13 @@ function InnerYearlyOverviewPage() {
           
           setYearlyLessons(tempUpdatedPrev);
           await Promise.all(gapPromises);
-          queryClientLocal.invalidateQueries(['yearlyData', currentYear]);
+          await refetch(); // Explizites Neuladen der Daten
         } catch (error) {
           console.error("Error creating lesson:", error);
           optimisticUpdateYearlyLessons(newLesson, false, true);
         }
       }
     } else {
-      // Non-active Topic: Modal handling
       if (lesson && lesson.topic_id && ((lesson.mergedLessons && lesson.mergedLessons.length > 1) || lesson.is_double_lesson)) {
         let topicLessons = [];
         if (lesson.is_double_lesson && (!lesson.mergedLessons || lesson.mergedLessons.length <= 1)) {
@@ -336,7 +337,7 @@ function InnerYearlyOverviewPage() {
       }
       setIsLessonModalOpen(true);
     }
-  }, [activeTopicId, currentYear, topicsById, yearlyLessons, queryClientLocal]);
+  }, [activeTopicId, currentYear, topicsById, yearlyLessons, activeClassId, subjects, refetch]);
 
   const handleSaveLesson = useCallback(async (lessonData, lessonContext) => {
     const originalLesson = lessonContext || editingLesson;
@@ -516,12 +517,12 @@ function InnerYearlyOverviewPage() {
   }, [subjects, activeClassId]);
 
   const lessonsForYear = useMemo(() => {
-      return yearlyLessons.filter(lesson => {
-        if (!lesson.school_year) {
-          return currentYear === new Date().getFullYear();
-        }
-        return lesson.school_year === currentYear;
-      });
+    return yearlyLessons.filter(lesson => {
+      if (!lesson.school_year) {
+        return currentYear === new Date().getFullYear();
+      }
+      return Number(lesson.school_year) === currentYear; // Konvertiere zu Number
+    });
   }, [yearlyLessons, currentYear]);
 
   return (

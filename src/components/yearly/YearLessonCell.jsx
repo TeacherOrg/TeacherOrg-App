@@ -20,7 +20,6 @@ const safeStringify = (value) => {
 };
 
 export default function YearLessonCell({ lesson, onClick, activeTopicId, defaultColor = '#3b82f6', isDoubleLesson = false, onMouseEnter = () => {}, onMouseLeave = () => {} }) {
-
   const handleClick = () => {
     onClick(lesson, !lesson ? {
       week_number: lesson?.week_number,
@@ -43,7 +42,7 @@ export default function YearLessonCell({ lesson, onClick, activeTopicId, default
   }
 
   const topic = lesson.topic;
-  const bgColor = topic?.color || defaultColor;
+  const bgColor = topic?.color || lesson?.color || defaultColor || '#3b82f6'; // Hier die Änderung
   const isTopicActive = activeTopicId === lesson.topic_id;
   const hasContent = lesson.steps?.length > 0 || (lesson.notes && String(lesson.notes).trim());
 
