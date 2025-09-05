@@ -252,6 +252,16 @@ const YearlyGrid = React.memo(({ lessons, topics, subjects, academicWeeks, onLes
           </>
         )}
         itemContent={(index, week) => {
+          // Guard 1: Überprüfe, ob benötigte Datenstrukturen initialisiert sind
+          if (!subjectsByName || !topicsById || !lessonsByWeek) {
+            console.warn('Datenstrukturen nicht initialisiert:', { subjectsByName, topicsById, lessonsByWeek });
+            return (
+              <td colSpan={uniqueSubjects.length + 1} className="p-3 text-center text-red-500 dark:text-red-400">
+                Fehler: Daten nicht geladen
+              </td>
+            );
+          }
+
           const weekDates = getWeekDateRange(week, currentYear);
           const isCurrentWeek = week === currentWeek && currentYear === new Date().getFullYear();
           const holiday = getHolidayForWeek(week);
@@ -276,29 +286,32 @@ const YearlyGrid = React.memo(({ lessons, topics, subjects, academicWeeks, onLes
                 const lessonSlotsCount = lessonsPerWeekBySubject[subject] || 4;
                 const subjectColor = subjectsByName[subject]?.color || '#3b82f6';
                 
-                const renderedSlots = new Set(); 
+                console.log('Debug: Processing subject', { subject, lessonSlotsCount, subjectColor }); // Debug-Log 2
                 
+                const renderedSlots = new Set(); 
                 const cells = [];
                 for (let i = 0; i < lessonSlotsCount; i++) {
                   const lessonNumber = i + 1;
+                  
+                  console.log('Debug: Processing lesson slot', { week, subject, lessonNumber, lessonKey: `${week}-${subject}-${lessonNumber}` }); // Debug-Log 3
 
                   if (renderedSlots.has(lessonNumber)) {
                     continue;
                   }
 
                   const lessonKey = `${week}-${subject}-${lessonNumber}`;
-                  const lesson = lessonsByWeek[lessonKey];
+                  const lesson = lessonsByWeek[lessonKey] || null; // Guard 2: Fallback auf null
                   const slot = { week_number: week, subject, lesson_number: lessonNumber, school_year: currentYear };
                   
                   if (!lesson) {
                     cells.push(
-                      <div key={lessonKey} className="h-16">
+                      <div key={lessonKey} className="h-16 p-0.5"> 
                         <YearLessonCell
-                          lesson={lessonToPass}
-                          onClick={() => handleCellClick(lessonToPass, slot)}
+                          lesson={null}
+                          onClick={() => handleCellClick(null, slot)}
                           activeTopicId={activeTopicId}
                           defaultColor={subjectColor}
-                          onMouseEnter={(e) => onShowHover(lessonToPass, e)}
+                          onMouseEnter={null} // Kein Hover für leere Slots
                           onMouseLeave={onHideHover}
                         />
                       </div>
@@ -309,6 +322,7 @@ const YearlyGrid = React.memo(({ lessons, topics, subjects, academicWeeks, onLes
                   // PRIORITY 1: Handle TOPIC BLOCKS
                   if (lesson.topic_id) {
                     const topic = topicsById.get(lesson.topic_id);
+                    console.log('Debug: Processing topic block', { lessonId: lesson.id, topicId: lesson.topic_id, topic }); // Debug-Log 4
                     if (topic) {
                       let span = 0;
                       const topicLessons = [];
@@ -316,7 +330,9 @@ const YearlyGrid = React.memo(({ lessons, topics, subjects, academicWeeks, onLes
                       let j = lessonNumber;
                       while (j <= lessonSlotsCount) {
                         const checkKey = `${week}-${subject}-${j}`;
-                        const checkLesson = lessonsByWeek[checkKey];
+                        const checkLesson = lessonsByWeek[checkKey] || null; // Guard 3: Fallback auf null
+                        
+                        console.log('Debug: Checking topic lesson', { checkKey, checkLessonId: checkLesson?.id }); // Debug-Log 5
                         
                         if (checkLesson && checkLesson.topic_id === lesson.topic_id) {
                           topicLessons.push(checkLesson);
@@ -332,7 +348,7 @@ const YearlyGrid = React.memo(({ lessons, topics, subjects, academicWeeks, onLes
                       if (lesson.is_double_lesson && lesson.second_yearly_lesson_id) {
                         const nextNumber = lessonNumber + 1;
                         const nextKey = `${week}-${subject}-${nextNumber}`;
-                        const nextLesson = lessonsByWeek[nextKey];
+                        const nextLesson = lessonsByWeek[nextKey] || null; // Guard 4: Fallback auf null
                         
                         if (nextLesson && nextLesson.topic_id === lesson.topic_id) {
                           isDoubleInTopic = true;
@@ -398,7 +414,7 @@ const YearlyGrid = React.memo(({ lessons, topics, subjects, academicWeeks, onLes
                   if (lesson.is_double_lesson && lesson.second_yearly_lesson_id) {
                     const nextNumber = lessonNumber + 1;
                     const nextKey = `${week}-${subject}-${nextNumber}`;
-                    const nextLesson = lessonsByWeek[nextKey];
+                    const nextLesson = lessonsByWeek[nextKey] || null; // Guard 5: Fallback auf null
                     
                     let span = 1;
                     if (nextLesson) {
