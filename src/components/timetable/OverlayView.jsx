@@ -27,7 +27,28 @@ const OverlayView = memo(({ lesson, schedule, overlayRef, disableHover, isDraggi
       onMouseMove={onMouseMove}
       onMouseLeave={onMouseLeave}
     >
-      <h3 className="font-bold mb-2 text-center">{lesson.content || 'Thema'}</h3>
+      <h3 className="font-bold mb-2 text-center text-white">
+        {lesson.is_allerlei ? (
+          `Allerlei: ${(lesson.allerlei_subjects || []).join(', ')}`
+        ) : lesson.topic_id && lesson.topic?.title ? (
+          <div>
+            <div>{lesson.topic.title}</div>
+            <div className="text-xs opacity-75">
+              {lesson.is_double_lesson && lesson.second_yearly_lesson_id && lesson.secondYearlyLesson ? (
+                `${lesson.primaryYearlyLesson?.name || `Lektion ${lesson.primaryYearlyLesson?.lesson_number || ''}`} + ${lesson.secondYearlyLesson.name || `Lektion ${Number(lesson.primaryYearlyLesson?.lesson_number || 1) + 1}`}`
+              ) : (
+                lesson.primaryYearlyLesson?.name || `Lektion ${lesson.primaryYearlyLesson?.lesson_number || ''}`
+              )}
+            </div>
+          </div>
+        ) : (
+          lesson.is_double_lesson && lesson.second_yearly_lesson_id && lesson.secondYearlyLesson ? (
+            `${lesson.primaryYearlyLesson?.name || `Lektion ${lesson.primaryYearlyLesson?.lesson_number || ''}`} + ${lesson.secondYearlyLesson.name || `Lektion ${Number(lesson.primaryYearlyLesson?.lesson_number || 1) + 1}`}`
+          ) : (
+            lesson.primaryYearlyLesson?.name || `Lektion ${lesson.primaryYearlyLesson?.lesson_number || ''}`
+          )
+        )}
+      </h3>
       {lesson.steps?.length > 0 ? (
         <table className="text-sm w-full border-collapse">
           <thead>

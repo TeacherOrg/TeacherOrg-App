@@ -8,25 +8,20 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Save, X, Trash2, PlusCircle, BookOpen } from "lucide-react";
 import { debounce } from 'lodash';
 
-const WORK_FORMS = [ '👤 Single', '👥 Partner', '👨‍👩‍👧‍👦 Group', '🏛️ Plenum' ];
+const WORK_FORMS = ['👤 Single', '👥 Partner', '👨‍👩‍👧‍👦 Group', '🏛️ Plenum'];
 const generateId = () => Math.random().toString(36).substr(2, 9);
 
 // Mock for YearlyLesson API calls - replace with actual import/service in a real app
-// e.g., import { YearlyLesson } from '@/path/to/your/api/service';
 const YearlyLesson = {
   update: async (id, data) => {
     console.log(`[MOCK API] Updating YearlyLesson ${id} with data:`, data);
-    // Simulate API call delay
     await new Promise(resolve => setTimeout(resolve, 300));
-    // In a real application, you would typically make an actual API call here:
-    // const response = await fetch(`/api/yearlylessons/${id}`, {
-    //   method: 'PUT',
-    //   headers: { 'Content-Type': 'application/json' },
-    //   body: JSON.stringify(data),
-    // });
-    // if (!response.ok) throw new Error('Failed to update yearly lesson');
-    // return response.json();
     return { success: true, id, data };
+  },
+  create: async (data) => {
+    console.log(`[MOCK API] Creating YearlyLesson with data:`, data);
+    await new Promise(resolve => setTimeout(resolve, 300));
+    return { success: true, id: generateId(), ...data };
   }
 };
 
@@ -70,8 +65,18 @@ const StepRow = ({ step, onUpdate, onRemove }) => (
 );
 
 export default function LessonModal({ isOpen, onClose, onSave, onDelete, lesson, topics, newLessonSlot, subjectColor, allYearlyLessons, currentWeek, currentYear }) {
-  const [formData, setFormData] = useState({});
-  // NEW: Separate states for steps
+  const [formData, setFormData] = useState({
+    name: '',
+    second_name: '', // Neues Feld für den Titel der zweiten Lektion
+    topic_id: '',
+    is_double_lesson: false,
+    is_exam: false,
+    is_half_class: false,
+    notes: '',
+    second_yearly_lesson_id: null,
+    steps: [],
+    allerlei_subjects: []
+  });
   const [primarySteps, setPrimarySteps] = useState([]);
   const [secondSteps, setSecondSteps] = useState([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -80,6 +85,41 @@ export default function LessonModal({ isOpen, onClose, onSave, onDelete, lesson,
   const isEditing = !!lesson;
 
   const displayLesson = lesson || newLessonSlot;
+
+  // Initialize form data and steps when the modal opens or lesson changes
+  useEffect(() => {
+    if (isOpen) {
+      const currentLesson = lesson || newLessonSlot;
+      const hasSecondLesson = !!currentLesson?.second_yearly_lesson_id;
+      const secondLesson = hasSecondLesson && allYearlyLessons
+        ? allYearlyLessons.find(yl => String(yl.id) === String(currentLesson.second_yearly_lesson_id))
+        : null;
+
+      setFormData({
+        name: currentLesson?.name || `Lektion ${currentLesson?.lesson_number || 1}`,
+        second_name: secondLesson?.name || (hasSecondLesson ? `Lektion ${Number(currentLesson?.lesson_number || 1) + 1}` : ''),
+        topic_id: currentLesson?.topic_id || '',
+        is_double_lesson: currentLesson?.is_double_lesson || false,
+        is_exam: currentLesson?.is_exam || false,
+        is_half_class: currentLesson?.is_half_class || false,
+        notes: currentLesson?.notes || '',
+        second_yearly_lesson_id: currentLesson?.second_yearly_lesson_id || null,
+        steps: currentLesson?.steps || [],
+        allerlei_subjects: currentLesson?.allerlei_subjects || []
+      });
+
+      setAddSecondLesson(hasSecondLesson);
+      setSecondYearlyLessonId(currentLesson?.second_yearly_lesson_id || '');
+
+      setPrimarySteps(currentLesson?.steps?.map(step => ({ ...step, id: step.id || generateId() })) || []);
+
+      if (currentLesson?.is_double_lesson && hasSecondLesson && secondLesson) {
+        setSecondSteps(secondLesson.steps?.map(step => ({ ...step, id: `second-${step.id || generateId()}` })) || []);
+      } else {
+        setSecondSteps([]);
+      }
+    }
+  }, [isOpen, lesson, newLessonSlot, allYearlyLessons]);
 
   // Handles keyboard shortcuts for modal actions
   useEffect(() => {
@@ -93,105 +133,67 @@ export default function LessonModal({ isOpen, onClose, onSave, onDelete, lesson,
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, isEditing, onClose]);
 
-  // Initializes form data and steps when the modal opens or lesson changes
-  useEffect(() => {
-    if (isOpen) {
-      const currentLesson = lesson || newLessonSlot;
-      setFormData({
-        topic_id: currentLesson?.topic_id || "",
-        is_double_lesson: currentLesson?.is_double_lesson || false,
-        is_exam: currentLesson?.is_exam || false,
-        is_half_class: currentLesson?.is_half_class || false, 
-        notes: currentLesson?.notes || '',
-      });
-      
-      const hasSecondLesson = !!currentLesson?.second_yearly_lesson_id;
-      setAddSecondLesson(hasSecondLesson);
-      setSecondYearlyLessonId(currentLesson?.second_yearly_lesson_id || '');
-
-      // Primary steps always from currentLesson
-      setPrimarySteps(currentLesson?.steps?.map(step => ({ ...step, id: step.id || generateId() })) || []);
-
-      // FIX: Always try to load second steps if double lesson, even if toggled off initially
-      if (currentLesson?.is_double_lesson && hasSecondLesson && currentLesson.second_yearly_lesson_id && allYearlyLessons) {
-        const secondLesson = allYearlyLessons.find(yl => String(yl.id) === String(currentLesson.second_yearly_lesson_id));
-        if (secondLesson) {
-          setSecondSteps(secondLesson.steps?.map(step => ({ ...step, id: `second-${step.id || generateId()}` })) || []);
-        } else {
-          setSecondSteps([]);
-        }
-      } else {
-        setSecondSteps([]);
-      }
-    }
-  }, [isOpen, lesson, newLessonSlot, allYearlyLessons]);
-
-  // FIX 1b: Couple the double lesson toggle with the content toggle
+  // Handle double lesson toggle
   const handleDoubleLessonToggle = (checked) => {
-    setFormData(prev => ({...prev, is_double_lesson: checked}));
+    setFormData(prev => ({ ...prev, is_double_lesson: checked }));
     if (checked) {
       setAddSecondLesson(true);
     } else {
       setAddSecondLesson(false);
       setSecondSteps([]);
       setSecondYearlyLessonId('');
+      setFormData(prev => ({ ...prev, second_name: '' }));
     }
   };
 
   // Effect for toggling addSecondLesson and handling second lesson content
   useEffect(() => {
     if (!addSecondLesson) {
-        setSecondSteps([]);
-        // Do not clear secondYearlyLessonId to allow re-toggling
+      setSecondSteps([]);
+      setSecondYearlyLessonId('');
+      setFormData(prev => ({ ...prev, second_name: '' }));
     } else {
-        // Always try to detect/load second lesson when toggled on
-        if (displayLesson && allYearlyLessons) {
-            const subjectLessonsThisWeek = allYearlyLessons
-                .filter(yl => yl.subject === displayLesson.subject && 
-                              yl.week_number === displayLesson.week_number)
-                .sort((a, b) => Number(a.lesson_number) - Number(b.lesson_number));
+      if (displayLesson && allYearlyLessons) {
+        const subjectLessonsThisWeek = allYearlyLessons
+          .filter(yl => yl.subject === displayLesson.subject && yl.week_number === displayLesson.week_number)
+          .sort((a, b) => Number(a.lesson_number) - Number(b.lesson_number));
 
-            const currentNum = Number(displayLesson.lesson_number);
+        const currentNum = Number(displayLesson.lesson_number);
+        let nextLessonCandidate = subjectLessonsThisWeek.find(yl => Number(yl.lesson_number) === currentNum + 1);
 
-            // Find the lesson with lesson_number = currentNum +1
-            let nextLessonCandidate = subjectLessonsThisWeek.find(yl => Number(yl.lesson_number) === currentNum + 1);
-            
-            let isNewSecond = false;
-            if (!nextLessonCandidate) {
-                // Create new second lesson if not existent
-                console.log('Creating new second YearlyLesson');
-                const newSecondNumber = currentNum + 1;
-                const newSecond = {
-                    subject: displayLesson.subject,
-                    week_number: displayLesson.week_number,
-                    lesson_number: newSecondNumber,
-                    school_year: currentYear,
-                    steps: [],  // Leer bei new
-                    notes: '',
-                    is_double_lesson: true
-                };
-                // In realer App: const createdSecond = await YearlyLesson.create(newSecond);
-                // Für Mock/Demo: Simuliere mit ID
-                nextLessonCandidate = { ...newSecond, id: generateId() };
-                isNewSecond = true;
-                // Update formData to link
-                setFormData(prev => ({...prev, second_yearly_lesson_id: nextLessonCandidate.id}));
-            }
-
-            if (nextLessonCandidate) {
-                setSecondYearlyLessonId(nextLessonCandidate.id);
-                const nextSteps = nextLessonCandidate.steps?.map(step => ({ ...step, id: `second-${step.id || generateId()}` })) || [];
-                setSecondSteps(nextSteps);
-            } else {
-                setSecondYearlyLessonId('');
-                setSecondSteps([]);
-            }
+        if (!nextLessonCandidate) {
+          console.log('Creating new second YearlyLesson');
+          const newSecondNumber = currentNum + 1;
+          const newSecond = {
+            subject: displayLesson.subject,
+            week_number: displayLesson.week_number,
+            lesson_number: newSecondNumber,
+            school_year: currentYear,
+            steps: [],
+            notes: '',
+            is_double_lesson: true,
+            name: `Lektion ${newSecondNumber}`
+          };
+          nextLessonCandidate = { ...newSecond, id: generateId() };
+          setFormData(prev => ({ ...prev, second_yearly_lesson_id: nextLessonCandidate.id, second_name: newSecond.name }));
         } else {
-            setSecondYearlyLessonId('');
-            setSecondSteps([]);
+          setFormData(prev => ({ ...prev, second_name: nextLessonCandidate.name || `Lektion ${currentNum + 1}` }));
         }
+
+        if (nextLessonCandidate) {
+          setSecondYearlyLessonId(nextLessonCandidate.id);
+          const nextSteps = nextLessonCandidate.steps?.map(step => ({ ...step, id: `second-${step.id || generateId()}` })) || [];
+          setSecondSteps(nextSteps);
+        } else {
+          setSecondYearlyLessonId('');
+          setSecondSteps([]);
+        }
+      } else {
+        setSecondYearlyLessonId('');
+        setSecondSteps([]);
+      }
     }
-  }, [addSecondLesson, allYearlyLessons, displayLesson, generateId, currentYear]);
+  }, [addSecondLesson, allYearlyLessons, displayLesson, currentYear]);
 
   const handleUpdatePrimaryStep = (id, field, value) => {
     setPrimarySteps(primarySteps.map(step => step.id === id ? { ...step, [field]: value } : step));
@@ -204,7 +206,7 @@ export default function LessonModal({ isOpen, onClose, onSave, onDelete, lesson,
   const handleAddPrimaryStep = () => {
     setPrimarySteps([...primarySteps, { id: generateId(), time: null, workForm: '', activity: '', material: '' }]);
   };
-  
+
   const handleUpdateSecondStep = (id, field, value) => {
     setSecondSteps(secondSteps.map(step => step.id === id ? { ...step, [field]: value } : step));
   };
@@ -228,25 +230,25 @@ export default function LessonModal({ isOpen, onClose, onSave, onDelete, lesson,
   };
 
   const debouncedSave = debounce(onSave, 300);
-  
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     e.persist();
-    
+
     if (isSubmitting) return;
     setIsSubmitting(true);
-    
+
     try {
       const finalData = {
         ...formData,
         topic_id: formData.topic_id === 'no_topic' ? null : formData.topic_id,
-        steps: cleanStepsData(primarySteps),  // Only primary steps for first lesson
-        secondSteps: addSecondLesson ? cleanStepsData(secondSteps) : [],  // Separate second steps
+        steps: cleanStepsData(primarySteps),
+        secondSteps: addSecondLesson ? cleanStepsData(secondSteps) : [],
         is_double_lesson: formData.is_double_lesson,
         second_yearly_lesson_id: addSecondLesson ? secondYearlyLessonId : null,
         notes: formData.notes
       };
-      
+
       debouncedSave(finalData);
     } finally {
       setIsSubmitting(false);
@@ -259,6 +261,11 @@ export default function LessonModal({ isOpen, onClose, onSave, onDelete, lesson,
     }
   };
 
+  const handleInputChange = (e) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({ ...prev, [name]: value }));
+  };
+
   const subjectTopics = topics.filter(topic => topic.subject === displayLesson?.subject);
   const topicColor = formData.topic_id ? topics.find(t => t.id === formData.topic_id)?.color : null;
   const modalColor = topicColor || subjectColor || '#3b82f6';
@@ -268,12 +275,12 @@ export default function LessonModal({ isOpen, onClose, onSave, onDelete, lesson,
       const secondLesson = allYearlyLessons.find(l => String(l.id) === String(secondYearlyLessonId));
       if (secondLesson && Number(secondLesson.lesson_number) === Number(displayLesson?.lesson_number) + 1) {
         const hasContent = !!secondLesson.notes || (secondLesson.steps || []).length > 0;
-        const contentInfo = `${secondLesson.notes || `Lektion ${secondLesson.lesson_number}`}${secondLesson.steps ? ` (${(secondLesson.steps || []).length} Schritte)` : ''}`;
-        return `Nächste: ${hasContent ? contentInfo : `Lektion ${secondLesson.lesson_number} (leer)`}`;
+        const contentInfo = `${secondLesson.notes || formData.second_name || `Lektion ${secondLesson.lesson_number}`}${secondLesson.steps ? ` (${(secondLesson.steps || []).length} Schritte)` : ''}`;
+        return `Nächste: ${hasContent ? contentInfo : `${formData.second_name || `Lektion ${secondLesson.lesson_number}`} (leer)`}`;
       }
     }
     return 'Keine aufeinanderfolgende Lektion verfügbar.';
-  }, [secondYearlyLessonId, allYearlyLessons, displayLesson]);
+  }, [secondYearlyLessonId, allYearlyLessons, displayLesson, formData.second_name]);
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -291,10 +298,10 @@ export default function LessonModal({ isOpen, onClose, onSave, onDelete, lesson,
           }}
         >
           <DialogTitle className="flex items-center gap-3 text-xl text-slate-900 dark:text-white">
-             <div 
-               className="w-10 h-10 rounded-xl flex items-center justify-center shadow-md"
-               style={{ backgroundColor: modalColor }}
-             >
+            <div 
+              className="w-10 h-10 rounded-xl flex items-center justify-center shadow-md"
+              style={{ backgroundColor: modalColor }}
+            >
               <BookOpen className="w-5 h-5 text-white" />
             </div>
             {lesson ? 'Jahreslektion bearbeiten' : 'Neue Jahreslektion erstellen'}
@@ -305,58 +312,86 @@ export default function LessonModal({ isOpen, onClose, onSave, onDelete, lesson,
         </DialogHeader>
         
         <form id="yearly-lesson-form" onSubmit={handleSubmit} className="space-y-6 pt-4">
-           <div className="flex flex-wrap items-center justify-around gap-x-6 gap-y-4 p-3 rounded-lg bg-slate-100/50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700">
-              <div className="flex items-center gap-2">
-                <Switch id="half-class" checked={formData.is_half_class || false} onCheckedChange={(checked) => setFormData(prev => ({ ...prev, is_half_class: checked }))} />
-                <Label htmlFor="half-class" className="text-sm font-semibold text-slate-900 dark:text-white cursor-pointer">Halbklasse</Label>
-              </div>
-              <div className="flex items-center gap-2">
-                <Switch id="double-lesson" checked={formData.is_double_lesson || false} onCheckedChange={handleDoubleLessonToggle} />
-                <Label htmlFor="double-lesson" className="text-sm font-semibold text-slate-900 dark:text-white cursor-pointer">Doppellektion</Label>
-              </div>
-              <div className="flex items-center gap-2">
-                <Switch id="exam" checked={formData.is_exam || false} onCheckedChange={(checked) => setFormData(prev => ({ ...prev, is_exam: checked }))} />
-                <Label htmlFor="exam" className="text-sm font-semibold text-slate-900 dark:text-white cursor-pointer">Prüfung</Label>
-              </div>
-           </div>
-           
-           {formData.is_double_lesson && (
-              <div className="p-3 rounded-lg bg-slate-100/50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 space-y-3">
-                 <div className="flex items-center gap-2">
-                    <Switch id="add-second" checked={addSecondLesson} onCheckedChange={setAddSecondLesson} />
-                    <Label htmlFor="add-second" className="text-sm font-semibold text-slate-900 dark:text-white cursor-pointer">Inhalte aus zweiter Lektion verwenden</Label>
-                 </div>
-                 {addSecondLesson && (
-                    <div className="p-3 bg-slate-200/50 dark:bg-slate-700/50 rounded-md text-sm text-slate-500 dark:text-slate-300">
-                      <p>
-                        <span className="font-semibold text-slate-900 dark:text-white">{secondLessonNote}</span>
-                      </p>
-                    </div>
-                 )}
-              </div>
-           )}
+          <div className="grid grid-cols-4 items-center gap-4">
+            <Label htmlFor="name" className="text-right text-sm font-semibold text-slate-900 dark:text-white">Titel (Lektion {displayLesson?.lesson_number})</Label>
+            <Input
+              id="name"
+              name="name"
+              value={formData.name}
+              onChange={handleInputChange}
+              className="col-span-3 bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white"
+              placeholder={`Lektion ${displayLesson?.lesson_number || ''}`}
+              maxLength={30}
+            />
+          </div>
 
-           <div className="flex justify-between items-start">
-              <div className="flex-1 space-y-2 mr-6">
-                 <Label className="text-sm font-semibold text-slate-900 dark:text-white">Thema</Label>
-                    <Select
-                      value={formData.topic_id || "no_topic"}
-                      onValueChange={(value) => setFormData({...formData, topic_id: value})}
-                    >
-                      <SelectTrigger className="bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white">
-                        <SelectValue placeholder="Thema auswählen (optional)" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="no_topic">Kein Thema</SelectItem>
-                        {subjectTopics.map((topic) => (
-                          <SelectItem key={topic.id} value={topic.id}>{topic.title}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                 </div>
-           </div>
+          {formData.is_double_lesson && addSecondLesson && (
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="second_name" className="text-right text-sm font-semibold text-slate-900 dark:text-white">Titel (Lektion {Number(displayLesson?.lesson_number || 1) + 1})</Label>
+              <Input
+                id="second_name"
+                name="second_name"
+                value={formData.second_name}
+                onChange={handleInputChange}
+                className="col-span-3 bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white"
+                placeholder={`Lektion ${Number(displayLesson?.lesson_number || 1) + 1}`}
+                maxLength={30}
+              />
+            </div>
+          )}
+
+          <div className="flex flex-wrap items-center justify-around gap-x-6 gap-y-4 p-3 rounded-lg bg-slate-100/50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700">
+            <div className="flex items-center gap-2">
+              <Switch id="half-class" checked={formData.is_half_class || false} onCheckedChange={(checked) => setFormData(prev => ({ ...prev, is_half_class: checked }))} />
+              <Label htmlFor="half-class" className="text-sm font-semibold text-slate-900 dark:text-white cursor-pointer">Halbklasse</Label>
+            </div>
+            <div className="flex items-center gap-2">
+              <Switch id="double-lesson" checked={formData.is_double_lesson || false} onCheckedChange={handleDoubleLessonToggle} />
+              <Label htmlFor="double-lesson" className="text-sm font-semibold text-slate-900 dark:text-white cursor-pointer">Doppellektion</Label>
+            </div>
+            <div className="flex items-center gap-2">
+              <Switch id="exam" checked={formData.is_exam || false} onCheckedChange={(checked) => setFormData(prev => ({ ...prev, is_exam: checked }))} />
+              <Label htmlFor="exam" className="text-sm font-semibold text-slate-900 dark:text-white cursor-pointer">Prüfung</Label>
+            </div>
+          </div>
           
-           <div className="space-y-4">
+          {formData.is_double_lesson && (
+            <div className="p-3 rounded-lg bg-slate-100/50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 space-y-3">
+              <div className="flex items-center gap-2">
+                <Switch id="add-second" checked={addSecondLesson} onCheckedChange={setAddSecondLesson} />
+                <Label htmlFor="add-second" className="text-sm font-semibold text-slate-900 dark:text-white cursor-pointer">Inhalte aus zweiter Lektion verwenden</Label>
+              </div>
+              {addSecondLesson && (
+                <div className="p-3 bg-slate-200/50 dark:bg-slate-700/50 rounded-md text-sm text-slate-500 dark:text-slate-300">
+                  <p>
+                    <span className="font-semibold text-slate-900 dark:text-white">{secondLessonNote}</span>
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="flex justify-between items-start">
+            <div className="flex-1 space-y-2 mr-6">
+              <Label className="text-sm font-semibold text-slate-900 dark:text-white">Thema</Label>
+              <Select
+                value={formData.topic_id || "no_topic"}
+                onValueChange={(value) => setFormData({...formData, topic_id: value})}
+              >
+                <SelectTrigger className="bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white">
+                  <SelectValue placeholder="Thema auswählen (optional)" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="no_topic">Kein Thema</SelectItem>
+                  {subjectTopics.map((topic) => (
+                    <SelectItem key={topic.id} value={topic.id}>{topic.title || topic.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          
+          <div className="space-y-4">
             <Label className="font-semibold text-slate-900 dark:text-white">Lektionsplan Schritte</Label>
             <div className="space-y-3 p-4 border rounded-lg bg-slate-100/50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700">
               {primarySteps.map(step => (

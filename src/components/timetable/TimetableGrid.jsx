@@ -33,38 +33,26 @@ const DraggableItem = ({ id, data, children }) => {
   return <div ref={setNodeRef} style={style} {...listeners} {...attributes} className="h-full w-full select-none lesson-card">{children}</div>;
 };
 
-const SlotCell = ({ dayIndex, rowNum, holiday, holidayDisplay, isOccupied, lesson, droppableId, onCreateLesson, day, slot, onEditLesson, onShowHover, onHideHover, isLastRow }) => {  // Neu: isLastRow als Prop hinzufügen
+const SlotCell = ({ dayIndex, rowNum, holiday, holidayDisplay, isOccupied, lesson, droppableId, onCreateLesson, day, slot, onEditLesson, onShowHover, onHideHover, isLastRow }) => {
   const { setNodeRef: dropRef, isOver } = useDroppable({ 
     id: droppableId, 
     disabled: !!lesson || !!holiday || isOccupied 
   });
 
-  if (isOccupied) {
-    return (
-      <div
-        className="relative border-r border-slate-700 bg-transparent"
-        style={{
-          gridRow: rowNum,
-          gridColumn: dayIndex + 2,
-        }}
-      >
-        {/* Leere Platzhalter-Zelle, kein Inhalt */}
-      </div>
-    );
-  }
+  if (isOccupied) return null; // Return null for slots occupied by double lesson to avoid overlap
 
   return (
     <div
-      className={`relative border-r ${dayIndex < DAYS.length - 1 ? 'border-r-slate-300 dark:border-r-slate-700' : 'border-r-transparent'} border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 group ${holiday ? holidayDisplay.color : ''} text-left min-w-0 overflow-hidden ${isLastRow ? 'border-b-0' : 'border-b'}`}  // Neu: Conditional border-b
+      className={`relative border-r ${dayIndex < DAYS.length - 1 ? 'border-r-slate-300 dark:border-r-slate-700' : 'border-r-transparent'} border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 group ${holiday ? holidayDisplay.color : ''} text-left min-w-0 overflow-hidden ${isLastRow || lesson?.is_double_lesson ? 'border-b-0' : 'border-b'}`}
       style={{
         gridRow: rowNum,
         gridColumn: dayIndex + 2,
         minHeight: 'var(--cell-height, 80px)',
         ...(lesson?.is_double_lesson ? {
           gridRow: `${rowNum} / span 2`,
-          minHeight: `calc(var(--cell-height, 80px) * 2 - 1px)`,  
-          borderBottom: 'none',  
-          overflow: 'hidden',  
+          minHeight: `calc(var(--cell-height, 80px) * 2 - 1px)`,
+          borderBottom: 'none',
+          overflow: 'hidden',
         } : {})
       }}
     >
@@ -111,7 +99,6 @@ const TimetableGrid = React.forwardRef(
   ({ lessons, onCreateLesson, onEditLesson, timeSlots, currentWeek, holidays, weekInfo, onShowHover, onHideHover }, ref) => {
     // Remove useCallback - normal function for latest state
     const getLessonForSlot = (day, period) => {
-      console.log(`Checking slot ${day}-${period} with current lessons length: ${lessons.length}`);
       return lessons.find(lesson => lesson.day_of_week === day && lesson.period_slot === period);
     };
 
@@ -119,7 +106,7 @@ const TimetableGrid = React.forwardRef(
     const isSlotOccupiedByDoubleLesson = (day, period) => {
       if (period === 1) return false;
       const previousPeriodLesson = getLessonForSlot(day, period - 1);
-      return previousPeriodLesson?.is_double_lesson;
+      return previousPeriodLesson?.is_double_lesson && previousPeriodLesson.period_slot === period - 1;
     };
 
     const getDateForDay = useMemo(() => (dayKey) => {
@@ -168,48 +155,42 @@ const TimetableGrid = React.forwardRef(
     }), []);
 
     const renderTimeSlotRow = (slot, slotIndex) => {
-      const rowNum = slotIndex + 2; // Header is row 1, slots start at row 2
-      const isLastRow = slotIndex === timeSlots.length - 1;  // Neu: Check ob letzte Row
-      console.log('Rendering row for period:', slot.period, 'with lessons:', lessons.map(l => l.period_slot));
+      const rowNum = slotIndex + 2;
+      const isLastRow = slotIndex === timeSlots.length - 1;
       return (
         <React.Fragment key={slot.period}>
           <div 
-            className={`sticky left-0 bg-white dark:bg-slate-800 z-10 border-r border-slate-300 dark:border-slate-700 flex items-center justify-center min-w-0 overflow-hidden text-gray-800 dark:text-slate-200 font-medium ${isLastRow ? 'border-b-0' : 'border-b'}`}  // Änderung: text-gray-800 für dunklere Schrift im Light Mode
+            className={`sticky left-0 bg-white dark:bg-slate-800 z-10 border-r border-slate-300 dark:border-slate-700 flex items-center justify-center min-w-0 overflow-hidden text-gray-800 dark:text-slate-200 font-medium ${isLastRow ? 'border-b-0' : 'border-b'}`}
             style={{ ...timeSlotCellStyle, gridRow: rowNum, gridColumn: 1 }}
           >
             <TimeSlot period={slot.period} start={slot.start} end={slot.end} />
           </div>
-        
           {DAYS.map((day, dayIndex) => {
             const droppableId = `${day.key}-${slot.period}`;
-
             const dateForCell = getDateForDay(day.key);
             const holiday = getHolidayForDate(dateForCell);
             const holidayDisplay = holiday ? getHolidayDisplay(holiday) : null;
-
             const isOccupied = isSlotOccupiedByDoubleLesson(day.key, slot.period);
-
-            const lesson = getLessonForSlot(day.key, slot.period);  
-
+            const lesson = getLessonForSlot(day.key, slot.period);
             return (
-            <SlotCell
-              key={droppableId}
-              dayIndex={dayIndex}
-              rowNum={rowNum}
-              holiday={holiday}
-              holidayDisplay={holidayDisplay}
-              isOccupied={isOccupied}
-              lesson={lesson}
-              droppableId={droppableId}
-              onCreateLesson={onCreateLesson}
-              day={day}
-              slot={slot}
-              onEditLesson={onEditLesson}
-              onShowHover={onShowHover}
-              onHideHover={onHideHover}
-              isLastRow={isLastRow}  // Neu: Übergebe die Prop
-            />
-          );
+              <SlotCell
+                key={droppableId}
+                dayIndex={dayIndex}
+                rowNum={rowNum}
+                holiday={holiday}
+                holidayDisplay={holidayDisplay}
+                isOccupied={isOccupied}
+                lesson={lesson}
+                droppableId={droppableId}
+                onCreateLesson={onCreateLesson}
+                day={day}
+                slot={slot}
+                onEditLesson={onEditLesson}
+                onShowHover={onShowHover}
+                onHideHover={onHideHover}
+                isLastRow={isLastRow}
+              />
+            );
           })}
         </React.Fragment>
       );
@@ -223,7 +204,7 @@ const TimetableGrid = React.forwardRef(
           className="p-3 text-center border-r border-b border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 sticky top-0 z-20"
           style={{ ...timeSlotCellStyle, gridRow: 1, gridColumn: 1 }}
         >
-          <div className="text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider flex items-center justify-center h-full">Zeit</div>
+          <div className="text-text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider flex items-center justify-center h-full">Zeit</div>
         </div>
         
         {DAYS.map((day, dayIndex) => (

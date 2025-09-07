@@ -42,7 +42,35 @@ const LessonCard = ({ lesson, isDragging, onEdit, onMouseEnter, onMouseLeave, on
         </div>
       )}
       <div className={`font-bold text-sm ${is_allerlei ? 'mb-1' : ''}`}>
-        {is_allerlei ? 'Allerlei' : subjectName}  {/* Geändert: subjectName statt subject */}
+        {console.log('Debug: LessonCard render', {
+          lessonId: lesson?.id,
+          yearlyLessonId: lesson?.yearly_lesson_id,
+          primaryName: lesson?.primaryYearlyLesson?.name,
+          primaryLessonNumber: lesson?.primaryYearlyLesson?.lesson_number,
+          secondName: lesson?.secondYearlyLesson?.name,
+          secondLessonNumber: lesson?.secondYearlyLesson?.lesson_number,
+          topicTitle: lesson?.topic?.title
+        })}
+        {is_allerlei ? (
+          'Allerlei'
+        ) : lesson?.topic_id && lesson?.topic?.title ? (
+          <div>
+            <div>{lesson.topic.title}</div>
+            <div className="text-xs opacity-75">
+              {lesson?.is_double_lesson && lesson?.second_yearly_lesson_id && lesson?.secondYearlyLesson ? (
+                `${lesson?.primaryYearlyLesson?.name || `Lektion ${lesson?.primaryYearlyLesson?.lesson_number || ''}`} + ${lesson?.secondYearlyLesson?.name || `Lektion ${Number(lesson?.primaryYearlyLesson?.lesson_number || 1) + 1}`}`
+              ) : (
+                lesson?.primaryYearlyLesson?.name || `Lektion ${lesson?.primaryYearlyLesson?.lesson_number || ''}` || 'Neue Lektion'
+              )}
+            </div>
+          </div>
+        ) : (
+          lesson?.is_double_lesson && lesson?.second_yearly_lesson_id && lesson?.secondYearlyLesson ? (
+            `${lesson?.primaryYearlyLesson?.name || `Lektion ${lesson?.primaryYearlyLesson?.lesson_number || ''}`} + ${lesson?.secondYearlyLesson?.name || `Lektion ${Number(lesson?.primaryYearlyLesson?.lesson_number || 1) + 1}`}`
+          ) : (
+            lesson?.primaryYearlyLesson?.name || `Lektion ${lesson?.primaryYearlyLesson?.lesson_number || ''}` || 'Neue Lektion'
+          )
+        )}
       </div>
       {is_allerlei && (
         <div className="text-[10px] opacity-80 leading-tight">

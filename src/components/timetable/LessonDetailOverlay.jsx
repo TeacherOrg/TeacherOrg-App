@@ -25,7 +25,26 @@ const LessonDetailOverlay = ({ lesson, subject, position }) => {
         className="font-bold mb-3 text-center text-lg p-2 rounded-lg text-white"
         style={{ backgroundColor: subject?.color || '#4f46e5' }}
       >
-        {lesson.notes || 'Thema'}
+        {lesson.is_allerlei ? (
+          `Allerlei: ${(lesson.allerlei_subjects || []).join(', ')}`
+        ) : lesson.topic_id && lesson.topic?.title ? (
+          <div>
+            <div>{lesson.topic.title}</div>
+            <div className="text-sm opacity-75">
+              {lesson.is_double_lesson && lesson.second_yearly_lesson_id && lesson.secondYearlyLesson ? (
+                `${lesson.primaryYearlyLesson?.name || `Lektion ${lesson.primaryYearlyLesson?.lesson_number || ''}`} + ${lesson.secondYearlyLesson.name || `Lektion ${Number(lesson.primaryYearlyLesson?.lesson_number || 1) + 1}`}`
+              ) : (
+                lesson.primaryYearlyLesson?.name || `Lektion ${lesson.primaryYearlyLesson?.lesson_number || ''}`
+              )}
+            </div>
+          </div>
+        ) : (
+          lesson.is_double_lesson && lesson.second_yearly_lesson_id && lesson.secondYearlyLesson ? (
+            `${lesson.primaryYearlyLesson?.name || `Lektion ${lesson.primaryYearlyLesson?.lesson_number || ''}`} + ${lesson.secondYearlyLesson.name || `Lektion ${Number(lesson.primaryYearlyLesson?.lesson_number || 1) + 1}`}`
+          ) : (
+            lesson.primaryYearlyLesson?.name || `Lektion ${lesson.primaryYearlyLesson?.lesson_number || ''}`
+          )
+        )}
       </h3>
       
       {lesson.steps && lesson.steps.length > 0 ? (

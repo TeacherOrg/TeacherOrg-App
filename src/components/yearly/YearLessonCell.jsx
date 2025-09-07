@@ -1,29 +1,12 @@
-import React, { memo } from 'react';
 import { motion } from 'framer-motion';
 import { Plus } from 'lucide-react';
 import { adjustColor } from '@/utils/colorUtils';
 
-// Helper function to safely convert any value to a string for rendering
-const safeStringify = (value) => {
-  if (typeof value === 'string') return value;
-  if (typeof value === 'number') return String(value);
-  if (value === null || value === undefined) return '';
-  if (typeof value === 'object') {
-    // Avoid rendering complex objects; show a placeholder or basic info
-    if (value.title) return value.title;
-    if (value.name) return value.name;
-    // As a last resort, stringify, but it's often not user-friendly.
-    // For this case, an empty string is better if no simple property is found.
-    return ''; 
-  }
-  return String(value);
-};
-
-export default function YearLessonCell({ lesson, onClick, activeTopicId, defaultColor = '#3b82f6', isDoubleLesson = false, onMouseEnter = () => {}, onMouseLeave = () => {} }) {
+export default function YearLessonCell({ lesson, onClick, activeTopicId, defaultColor = '#3b82f6', isDoubleLesson = false, onMouseEnter = () => {}, onMouseLeave = () => {}, allYearlyLessons = [] }) {
   const handleClick = () => {
     onClick(lesson, !lesson ? {
       week_number: lesson?.week_number,
-      subject: lesson?.subject,
+      subject: lesson?.subject?.name || lesson?.subject || 'Unbekannt',
       lesson_number: lesson?.lesson_number
     } : null);
   };
@@ -33,7 +16,7 @@ export default function YearLessonCell({ lesson, onClick, activeTopicId, default
       <div
         className="w-full h-full border border-dashed border-slate-400 dark:border-slate-500 rounded-md hover:border-blue-400 hover:bg-blue-900/20 transition-all duration-200 cursor-pointer flex items-center justify-center group"
         onClick={handleClick}
-        onMouseEnter={(e) => onMouseEnter(e)}
+        onMouseEnter={typeof onMouseEnter === 'function' ? onMouseEnter : () => {}}
         onMouseLeave={onMouseLeave}
       >
         <Plus className="w-4 h-4 text-slate-500 group-hover:text-blue-400 transition-colors" />
@@ -42,9 +25,28 @@ export default function YearLessonCell({ lesson, onClick, activeTopicId, default
   }
 
   const topic = lesson.topic;
-  const bgColor = topic?.color || lesson?.color || defaultColor || '#3b82f6'; // Hier die Änderung
+  const bgColor = topic?.color || lesson?.color || defaultColor || '#3b82f6';
   const isTopicActive = activeTopicId === lesson.topic_id;
   const hasContent = lesson.steps?.length > 0 || (lesson.notes && String(lesson.notes).trim());
+
+  // Bestimme den Anzeigetext für den Titel
+  let lessonTitle = lesson.name !== 'Neue Lektion' ? lesson.name : `Lektion ${lesson.lesson_number}`;
+  let lessonNumberDisplay = `Lektion ${lesson.lesson_number}`;
+
+  if (isDoubleLesson && lesson.second_yearly_lesson_id) {
+    const secondLesson = allYearlyLessons.find(l => String(l.id) === String(lesson.second_yearly_lesson_id));
+    console.log('Debug: secondLesson data', { secondLesson, secondYearlyLessonId: lesson.second_yearly_lesson_id, allYearlyLessons });
+    if (secondLesson) {
+      const secondTitle = secondLesson.name !== 'Neue Lektion' ? secondLesson.name : `Lektion ${Number(lesson.lesson_number) + 1}`;
+      lessonTitle = `${lesson.name !== 'Neue Lektion' ? lesson.name : `Lektion ${lesson.lesson_number}`} + ${secondTitle}`;
+      lessonNumberDisplay = `Lektion ${lesson.lesson_number} & ${Number(lesson.lesson_number) + 1}`;
+    } else {
+      lessonTitle = lesson.name !== 'Neue Lektion' ? lesson.name : `Lektion ${lesson.lesson_number}`;
+      lessonNumberDisplay = `Lektion ${lesson.lesson_number} & ${Number(lesson.lesson_number) + 1}`;
+    }
+  }
+
+  console.log('Debug: YearLessonCell props', { lesson, topic, lessonTitle, lessonNumberDisplay, second_yearly_lesson_id: lesson.second_yearly_lesson_id });
 
   return (
     <motion.div
@@ -59,33 +61,23 @@ export default function YearLessonCell({ lesson, onClick, activeTopicId, default
         background: `linear-gradient(135deg, ${bgColor} 0%, ${adjustColor(bgColor, -20)} 100%)`,
       }}
       onClick={handleClick}
-      onMouseEnter={hasContent ? onMouseEnter : undefined}
-      onMouseLeave={hasContent ? onMouseLeave : undefined}
+      onMouseEnter={hasContent && typeof onMouseEnter === 'function' ? onMouseEnter : undefined}
+      onMouseLeave={hasContent && typeof onMouseLeave === 'function' ? onMouseLeave : undefined}
     >
-      <div className="flex-1 flex flex-col justify-center text-center leading-tight">
-        {topic ? (
-          <div className="font-bold text-[10px] mb-1">{safeStringify(topic.title)}</div>
+      <div className="flex flex-col items-center justify-center h-full">
+        {lesson.topic_id && topic ? (
+          // Für Lektionen mit Thema
+          <div className="text-center">
+            <div>{topic.name}</div>
+            <div className="text-[10px] opacity-75">{lessonNumberDisplay}</div>
+          </div>
         ) : (
-          hasContent ? (
-            <div className="text-[10px] opacity-90">
-              {safeStringify(lesson.notes) || `Lektion ${safeStringify(lesson.lesson_number)}`}
-            </div>
-          ) : (
-            <div className="text-[10px] opacity-60">Leer</div>
-          )
-        )}
-
-        {lesson.steps?.length > 0 && (
-          <div className="text-[9px] opacity-75 mt-1">
-            {lesson.steps.length} Schritt{lesson.steps.length !== 1 ? 'e' : ''}
+          // Für Lektionen ohne Thema
+          <div className="text-center">
+            <div>{lessonTitle}</div>
+            {lessonTitle !== lessonNumberDisplay && <div className="text-[10px] opacity-75">{lessonNumberDisplay}</div>}
           </div>
         )}
-
-        <div className="flex justify-center items-center gap-1 mt-1">
-          {lesson.is_exam && <span className="text-red-400 text-[8px]">📝</span>}
-          {lesson.is_half_class && <span className="text-blue-400 text-[8px]">½</span>}
-          {isDoubleLesson && <span className="text-yellow-400 text-[8px]">2×</span>}
-        </div>
       </div>
     </motion.div>
   );

@@ -26,7 +26,17 @@ const YearLessonOverlay = memo(({ lesson, overlayRef, position, onMouseLeave, le
             onMouseLeave={onMouseLeave}
             >
             <h3 className="font-bold mb-3 text-center text-white" style={{ color: lessonColor }}>
-                {lesson?.notes || lesson?.topic?.title || 'Lektion'}
+                {lesson?.mergedLessons ? (
+                    lesson.mergedLessons.map((subLesson, idx) => (
+                        subLesson.name !== 'Neue Lektion' ? subLesson.name : `Lektion ${subLesson.lesson_number}`
+                    )).join(' + ')
+                ) : (
+                    lesson?.is_double_lesson && lesson?.second_yearly_lesson_id && lesson.expand?.second_yearly_lesson_id ? (
+                        `${lesson.name !== 'Neue Lektion' ? lesson.name : `Lektion ${lesson.lesson_number}`} + ${lesson.expand.second_yearly_lesson_id.name !== 'Neue Lektion' ? lesson.expand.second_yearly_lesson_id.name : `Lektion ${Number(lesson.lesson_number) + 1}`}`
+                    ) : (
+                        lesson?.name !== 'Neue Lektion' ? lesson?.name : `Lektion ${lesson?.lesson_number || ''}`
+                    )
+                )}
             </h3>
             
             {lesson?.mergedLessons ? (

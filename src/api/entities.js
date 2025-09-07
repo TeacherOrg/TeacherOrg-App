@@ -4,6 +4,10 @@ class PbEntity {
   constructor(name) {
     this.name = name.toLowerCase();
     this.collection = pb.collection(`${this.name}s`);
+    // Standard expand fields
+    this.expandFields = this.name === 'lesson' 
+      ? 'subject,user_id,yearly_lesson_id,second_yearly_lesson_id,topic_id'
+      : 'subject,user_id,second_yearly_lesson_id,topic_id,class_id';
   }
 
   normalizeData(item) {
@@ -17,10 +21,11 @@ class PbEntity {
     const params = { 
       filter: this.buildFilter(query), 
       perPage: 500,
-      expand: 'subject,user_id,second_yearly_lesson_id,topic_id,class_id',
+      expand: this.expandFields,
       $cancelKey: `list-${this.name}-${Date.now()}`
     }; 
     const { items } = await this.collection.getList(1, params.perPage, params);
+    console.log(`Debug: Raw ${this.name}s data`, items); // Debugging
     return items.map(this.normalizeData);
   }
 
@@ -40,7 +45,7 @@ class PbEntity {
   async findById(id) {
     try {
       const params = { 
-        expand: 'subject,user_id,second_yearly_lesson_id,topic_id,class_id',
+        expand: this.expandFields,
         $cancelKey: `getOne-${this.name}-${id}-${Date.now()}`
       };  
       const item = await this.collection.getOne(id, params);
@@ -106,8 +111,7 @@ class PbEntity {
 
   buildFilter(query) {
     if (Object.keys(query).length === 0) return '';
-    console.log('Building filter with query:', query);  // Neu: Log den input query, um ungültige Werte (z. B. class_id undefined) zu debuggen – hier siehst du den ":1"-Fehler-Ursprung
-    return Object.entries(query).map(([key, value]) => {
+    let filters = Object.entries(query).map(([key, value]) => {
       if (typeof value === 'object' && value !== null) {
         if (value.$gt) return `${key} > ${value.$gt}`;
         if (value.$lt) return `${key} < ${value.$lt}`;
@@ -116,12 +120,17 @@ class PbEntity {
       }
       return `${key} = ${this.formatValue(value)}`;
     }).join(' && ');
-  };
-
-  formatValue(value) {
-    if (typeof value === 'string') return `'${value.replace(/'/g, "\\'")}'`; // Escape single quotes
-    if (typeof value === 'number' || typeof value === 'boolean') return value;
-    return `'${value}'`; // Fallback für andere Typen
+    
+    // Neu: Filter für Doppellektionen im Pool
+    if (query.excludeDoubleSeconds && this.name === 'yearly_lesson') {
+      // Zeige nur: Nicht-Doppel ODER Primäre Doppel (is_double_lesson=true UND second_yearly_lesson_id != null)
+      // Schließe sekundäre Doppel aus: is_double_lesson=true UND second_yearly_lesson_id=null
+      const doubleFilter = '(is_double_lesson = false) || (is_double_lesson = true && second_yearly_lesson_id != null)';
+      filters = filters ? `${filters} && ${doubleFilter}` : doubleFilter;
+    }
+    
+    console.log('Building filter with query:', query, 'Final filter:', filters);
+    return filters;
   }
 }
 

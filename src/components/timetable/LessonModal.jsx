@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Save, X, Trash2, PlusCircle, BookOpen, Copy } from "lucide-react";
+import { YearlyLesson } from '@/api/entities';
 import { debounce } from 'lodash';
 
 const generateId = () => Math.random().toString(36).substr(2, 9);
@@ -75,7 +76,10 @@ export default function LessonModal({
   const originalLessonRef = useRef(null);
 
   const scheduledLessonIds = useMemo(() => 
-    new Set(allLessons.filter(l => l.yearly_lesson_id).map(l => l.yearly_lesson_id)),
+    new Set([
+      ...allLessons.filter(l => l.yearly_lesson_id).map(l => l.yearly_lesson_id),
+      ...allLessons.filter(l => l.second_yearly_lesson_id).map(l => l.second_yearly_lesson_id)
+    ]),
     [allLessons]
   );
   
@@ -144,7 +148,13 @@ export default function LessonModal({
     if (!formData.is_double_lesson || !selectedSubject) return [];
     
     const subjectYearlyLessons = allYearlyLessons
-      .filter(yl => yl.subject === selectedSubject && yl.week_number === currentWeek)
+      .filter(yl => 
+        yl.subject === selectedSubject && 
+        yl.week_number === currentWeek &&
+        // Nur primäre Doppellektionen oder nicht-geplante Lektionen
+        (!yl.is_double_lesson || (yl.is_double_lesson && yl.second_yearly_lesson_id !== null)) &&
+        !scheduledLessonIds.has(yl.id)
+      )
       .sort((a, b) => a.lesson_number - b.lesson_number);
 
     let currentLessonNumber = 1;
@@ -153,13 +163,12 @@ export default function LessonModal({
       currentLessonNumber = currentYearlyLesson?.lesson_number || 1;
     } else if (slotInfo) {
       const firstAvailableYearlyLesson = subjectYearlyLessons.find(yl => !scheduledLessonIds.has(yl.id));
-      if (firstAvailableYearlyLesson) {
-        currentLessonNumber = firstAvailableYearlyLesson.lesson_number;
-      }
+      currentLessonNumber = firstAvailableYearlyLesson?.lesson_number || 1;
     }
 
     const nextLesson = subjectYearlyLessons.find(yl => 
-      yl.lesson_number === currentLessonNumber + 1
+      yl.lesson_number === currentLessonNumber + 1 && 
+      !scheduledLessonIds.has(yl.id)
     );
     
     return nextLesson ? [nextLesson] : [];
@@ -253,12 +262,21 @@ export default function LessonModal({
       const lessonToLoad = copiedLesson || lesson || {};
       originalLessonRef.current = lesson;
 
-      // Load topic_id from YearlyLesson if available
+      // Load topic_id and name from YearlyLesson if available
       let loadedTopicId = lessonToLoad.topic_id || "no_topic";
+      let loadedName = '';
+      let loadedSecondName = '';
       if (lessonToLoad.yearly_lesson_id) {
         const primaryYL = allYearlyLessons.find(yl => yl.id === lessonToLoad.yearly_lesson_id);
-        if (primaryYL?.topic_id) {
-          loadedTopicId = primaryYL.topic_id;
+        if (primaryYL) {
+          loadedTopicId = primaryYL.topic_id || "no_topic";
+          loadedName = primaryYL.name || `Lektion ${primaryYL.lesson_number}`;
+        }
+      }
+      if (lessonToLoad.is_double_lesson && lessonToLoad.second_yearly_lesson_id) {
+        const secondYL = allYearlyLessons.find(yl => yl.id === lessonToLoad.second_yearly_lesson_id);
+        if (secondYL) {
+          loadedSecondName = secondYL.name || `Lektion ${Number(lessonToLoad.yearly_lesson_id ? allYearlyLessons.find(yl => yl.id === lessonToLoad.yearly_lesson_id)?.lesson_number || 1 : 1) + 1}`;
         }
       }
 
@@ -268,7 +286,9 @@ export default function LessonModal({
         is_exam: lessonToLoad.is_exam || false,
         is_allerlei: lessonToLoad.is_allerlei || false,
         is_half_class: lessonToLoad.is_half_class || false,
-        original_topic_id: lesson?.topic_id || "no_topic"
+        original_topic_id: lesson?.topic_id || "no_topic",
+        name: loadedName,
+        second_name: loadedSecondName
       });
 
       setSelectedSubject(lessonToLoad.subject || initialSubject || "");
@@ -570,20 +590,30 @@ export default function LessonModal({
       if (!finalSubject) return; 
 
       if (formData.is_double_lesson && addSecondLesson && selectedSecondLesson) {
-          const lessonOnGridToDelete = allLessons.find(l => l.yearly_lesson_id === selectedSecondLesson);
-          if (lessonOnGridToDelete) {
-              toDeleteIds.push(lessonOnGridToDelete.id);
-          }
-      } 
-      else if (isEditing && formData.is_double_lesson && !originalLessonRef.current?.is_double_lesson) {
-          const nextPeriodLesson = allLessons.find(l =>
-              l.day_of_week === lesson.day_of_week &&
-              l.period_slot === lesson.period_slot + 1 &&
-              l.week_number === currentWeek
-          );
-          if (nextPeriodLesson) {
-              toDeleteIds.push(nextPeriodLesson.id);
-          }
+        const lessonOnGridToDelete = allLessons.find(l => l.yearly_lesson_id === selectedSecondLesson);
+        if (lessonOnGridToDelete) {
+          toDeleteIds.push(lessonOnGridToDelete.id);
+        }
+      } else if (isEditing && !formData.is_double_lesson && lesson?.is_double_lesson) {
+        // Teilen einer Doppellektion: Aktualisiere YearlyLessons
+        if (lesson.yearly_lesson_id) {
+          await YearlyLesson.update(lesson.yearly_lesson_id, {
+            is_double_lesson: false,
+            second_yearly_lesson_id: null
+          });
+        }
+        if (lesson.second_yearly_lesson_id) {
+          await YearlyLesson.update(lesson.second_yearly_lesson_id, { is_double_lesson: false });
+        }
+        // Entferne die zweite Lektion aus dem Grid, falls vorhanden
+        const nextPeriodLesson = allLessons.find(l =>
+          l.day_of_week === lesson.day_of_week &&
+          l.period_slot === lesson.period_slot + 1 &&
+          l.week_number === currentWeek
+        );
+        if (nextPeriodLesson) {
+          toDeleteIds.push(nextPeriodLesson.id);
+        }
       }
 
       if (formData.is_allerlei) {
@@ -619,17 +649,37 @@ export default function LessonModal({
 
       if (isEditing) {
         lessonData = { 
-          id: lesson.id,  // Behalte ID für Update
-          ...formData,    // Form-Felder (is_double_lesson, etc.)
-          steps: [...primarySteps, ...secondSteps],  // Stelle sicher, dass steps ein Array ist
+          id: lesson.id,
+          ...formData,
+          steps: [...primarySteps, ...secondSteps],
           subject: finalSubject,
           yearly_lesson_id: lesson.yearly_lesson_id,
           second_yearly_lesson_id: (formData.is_double_lesson && addSecondLesson && selectedSecondLesson) ? selectedSecondLesson : null,
-          allerlei_subjects: formData.is_allerlei ? allerleiFaecher.filter(Boolean) : [],  // Immer Array
+          allerlei_subjects: formData.is_allerlei ? allerleiFaecher.filter(Boolean) : [],
           allerlei_yearly_lesson_ids: formData.is_allerlei ? 
-            allerleiFaecher.map((_, index) => selectedLessonsForAllerlei[index] || null) : [],  // Immer Array
-          topic_id: formData.is_allerlei ? undefined : (formData.topic_id === 'no_topic' ? undefined : formData.topic_id),  // Undefined statt null, um nicht zu senden
+            allerleiFaecher.map((_, index) => selectedLessonsForAllerlei[index] || null) : [],
+          topic_id: formData.is_allerlei ? undefined : (formData.topic_id === 'no_topic' ? undefined : formData.topic_id),
         };  
+
+        // Update yearly_lesson with name
+        if (lessonData.yearly_lesson_id) {
+          await YearlyLesson.update(lessonData.yearly_lesson_id, {
+            name: formData.name || `Lektion ${allYearlyLessons.find(yl => yl.id === lessonData.yearly_lesson_id)?.lesson_number || 1}`,
+            steps: primarySteps,
+            topic_id: lessonData.topic_id,
+            is_double_lesson: lessonData.is_double_lesson,
+            second_yearly_lesson_id: lessonData.second_yearly_lesson_id,
+            is_exam: lessonData.is_exam,
+            is_half_class: lessonData.is_half_class
+          });
+        }
+        if (lessonData.is_double_lesson && lessonData.second_yearly_lesson_id) {
+          await YearlyLesson.update(lessonData.second_yearly_lesson_id, {
+            name: formData.second_name || `Lektion ${Number(allYearlyLessons.find(yl => yl.id === lessonData.yearly_lesson_id)?.lesson_number || 1) + 1}`,
+            steps: secondSteps,
+            is_double_lesson: true
+          });
+        }
       } else {
         const timeSlotForNewLesson = timeSlots.find(ts => ts.period === slotInfo.period);
 
@@ -646,18 +696,52 @@ export default function LessonModal({
           week_number: currentWeek,
           start_time: timeSlotForNewLesson?.start,
           end_time: timeSlotForNewLesson?.end,
-          allerlei_subjects: formData.is_allerlei ? allerleiFaecher.filter(Boolean) : [],  // Immer Array
+          allerlei_subjects: formData.is_allerlei ? allerleiFaecher.filter(Boolean) : [],
           allerlei_yearly_lesson_ids: formData.is_allerlei ? 
-            allerleiFaecher.map((_, index) => selectedLessonsForAllerlei[index] || null) : [],  // Immer Array
-          topic_id: formData.is_allerlei ? undefined : (formData.topic_id === 'no_topic' ? undefined : formData.topic_id),  // Undefined statt null
-          yearly_lesson_id: formData.is_allerlei ? null : null,
-          second_yearly_lesson_id: (formData.is_double_lesson && addSecondLesson && selectedSecondLesson) ? selectedSecondLesson : null
+            allerleiFaecher.map((_, index) => selectedLessonsForAllerlei[index] || null) : [],
+          topic_id: formData.is_allerlei ? undefined : (formData.topic_id === 'no_topic' ? undefined : formData.topic_id),
+          yearly_lesson_id: null,
+          second_yearly_lesson_id: (formData.is_double_lesson && addSecondLesson && selectedSecondLesson) ? selectedSecondLesson : null,
+          user_id: pb.authStore.model.id
         };
+
+        // Create or update yearly_lesson for new lesson
+        if (!lessonData.is_allerlei) {
+          const subjectYearlyLessons = allYearlyLessons
+            .filter(yl => yl.subject === lessonData.subject && yl.week_number === lessonData.week_number)
+            .sort((a, b) => Number(a.lesson_number) - Number(b.lesson_number));
+          const nextLessonNumber = subjectYearlyLessons.length > 0
+            ? Math.max(...subjectYearlyLessons.map(yl => Number(yl.lesson_number))) + 1
+            : 1;
+          const newYearlyLesson = await YearlyLesson.create({
+            subject: lessonData.subject,
+            week_number: lessonData.week_number,
+            lesson_number: nextLessonNumber,
+            school_year: currentYear,
+            name: formData.name || `Lektion ${nextLessonNumber}`,
+            description: '',
+            steps: primarySteps,
+            topic_id: lessonData.topic_id,
+            is_double_lesson: lessonData.is_double_lesson,
+            second_yearly_lesson_id: lessonData.second_yearly_lesson_id,
+            is_exam: lessonData.is_exam,
+            is_half_class: lessonData.is_half_class,
+            user_id: pb.authStore.model.id,
+            class_id: activeClassId
+          });
+          lessonData.yearly_lesson_id = newYearlyLesson.id;
+          if (lessonData.is_double_lesson && lessonData.second_yearly_lesson_id) {
+            await YearlyLesson.update(lessonData.second_yearly_lesson_id, {
+              name: formData.second_name || `Lektion ${Number(nextLessonNumber) + 1}`,
+              steps: secondSteps,
+              is_double_lesson: true
+            });
+          }
+        }
       }
 
       // Debug: Logge steps als JSON vor dem Speichern
       console.log('Steps as JSON:', JSON.stringify(lessonData.steps));
-
       console.log('Final lesson data:', lessonData);
       await saveLesson(lessonData, toDeleteIds);
     } finally {
@@ -762,6 +846,33 @@ export default function LessonModal({
               </Select>
             </div>
           </div>
+          <div className="grid grid-cols-4 items-center gap-4 mt-4">
+            <Label htmlFor="name" className="text-right text-sm font-semibold text-slate-900 dark:text-white">Titel (Lektion)</Label>
+            <Input
+              id="name"
+              name="name"
+              value={formData.name || ''}
+              onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
+              className="col-span-3 bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white"
+              placeholder={`Lektion ${lesson?.yearly_lesson_id ? allYearlyLessons.find(yl => yl.id === lesson.yearly_lesson_id)?.lesson_number || '' : slotInfo?.period || ''}`}
+              maxLength={30}
+            />
+          </div>
+          {formData.is_double_lesson && addSecondLesson && (
+            <div className="grid grid-cols-4 items-center gap-4 mt-4">
+              <Label htmlFor="second_name" className="text-right text-sm font-semibold text-slate-900 dark:text-white">Titel (Zweite Lektion)</Label>
+              <Input
+                id="second_name"
+                name="second_name"
+                value={formData.second_name || ''}
+                onChange={(e) => setFormData(prev => ({ ...prev, second_name: e.target.value }))}
+                className="col-span-3 bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white"
+                placeholder={`Lektion ${Number(lesson?.yearly_lesson_id ? allYearlyLessons.find(yl => yl.id === lesson.yearly_lesson_id)?.lesson_number || slotInfo?.period || 1 : slotInfo?.period || 1) + 1}`}
+                maxLength={30}
+              />
+            </div>
+          )}      
+
 
           {formData.is_double_lesson && (
             <div className="space-y-4 p-4 rounded-lg bg-slate-100/50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700">
