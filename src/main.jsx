@@ -5,7 +5,7 @@ import '@/index.css';
 import { BrowserRouter } from 'react-router-dom';  // Importiere BrowserRouter hier
 
 ReactDOM.createRoot(document.getElementById('root')).render(
-  <BrowserRouter>  // Wrap um App – das behebt den Kontext-Fehler
+  <BrowserRouter>  
     <App />
   </BrowserRouter>
 );

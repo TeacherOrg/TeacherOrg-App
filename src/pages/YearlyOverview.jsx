@@ -15,9 +15,8 @@ import { QueryClient, QueryClientProvider, useQuery, useQueryClient } from '@tan
 import debounce from 'lodash/debounce';
 import YearLessonOverlay from "../components/yearly/YearLessonOverlay";
 import { adjustColor } from '@/utils/colorUtils';
-import { useLessonStore } from '@/store'; // Passe den Pfad an, falls nötig
+import { useLessonStore } from '@/store';
 import pb from '@/api/pb';
-
 
 const ACADEMIC_WEEKS = 52;
 
@@ -48,7 +47,6 @@ function InnerYearlyOverviewPage() {
   const [isLessonModalOpen, setIsLessonModalOpen] = useState(false);
   const [newLessonSlot, setNewLessonSlot] = useState(null);
 
-  // NEW: State for topic lessons modal
   const [isTopicLessonsModalOpen, setIsTopicLessonsModalOpen] = useState(false);
   const [selectedTopicLessons, setSelectedTopicLessons] = useState([]);
   const [selectedTopicInfo, setSelectedTopicInfo] = useState(null);
@@ -98,11 +96,11 @@ function InnerYearlyOverviewPage() {
     queryKey: ['yearlyData', currentYear],
     queryFn: async () => {
       const [lessonsData, topicsData, subjectsData, classesData, holidaysData] = await Promise.all([
-        YearlyLesson.list(),
-        Topic.list(),
-        Subject.list(),
-        Class.list(),
-        Holiday.list()
+        YearlyLesson.list({ user_id: pb.authStore.model.id }),
+        Topic.list({ 'class_id.user_id': pb.authStore.model.id }),
+        Subject.list({ 'class_id.user_id': pb.authStore.model.id }),
+        Class.list({ user_id: pb.authStore.model.id }),
+        Holiday.list({ user_id: pb.authStore.model.id })
       ]);
       return { lessonsData, topicsData, subjectsData, classesData, holidaysData };
     },
@@ -112,7 +110,7 @@ function InnerYearlyOverviewPage() {
   useEffect(() => {
     if (data) {
       console.log('Debug: Loaded yearlyLessons', data.lessonsData);
-      setYearlyLessons(data.lessonsData.map(l => ({...l, lesson_number: Number(l.lesson_number)})) || []);
+      setYearlyLessons(data.lessonsData.map(l => ({ ...l, lesson_number: Number(l.lesson_number) })) || []);
       setTopics(data.topicsData.sort((a, b) => a.title.localeCompare(b.title)) || []);
       setSubjects(data.subjectsData || []);
       setClasses(data.classesData || []);
@@ -161,11 +159,11 @@ function InnerYearlyOverviewPage() {
           const weekLessons = tempUpdatedPrev
             .filter(l => l.week_number === lesson.week_number && l.subject === lesson.subject && l.topic_id === newTopicId)
             .sort((a, b) => Number(a.lesson_number) - Number(b.lesson_number));
-          
+
           if (weekLessons.length > 1) {
             const minNum = Math.min(...weekLessons.map(l => Number(l.lesson_number)));
-            const maxNum = Math.max(...weekLessons.map(l => Number(l.lesson_number)));
-            
+            const maxNum = Math.max(...weekLessons.map(l => Number(b.lesson_number)));
+
             for (let num = minNum; num <= maxNum; num++) {
               if (!weekLessons.some(l => Number(l.lesson_number) === num)) {
                 const gapSlot = { week_number: lesson.week_number, subject: lesson.subject, lesson_number: num, school_year: currentYear };
@@ -178,52 +176,57 @@ function InnerYearlyOverviewPage() {
                   second_yearly_lesson_id: null
                 };
                 tempUpdatedPrev = [...tempUpdatedPrev, gapLesson];
-                
+
                 const createPromise = YearlyLesson.create({
                   ...gapSlot,
                   topic_id: newTopicId,
                   notes: '',
                   is_double_lesson: false,
                   second_yearly_lesson_id: null,
-                  name: 'Neue Lektion', // Erforderlich
+                  name: 'Neue Lektion',
                   description: '',
                   user_id: pb.authStore.model.id,
                   class_id: activeClassId,
-                  subject: subjects.find(s => s.name === slot.subject)?.id
+                  subject: subjects.find(s => s.name === gapSlot.subject)?.id
                 }).then(gapCreated => {
-                  optimisticUpdateYearlyLessons(gapLesson, false, true); // Entferne temp
-                  optimisticUpdateYearlyLessons(gapCreated, true); // Füge reale Lektion hinzu
+                  optimisticUpdateYearlyLessons(gapLesson, false, true);
+                  optimisticUpdateYearlyLessons(gapCreated, true);
                 }).catch(err => {
                   console.error("Error creating gap lesson:", err);
-                  optimisticUpdateYearlyLessons(gapLesson, false, true); // Entferne temp bei Fehler
+                  optimisticUpdateYearlyLessons(gapLesson, false, true);
                 });
-                
+
                 gapPromises.push(createPromise);
               }
             }
           }
         }
-        
+
         setYearlyLessons(tempUpdatedPrev);
 
         try {
           await Promise.all(
-            lessonsToUpdate.map(mergedLesson => 
+            lessonsToUpdate.map(mergedLesson =>
               YearlyLesson.update(mergedLesson.id, { topic_id: newTopicId })
             )
           );
           await Promise.all(gapPromises);
-          await refetch(); // Explizites Neuladen der Daten
+          await refetch();
         } catch (error) {
           console.error("Error updating block lesson topics:", error);
-          setYearlyLessons(yearlyLessons); // Rollback
+          setYearlyLessons(yearlyLessons);
         }
       } else if (slot) {
         const subjectId = subjects.find(s => s.name === slot.subject)?.id;
-        console.log('Debug: Creating lesson with subject', { slotSubject: slot.subject, subjectId, subjects }); // Debug-Log
+        console.log('Debug: Subject mapping in handleLessonClick', {
+          slotSubject: slot.subject,
+          subjectId,
+          slot,
+          availableSubjects: subjects.map(s => ({ id: s.id, name: s.name }))
+        });
         if (!subjectId) {
           console.error('Error: No valid subject ID found for', slot.subject);
-          return; // Verhindere Erstellung ohne gültigen subject
+          return;
         }
 
         const newLesson = {
@@ -235,6 +238,7 @@ function InnerYearlyOverviewPage() {
           is_double_lesson: false,
           second_yearly_lesson_id: null
         };
+        optimisticUpdateYearlyLessons(newLesson, true);
 
         const gapPromises = [];
 
@@ -247,7 +251,7 @@ function InnerYearlyOverviewPage() {
             description: '',
             user_id: pb.authStore.model.id,
             class_id: activeClassId,
-            subject: subjectId, // Verwende subjectId
+            subject: subjectId,
             notes: '',
             is_double_lesson: false,
             second_yearly_lesson_id: null,
@@ -256,17 +260,19 @@ function InnerYearlyOverviewPage() {
             is_allerlei: false,
             allerlei_subjects: []
           });
+          optimisticUpdateYearlyLessons(newLesson, false, true);
+          optimisticUpdateYearlyLessons({ ...createdLesson, lesson_number: Number(createdLesson.lesson_number) }, true);
 
           let tempUpdatedPrev = [...yearlyLessons, { ...createdLesson, lesson_number: Number(createdLesson.lesson_number) }];
-          
+
           const weekLessons = tempUpdatedPrev
             .filter(l => l.week_number === slot.week_number && l.subject === slot.subject && l.topic_id === activeTopicId)
             .sort((a, b) => Number(a.lesson_number) - Number(b.lesson_number));
-          
+
           if (weekLessons.length > 1) {
             const minNum = Math.min(...weekLessons.map(l => Number(l.lesson_number)));
             const maxNum = Math.max(...weekLessons.map(l => Number(l.lesson_number)));
-            
+
             for (let num = minNum; num <= maxNum; num++) {
               if (!weekLessons.some(l => Number(l.lesson_number) === num)) {
                 const gapSlot = { week_number: slot.week_number, subject: slot.subject, lesson_number: num, school_year: currentYear };
@@ -279,7 +285,7 @@ function InnerYearlyOverviewPage() {
                   second_yearly_lesson_id: null
                 };
                 tempUpdatedPrev = [...tempUpdatedPrev, gapLesson];
-                
+
                 const createPromise = YearlyLesson.create({
                   ...gapSlot,
                   topic_id: activeTopicId,
@@ -290,7 +296,7 @@ function InnerYearlyOverviewPage() {
                   description: '',
                   user_id: pb.authStore.model.id,
                   class_id: activeClassId,
-                  subject: subjectId // Verwende subjectId
+                  subject: subjectId
                 }).then(gapCreated => {
                   optimisticUpdateYearlyLessons(gapLesson, false, true);
                   optimisticUpdateYearlyLessons(gapCreated, true);
@@ -298,15 +304,15 @@ function InnerYearlyOverviewPage() {
                   console.error("Error creating gap lesson:", err);
                   optimisticUpdateYearlyLessons(gapLesson, false, true);
                 });
-                
+
                 gapPromises.push(createPromise);
               }
             }
           }
-          
+
           setYearlyLessons(tempUpdatedPrev);
           await Promise.all(gapPromises);
-          await refetch(); // Explizites Neuladen
+          await refetch();
         } catch (error) {
           console.error("Error creating lesson:", error);
           optimisticUpdateYearlyLessons(newLesson, false, true);
@@ -346,7 +352,7 @@ function InnerYearlyOverviewPage() {
       }
       setIsLessonModalOpen(true);
     }
-  }, [activeTopicId, currentYear, topicsById, yearlyLessons, activeClassId, subjects, refetch]);
+  }, [activeTopicId, currentYear, topicsById, yearlyLessons, activeClassId, subjects, refetch, setYearlyLessons, optimisticUpdateYearlyLessons, setSelectedTopicLessons, setSelectedTopicInfo, setIsTopicLessonsModalOpen, setEditingLesson, setNewLessonSlot, setIsLessonModalOpen]);
 
   const handleSaveLesson = useCallback(async (lessonData, lessonContext) => {
     const originalLesson = lessonContext || editingLesson;
@@ -357,7 +363,6 @@ function InnerYearlyOverviewPage() {
     if (finalLessonData.is_double_lesson) {
       const nextLesson = yearlyLessons.find(l => l.id === finalLessonData.second_yearly_lesson_id);
       if (!nextLesson || parseInt(nextLesson.lesson_number) !== parseInt(originalLesson?.lesson_number || newLessonSlot?.lesson_number) + 1) {
-        // Neue zweite Lektion erstellen, falls sie nicht existiert
         if (!nextLesson) {
           const subjectId = subjects.find(s => s.name === (originalLesson?.subject || newLessonSlot?.subject))?.id;
           if (!subjectId) {
@@ -393,7 +398,6 @@ function InnerYearlyOverviewPage() {
       let primaryId = originalLesson?.id;
 
       if (primaryId) {
-        // Nur die Schritte der ersten Lektion speichern
         await YearlyLesson.update(primaryId, { ...finalLessonData, steps: finalLessonData.steps });
       } else if (newLessonSlot) {
         const subjectId = subjects.find(s => s.name === newLessonSlot.subject)?.id;
@@ -405,7 +409,7 @@ function InnerYearlyOverviewPage() {
         const created = await YearlyLesson.create({
           ...newLessonSlot,
           ...finalLessonData,
-          steps: finalLessonData.steps, // Nur erste Lektion
+          steps: finalLessonData.steps,
           name: finalLessonData.name || 'Neue Lektion',
           description: finalLessonData.description || '',
           user_id: pb.authStore.model.id,
@@ -417,10 +421,9 @@ function InnerYearlyOverviewPage() {
         console.log('Debug: Created lesson', created);
       }
 
-      // Zweite Lektion separat aktualisieren
       if (finalLessonData.is_double_lesson && finalLessonData.second_yearly_lesson_id) {
         await YearlyLesson.update(finalLessonData.second_yearly_lesson_id, {
-          steps: finalLessonData.secondSteps, // Nur Schritte der zweiten Lektion
+          steps: finalLessonData.secondSteps,
           is_double_lesson: true,
           name: finalLessonData.second_name
         });
@@ -431,7 +434,6 @@ function InnerYearlyOverviewPage() {
         });
       }
 
-      // Handle "un-doubling"
       if (!finalLessonData.is_double_lesson && wasDoubleLesson && oldSecondYearlyId) {
         const primaryYL = yearlyLessons.find(yl => yl.id === primaryId);
         const originalTopicId = primaryYL?.topic_id;
@@ -442,7 +444,6 @@ function InnerYearlyOverviewPage() {
         optimisticUpdateYearlyLessons(primaryId, { is_double_lesson: false, second_yearly_lesson_id: null, topic_id: originalTopicId });
       }
 
-      // Sync basic flags to weekly lesson (Timetable)
       const week = originalLesson?.week_number || newLessonSlot?.week_number;
       if (week && primaryId) {
         const allWeeklyLessons = await Lesson.list();
@@ -456,13 +457,11 @@ function InnerYearlyOverviewPage() {
         }
       }
 
-      // Close modals and invalidate queries
       setIsLessonModalOpen(false);
       setEditingLesson(null);
       setNewLessonSlot(null);
       queryClientLocal.invalidateQueries(['yearlyData', currentYear]);
       queryClientLocal.invalidateQueries(['timetableData']);
-
     } catch (error) {
       optimisticUpdateYearlyLessons(originalLesson);
       console.error("CRITICAL ERROR saving lesson:", error);
@@ -475,20 +474,16 @@ function InnerYearlyOverviewPage() {
     try {
       const lessonToDelete = yearlyLessons.find(l => l.id === lessonId);
       if (lessonToDelete) {
-        // Optimistic delete
         optimisticUpdateYearlyLessons(lessonToDelete, false, true);
-
         await YearlyLesson.delete(lessonId);
-
         setIsLessonModalOpen(false);
         setEditingLesson(null);
-        setIsTopicLessonsModalOpen(false); // Close topic lessons modal if open
+        setIsTopicLessonsModalOpen(false);
         queryClientLocal.invalidateQueries(['yearlyData', currentYear]);
         queryClientLocal.invalidateQueries(['timetableData']);
       }
     } catch (error) {
       console.error("Error deleting lesson:", error);
-      // Revert on error
       queryClientLocal.invalidateQueries(['yearlyData', currentYear]);
       queryClientLocal.invalidateQueries(['timetableData']);
     }
@@ -509,7 +504,7 @@ function InnerYearlyOverviewPage() {
       if (editingTopic) {
         await Topic.update(editingTopic.id, topicData);
       } else {
-        await Topic.create({ 
+        await Topic.create({
           name: topicData.name,
           description: topicData.description,
           color: topicData.color,
@@ -549,7 +544,7 @@ function InnerYearlyOverviewPage() {
   }, [yearlyLessons, activeTopicId, queryClientLocal, currentYear]);
 
   const activeClassName = useMemo(() => classes.find(c => c.id === activeClassId)?.name || '', [classes, activeClassId]);
-  
+
   const subjectsForClass = useMemo(() => {
     if (!activeClassId) return [];
     return subjects.filter(s => s.class_id === activeClassId);
@@ -557,7 +552,7 @@ function InnerYearlyOverviewPage() {
 
   const lessonsForYear = useMemo(() => {
     return yearlyLessons.filter(lesson => {
-      const lessonYear = Number(lesson.school_year); // Konvertiere zu Number
+      const lessonYear = Number(lesson.school_year);
       if (!lessonYear) {
         return currentYear === new Date().getFullYear();
       }
@@ -567,7 +562,6 @@ function InnerYearlyOverviewPage() {
 
   return (
     <div className="h-screen flex flex-col bg-slate-50 dark:bg-slate-900 overflow-hidden">
-      {/* Sticky Header Section */}
       <div className="flex-shrink-0 z-30 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-slate-200 dark:border-slate-700 shadow-sm sticky top-0">
         <div className="p-6 pb-4 max-w-screen-2xl mx-auto">
           <motion.div
@@ -599,7 +593,7 @@ function InnerYearlyOverviewPage() {
               variant="outline"
               size="icon"
               onClick={() => setCurrentYear(y => y - 1)}
-              className="rounded-lg bg-white/80 dark:bg-slate-800/80 backdrop-blur-md border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 shadow-md text-black dark:text-white"  // Hell machen + Textfarbe
+              className="rounded-lg bg-white/80 dark:bg-slate-800/80 backdrop-blur-md border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 shadow-md text-black dark:text-white"
             >
               <ChevronsLeft className="w-4 h-4" />
             </Button>
@@ -612,7 +606,7 @@ function InnerYearlyOverviewPage() {
               variant="outline"
               size="icon"
               onClick={() => setCurrentYear(y => y + 1)}
-              className="rounded-lg bg-white/80 dark:bg-slate-800/80 backdrop-blur-md border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 shadow-md text-black dark:text-white"  // Hell machen + Textfarbe
+              className="rounded-lg bg-white/80 dark:bg-slate-800/80 backdrop-blur-md border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 shadow-md text-black dark:text-white"
             >
               <ChevronsRight className="w-4 h-4" />
             </Button>
@@ -620,14 +614,13 @@ function InnerYearlyOverviewPage() {
         </div>
       </div>
 
-      {/* Main Content */}
       <div className="flex-1 p-6 pt-2 max-w-screen-2xl mx-auto w-full flex gap-8 bg-slate-50 dark:bg-slate-900">
         <div className="flex-[3] overflow-auto relative">
           <motion.div
             initial={{ opacity: 0, x: 20 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ delay: 0.2 }}
-            className="bg-white dark:bg-slate-800 backdrop-blur-xl rounded-2xl shadow-xl border border-slate-200 dark:border-slate-700 h-full"  // Entferne p-4
+            className="bg-white dark:bg-slate-800 backdrop-blur-xl rounded-2xl shadow-xl border border-slate-200 dark:border-slate-700 h-full"
           >
             {isLoading ? (
               <div className="flex items-center justify-center h-full">
@@ -686,9 +679,9 @@ function InnerYearlyOverviewPage() {
           position={hoverPosition}
           onMouseMove={() => { if (debouncedShowRef.current) debouncedShowRef.current(hoverLesson, hoverPosition); }}
           onMouseLeave={() => { if (debouncedHideRef.current) debouncedHideRef.current(); }}
-          lessonColor={hoverLesson?.color}  
+          lessonColor={hoverLesson?.color}
         />
-      )}   
+      )}
 
       <TopicModal
         isOpen={isTopicModalOpen}
@@ -710,7 +703,7 @@ function InnerYearlyOverviewPage() {
         subjectColor={subjects.find(s => s.name === (newLessonSlot?.subject || editingLesson?.subject))?.color}
         allYearlyLessons={yearlyLessons}
         currentWeek={editingLesson?.week_number || newLessonSlot?.week_number}
-        currentYear={currentYear}  // Neu: Übergebe currentYear als Prop
+        currentYear={currentYear}
       />
 
       <TopicLessonsModal

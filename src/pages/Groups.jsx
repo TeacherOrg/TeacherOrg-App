@@ -1,6 +1,6 @@
 // src/pages/GroupsPage.jsx
 import React, { useState, useEffect } from "react";
-import { Student, Class } from "@/api/entities";
+import { Student, Class, Group } from "@/api/entities";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Users, Shuffle, Trash2 } from "lucide-react";
@@ -8,6 +8,7 @@ import { motion } from "framer-motion";
 import { DndContext, closestCenter, useDroppable, DragOverlay } from "@dnd-kit/core";
 import { SortableContext, useSortable, verticalListSortingStrategy, rectSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import pb from '@/api/pb';
 
 const StudentCard = ({ student, handleDeleteStudent, id }) => {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
@@ -15,7 +16,7 @@ const StudentCard = ({ student, handleDeleteStudent, id }) => {
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
-    opacity: isDragging ? 0 : 1,
+    opacity: isDragging ? 0.4 : 1,
   };
 
   if (!student || !student.id) return null;
@@ -26,7 +27,7 @@ const StudentCard = ({ student, handleDeleteStudent, id }) => {
       style={style}
       {...attributes}
       {...listeners}
-      className={`p-3 rounded-xl border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-700 backdrop-blur-md mb-2 shadow-sm relative group text-gray-800 dark:text-white w-full touch-none break-words overflow-hidden ${isDragging ? "z-50" : ""}`}
+      className={`p-3 rounded-xl border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-700 backdrop-blur-md mb-2 shadow-sm relative group text-gray-800 dark:text-white w-full touch-none break-words overflow-hidden cursor-move ${isDragging ? "z-50" : ""}`}
     >
       {student.name}
       <Button
@@ -57,15 +58,15 @@ const StudentPreview = ({ student }) => {
 };
 
 const GroupBox = ({ group, students, index, handleDeleteStudent }) => {
-  const { setNodeRef: setDropRef } = useDroppable({ id: group.id });
+  const { setNodeRef: setDropRef, isOver } = useDroppable({ id: group.id });
 
   return (
-    <div className="bg-white dark:bg-slate-800 backdrop-blur-xl rounded-3xl shadow-xl border border-gray-200 dark:border-slate-700 p-3 flex flex-col min-h-[300px] min-w-[250px]">
+    <div className={`bg-white dark:bg-slate-800 backdrop-blur-xl rounded-3xl shadow-xl border ${isOver ? 'border-blue-500' : 'border-gray-200 dark:border-slate-700'} p-3 flex flex-col min-h-[300px] min-w-[250px]`}>
       <div className="pb-4 mb-4 border-b border-gray-200 dark:border-slate-700">
-        <h3 className="font-bold text-gray-800 dark:text-white text-lg tracking-tight">Group {index + 1}</h3>
+        <h3 className="font-bold text-gray-800 dark:text-white text-lg tracking-tight">{group.name}</h3>
       </div>
       <SortableContext id={group.id} items={students.map(s => s.id.toString())} strategy={verticalListSortingStrategy}>
-        <div ref={setDropRef} className={`p-4 transition-colors rounded-xl min-h-[100px]`}>
+        <div ref={setDropRef} className={`p-4 transition-colors rounded-xl min-h-[100px] ${isOver ? 'bg-blue-50 dark:bg-blue-900/30' : ''}`}>
           {students.length > 0 ? (
             students.map((student) => (
               <StudentCard key={student.id} student={student} handleDeleteStudent={handleDeleteStudent} id={student.id.toString()} />
@@ -85,257 +86,284 @@ export default function GroupsPage() {
   const [allStudents, setAllStudents] = useState([]);
   const [classes, setClasses] = useState([]);
   const [activeClassId, setActiveClassId] = useState(null);
-
-  const [columns, setColumns] = useState({ unassigned: { id: 'unassigned', studentIds: [] } });
+  const [groups, setGroups] = useState([]);
   const [numGroups, setNumGroups] = useState(2);
   const [isLoading, setIsLoading] = useState(true);
   const [activeStudent, setActiveStudent] = useState(null);
+  const [error, setError] = useState(null);
 
-  const { setNodeRef: setUnassignedDropRef } = useDroppable({ id: 'unassigned' });
+  const { setNodeRef: setUnassignedDropRef, isOver: isOverUnassigned } = useDroppable({ id: 'unassigned' });
 
-  // Effect to load initial state from localStorage and fetch students/classes
   useEffect(() => {
     const loadInitialData = async () => {
       setIsLoading(true);
+      setError(null);
       try {
-        const [fetchedStudents, fetchedClasses] = await Promise.all([Student.list(), Class.list()]);
+        const [fetchedStudents, fetchedClasses, fetchedGroups] = await Promise.all([
+          Student.list(),
+          Class.list(),
+          Group.list({ filter: `user_id = "${pb.authStore.model?.id}"` })
+        ]);
+        console.log('Groups.jsx: Fetched students:', fetchedStudents);
+        console.log('Groups.jsx: Fetched classes:', fetchedClasses);
+        console.log('Groups.jsx: Fetched groups:', fetchedGroups);
         setAllStudents(fetchedStudents);
         setClasses(fetchedClasses);
+        setGroups(fetchedGroups);
 
-        let initialActiveClassId = null;
-        let initialColumns = { unassigned: { id: 'unassigned', studentIds: [] } };
-        let initialNumGroups = 2;
-
-        try {
-          const storedState = localStorage.getItem('studentGroupsState');
-          if (storedState) {
-            const persistedState = JSON.parse(storedState);
-            if (persistedState && typeof persistedState === 'object' && persistedState.activeClassId && persistedState.columns) {
-              initialActiveClassId = persistedState.activeClassId;
-              initialColumns = persistedState.columns;
-            } else {
-              console.warn("Persisted state found, but invalid format. Starting fresh.");
-            }
-          }
-        } catch (error) {
-          console.error("Failed to parse persisted state from localStorage:", error);
-        }
-
-        let studentsForActiveContext = [];
-        if (initialActiveClassId && fetchedClasses.some(c => c.id === initialActiveClassId)) {
-          // If a valid active class ID was persisted, use it
-          studentsForActiveContext = fetchedStudents.filter(s => s.class_id === initialActiveClassId);
-        } else if (fetchedClasses.length > 0) {
-          // If no valid active class ID was persisted, default to the first class
-          initialActiveClassId = fetchedClasses[0].id;
-          studentsForActiveContext = fetchedStudents.filter(s => s.class_id === initialActiveClassId);
-        } else {
-          // No classes at all, so no students to display/group
-          initialActiveClassId = null;
-          initialColumns = { unassigned: { id: 'unassigned', studentIds: [] } };
-        }
-
+        const initialActiveClassId = fetchedClasses.length > 0 ? fetchedClasses[0].id : null;
         setActiveClassId(initialActiveClassId);
-
-        // Reconcile loaded columns with actual students for the determined active class
-        const validStudentIdsForActiveContext = new Set(studentsForActiveContext.map(s => s.id.toString()));
-        const reconciledColumns = { ...initialColumns };
-
-        // Ensure studentIds are strings for consistency
-        Object.keys(reconciledColumns).forEach(colId => {
-          reconciledColumns[colId].studentIds = reconciledColumns[colId].studentIds.map(id => id.toString()).filter(id => validStudentIdsForActiveContext.has(id));
-        });
-
-        // 2. Identify students in the active class that are not in any column and add them to unassigned
-        const currentStudentIdsInColumns = new Set();
-        Object.values(reconciledColumns).forEach(col => {
-          col.studentIds.forEach(id => currentStudentIdsInColumns.add(id));
-        });
-
-        const unassignedStudentIdsToAdd = studentsForActiveContext
-          .filter(s => !currentStudentIdsInColumns.has(s.id.toString()))
-          .map(s => s.id.toString());
-        
-        reconciledColumns.unassigned.studentIds = [...new Set([...reconciledColumns.unassigned.studentIds, ...unassignedStudentIdsToAdd])];
-
-        setColumns(reconciledColumns);
-
-        // Update numGroups state to reflect the number of groups loaded from persistence
-        const loadedGroupCount = Object.keys(reconciledColumns).filter(k => k.startsWith('group-')).length;
-        if (loadedGroupCount > 0) {
-          initialNumGroups = loadedGroupCount;
-        }
-        setNumGroups(initialNumGroups);
-
       } catch (error) {
-        console.error("Error loading initial data:", error);
-        // Fallback to empty state on error
+        console.error("Groups.jsx: Error loading initial data:", error);
+        setError(`Failed to load data: ${error.message}`);
         setAllStudents([]);
         setClasses([]);
+        setGroups([]);
         setActiveClassId(null);
-        setColumns({ unassigned: { id: 'unassigned', studentIds: [] } });
-        setNumGroups(2);
       } finally {
         setIsLoading(false);
       }
     };
 
-    loadInitialData();
-  }, []); // Empty dependency array, runs once on mount
-
-  // Effect to save columns state to localStorage whenever it changes
-  useEffect(() => {
-    try {
-      const stateToSave = {
-        activeClassId,
-        columns,
-      };
-      localStorage.setItem('studentGroupsState', JSON.stringify(stateToSave));
-    } catch (error) {
-      console.error("Failed to save state to localStorage:", error);
+    if (pb.authStore.model?.id) {
+      loadInitialData();
+    } else {
+      console.warn("Groups.jsx: No authenticated user, skipping data load");
+      setIsLoading(false);
+      setError("No authenticated user. Please log in.");
     }
-  }, [activeClassId, columns]); // Dependency on activeClassId and columns state
+  }, []);
 
-  const handleClassChange = (classId) => {
+  const handleClassChange = async (classId) => {
     setActiveClassId(classId);
-    const studentsOfClass = allStudents.filter(s => s.class_id === classId).map(s => s.id.toString());
-    setColumns({
-      unassigned: { id: 'unassigned', studentIds: studentsOfClass },
-    });
-    setNumGroups(2); // Reset group count
+    try {
+      const fetchedGroups = await Group.list({ filter: `class_id = "${classId}" && user_id = "${pb.authStore.model?.id}"` });
+      console.log('Groups.jsx: Fetched groups for class:', fetchedGroups);
+      setGroups(fetchedGroups);
+    } catch (error) {
+      console.error("Groups.jsx: Error loading groups for class:", error);
+      setGroups([]);
+      setError(`Failed to load groups: ${error.message}`);
+    }
   };
-  
+
   const handleDeleteStudent = async (studentId) => {
     try {
       await Student.delete(studentId);
-      // Update allStudents state
       const updatedStudents = allStudents.filter(s => s.id !== studentId);
       setAllStudents(updatedStudents);
 
-      // Remove student from all columns and update columns state
-      const updatedColumns = { ...columns };
-      Object.keys(updatedColumns).forEach(colId => {
-        updatedColumns[colId].studentIds = updatedColumns[colId].studentIds.filter(id => id !== studentId.toString());
-      });
-      setColumns(updatedColumns);
+      const updatedGroups = await Promise.all(
+        groups
+          .filter(g => g.student_ids.includes(studentId))
+          .map(async (group) => {
+            const updatedStudentIds = group.student_ids.filter(id => id !== studentId);
+            await Group.update(group.id, { student_ids: updatedStudentIds });
+            return { ...group, student_ids: updatedStudentIds };
+          })
+      );
+      setGroups([...groups.filter(g => !g.student_ids.includes(studentId)), ...updatedGroups]);
     } catch (error) {
-      console.error("Error deleting student:", error);
+      console.error("Groups.jsx: Error deleting student:", error);
+      setError(`Failed to delete student: ${error.message}`);
     }
   };
 
-  const handleCreateGroups = () => {
+  const handleCreateGroups = async () => {
     if (!activeClassId) {
       alert("Please select a class first.");
       return;
     }
-    const studentsInClass = allStudents.filter(s => s.class_id === activeClassId).map(s => s.id.toString());
-    const newColumns = { unassigned: { id: 'unassigned', studentIds: studentsInClass } };
-    
-    for (let i = 1; i <= numGroups; i++) {
-      newColumns[`group-${i}`] = { id: `group-${i}`, studentIds: [] };
+    try {
+      const existingGroups = await Group.list({ filter: `class_id = "${activeClassId}" && user_id = "${pb.authStore.model?.id}"` });
+      console.log('Groups.jsx: Existing groups before deletion:', existingGroups);
+      await Group.batchDelete(existingGroups.map(g => g.id));
+
+      const newGroups = [];
+      for (let i = 1; i <= numGroups; i++) {
+        const group = await Group.create({
+          user_id: pb.authStore.model.id,
+          class_id: activeClassId,
+          name: `Group ${i}`,
+          student_ids: []
+        });
+        newGroups.push(group);
+      }
+      console.log('Groups.jsx: Created new groups:', newGroups);
+      setGroups(newGroups);
+    } catch (error) {
+      console.error("Groups.jsx: Error creating groups:", error);
+      setError(`Failed to create groups: ${error.message}`);
     }
-    setColumns(newColumns);
   };
 
-  const handleRandomize = () => {
+  const handleRandomize = async () => {
     if (!activeClassId) {
       alert("Please select a class first.");
       return;
     }
     let studentIds = allStudents.filter(s => s.class_id === activeClassId).map(s => s.id.toString());
-    // Shuffle student IDs
     for (let i = studentIds.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
       [studentIds[i], studentIds[j]] = [studentIds[j], studentIds[i]];
     }
 
-    const groupKeys = Object.keys(columns).filter(k => k.startsWith('group-'));
+    const groupKeys = groups.map(g => g.id);
     if (groupKeys.length === 0) {
       alert("Please create groups first before randomizing.");
       return;
     }
 
-    const newColumns = { ...columns };
-    // Clear all columns (groups and unassigned) that contain students from the active class
-    Object.keys(newColumns).forEach(key => newColumns[key].studentIds = []);
-
-    // Distribute students evenly among groups
-    studentIds.forEach((studentId, index) => {
-      const groupKey = groupKeys[index % groupKeys.length];
-      newColumns[groupKey].studentIds.push(studentId);
-    });
-
-    setColumns(newColumns);
+    try {
+      const updatedGroups = await Promise.all(
+        groups.map(async (group, index) => {
+          const studentIdsForGroup = studentIds.slice(
+            Math.floor(index * studentIds.length / groups.length),
+            Math.floor((index + 1) * studentIds.length / groups.length)
+          );
+          await Group.update(group.id, { student_ids: studentIdsForGroup });
+          return { ...group, student_ids: studentIdsForGroup };
+        })
+      );
+      console.log('Groups.jsx: Randomized groups:', updatedGroups);
+      setGroups(updatedGroups);
+    } catch (error) {
+      console.error("Groups.jsx: Error randomizing groups:", error);
+      setError(`Failed to randomize groups: ${error.message}`);
+    }
   };
-  
-  const handleClearGroups = () => {
+
+  const handleClearGroups = async () => {
     if (!window.confirm("Are you sure you want to clear all groups and move students back to unassigned for this class?")) {
       return;
     }
     if (activeClassId) {
-      handleClassChange(activeClassId); // This effectively resets groups for the active class
+      try {
+        const existingGroups = await Group.list({ filter: `class_id = "${activeClassId}" && user_id = "${pb.authStore.model?.id}"` });
+        console.log('Groups.jsx: Clearing groups:', existingGroups);
+        await Group.batchDelete(existingGroups.map(g => g.id));
+        setGroups([]);
+      } catch (error) {
+        console.error("Groups.jsx: Error clearing groups:", error);
+        setError(`Failed to clear groups: ${error.message}`);
+      }
     }
   };
 
   const onDragStart = (event) => {
+    console.log('Groups.jsx: Drag started:', event.active.id);
     const student = studentsById[event.active.id];
     setActiveStudent(student);
   };
 
-  const onDragEnd = (event) => {
+  const onDragEnd = async (event) => {
+    console.log('Groups.jsx: Drag ended:', { active: event.active, over: event.over });
     const { active, over } = event;
-
     setActiveStudent(null);
 
-    if (!over) return;
-
-    const activeContainer = findContainer(active.id);
-    let overContainer = findContainer(over.id) || over.id; // Fallback if over.id is the container itself
-
-    if (activeContainer === overContainer) {
-      // Reorder within the same container
-      const items = [...columns[activeContainer].studentIds];
-      const oldIndex = items.indexOf(active.id);
-      const newIndex = over.id === activeContainer ? items.length : items.indexOf(over.id);
-      const newItems = arrayMove(items, oldIndex, newIndex);
-      setColumns({ ...columns, [activeContainer]: { ...columns[activeContainer], studentIds: newItems } });
+    if (!over) {
+      console.log('Groups.jsx: No drop target');
       return;
     }
 
-    // Move to different container
-    const activeItems = [...columns[activeContainer].studentIds];
-    const overItems = [...columns[overContainer].studentIds];
-    const oldIndex = activeItems.indexOf(active.id);
-    const newItemsActive = activeItems.toSpliced(oldIndex, 1);
+    const activeId = active.id.toString();
+    const overId = over.id.toString();
+    const activeContainer = findContainer(activeId);
+    const overContainer = overId; // Use over.id directly as the container ID
+
+    console.log('Groups.jsx: Active container:', activeContainer, 'Over container:', overContainer);
+
+    if (activeContainer === overContainer) {
+      if (activeContainer !== 'unassigned') {
+        const group = groups.find(g => g.id === activeContainer);
+        if (!group) {
+          console.log('Groups.jsx: Group not found for container:', activeContainer);
+          return;
+        }
+        const items = [...group.student_ids];
+        const oldIndex = items.indexOf(activeId);
+        const newIndex = items.indexOf(overId) !== -1 ? items.indexOf(overId) : items.length;
+        if (oldIndex === -1) {
+          console.log('Groups.jsx: Student not found in active container');
+          return;
+        }
+        const newItems = arrayMove(items, oldIndex, newIndex);
+        try {
+          await Group.update(activeContainer, { student_ids: newItems });
+          setGroups(groups.map(g => g.id === activeContainer ? { ...g, student_ids: newItems } : g));
+          console.log('Groups.jsx: Updated group order:', newItems);
+        } catch (error) {
+          console.error("Groups.jsx: Error updating group order:", error);
+          setError(`Failed to update group order: ${error.message}`);
+        }
+      }
+      return;
+    }
+
+    const activeGroup = activeContainer === 'unassigned' ? { id: 'unassigned', student_ids: unassignedStudents.map(s => s.id.toString()) } : groups.find(g => g.id === activeContainer);
+    const overGroup = overContainer === 'unassigned' ? { id: 'unassigned', student_ids: unassignedStudents.map(s => s.id.toString()) } : groups.find(g => g.id === overContainer);
+
+    if (!activeGroup || !overGroup) {
+      console.log('Groups.jsx: Invalid active or over group:', { activeGroup, overGroup });
+      return;
+    }
+
+    const activeItems = [...activeGroup.student_ids];
+    const overItems = [...overGroup.student_ids];
+    const oldIndex = activeItems.indexOf(activeId);
+    if (oldIndex === -1) {
+      console.log('Groups.jsx: Student not found in active container');
+      return;
+    }
+    const newItemsActive = activeItems.filter(id => id !== activeId);
     let newItemsOver = [...overItems];
-    const insertIndex = over.id === overContainer ? overItems.length : overItems.indexOf(over.id);
-    newItemsOver.splice(insertIndex, 0, active.id);
-    setColumns({
-      ...columns,
-      [activeContainer]: { ...columns[activeContainer], studentIds: newItemsActive },
-      [overContainer]: { ...columns[overContainer], studentIds: newItemsOver },
-    });
+    const insertIndex = overId === overContainer ? overItems.length : overItems.indexOf(overId);
+    newItemsOver.splice(insertIndex === -1 ? overItems.length : insertIndex, 0, activeId);
+
+    try {
+      if (activeContainer !== 'unassigned') {
+        await Group.update(activeContainer, { student_ids: newItemsActive });
+      }
+      if (overContainer !== 'unassigned') {
+        await Group.update(overContainer, { student_ids: newItemsOver });
+      }
+      setGroups(groups.map(g => 
+        g.id === activeContainer ? { ...g, student_ids: newItemsActive } :
+        g.id === overContainer ? { ...g, student_ids: newItemsOver } : g
+      ));
+      console.log('Groups.jsx: Moved student:', { activeId, from: activeContainer, to: overContainer });
+    } catch (error) {
+      console.error("Groups.jsx: Error moving student between groups:", error);
+      setError(`Failed to move student: ${error.message}`);
+    }
   };
 
   const findContainer = (id) => {
-    if (id in columns) return id;
-    return Object.keys(columns).find((key) => columns[key].studentIds.includes(id));
+    // If id matches a group ID, return it directly
+    if (groups.some(g => g.id === id)) return id;
+    // If id is 'unassigned', return it
+    if (id === 'unassigned') return 'unassigned';
+    // If id is a student ID, find the group containing it
+    const group = groups.find(g => g.student_ids.includes(id.toString()));
+    return group ? group.id : 'unassigned';
   };
 
   function arrayMove(arr, fromIndex, toIndex) {
-    const element = arr[fromIndex];
-    arr.splice(fromIndex, 1);
-    arr.splice(toIndex, 0, element);
-    return arr;
+    const newArr = [...arr];
+    const element = newArr[fromIndex];
+    newArr.splice(fromIndex, 1);
+    newArr.splice(toIndex, 0, element);
+    return newArr;
   }
 
   const studentsById = allStudents.reduce((acc, student) => {
     acc[student.id.toString()] = student;
     return acc;
   }, {});
-  
-  const groupKeys = Object.keys(columns).filter(k => k.startsWith('group-')); // Filter for actual group keys
-  const unassignedStudents = columns.unassigned ? columns.unassigned.studentIds.map(id => studentsById[id]).filter(Boolean) : []; // Filter out null/undefined if student not found
+
+  const unassignedStudents = allStudents
+    .filter(s => s.class_id === activeClassId && !groups.some(g => g.student_ids.includes(s.id.toString())))
+    .map(s => ({ ...s, id: s.id.toString() }));
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-slate-900 p-6 transition-colors duration-300">
@@ -356,21 +384,27 @@ export default function GroupsPage() {
           </div>
         </motion.div>
 
+        {error && (
+          <div className="mb-4 p-4 bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 rounded-xl">
+            {error}
+          </div>
+        )}
+
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           <div className="lg:col-span-1 space-y-6">
             <div className="bg-white dark:bg-slate-800 backdrop-blur-xl rounded-3xl shadow-xl border border-gray-200 dark:border-slate-700 p-6">
               <h3 className="font-bold text-gray-800 dark:text-white text-lg mb-4 tracking-tight">Controls</h3>
               <div className="space-y-4">
                 <div className="space-y-2">
-                    <label className="text-sm font-medium text-gray-600 dark:text-slate-300">Select Class</label>
-                    <Select value={activeClassId || ''} onValueChange={handleClassChange} disabled={isLoading || classes.length === 0}>
-                      <SelectTrigger className="bg-white dark:bg-slate-700 border-gray-300 dark:border-slate-600 rounded-2xl text-gray-800 dark:text-white placeholder:text-gray-400 dark:placeholder:text-slate-400">
-                        <SelectValue placeholder="Choose a class" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {classes.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
+                  <label className="text-sm font-medium text-gray-600 dark:text-slate-300">Select Class</label>
+                  <Select value={activeClassId || ''} onValueChange={handleClassChange} disabled={isLoading || classes.length === 0}>
+                    <SelectTrigger className="bg-white dark:bg-slate-700 border-gray-300 dark:border-slate-600 rounded-2xl text-gray-800 dark:text-white placeholder:text-gray-400 dark:placeholder:text-slate-400">
+                      <SelectValue placeholder="Choose a class" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {classes.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div className="flex items-center gap-3">
                   <input 
@@ -413,13 +447,12 @@ export default function GroupsPage() {
           <div className="lg:col-span-2">
             <DndContext collisionDetection={closestCenter} onDragStart={onDragStart} onDragEnd={onDragEnd}>
               <div className="flex flex-col md:flex-row gap-6 items-start">
-                {/* Unassigned-Box links, fixed Breite auf md+ */}
-                <div className={`bg-white dark:bg-slate-800 backdrop-blur-xl rounded-3xl shadow-xl border border-gray-200 dark:border-slate-700 p-6 flex flex-col min-w-[300px] flex-1 md:flex-none ${unassignedStudents.length === 0 ? 'md:min-w-[300px]' : 'md:min-w-[400px]'}`}>
+                <div className={`bg-white dark:bg-slate-800 backdrop-blur-xl rounded-3xl shadow-xl border ${isOverUnassigned ? 'border-blue-500' : 'border-gray-200 dark:border-slate-700'} p-6 flex flex-col min-w-[300px] flex-1 md:flex-none ${unassignedStudents.length === 0 ? 'md:min-w-[300px]' : 'md:min-w-[400px]'}`}>
                   <div className="pb-4 mb-4 border-b border-gray-200 dark:border-slate-700">
                     <h3 className="font-bold text-gray-800 dark:text-white text-lg tracking-tight">Unassigned ({unassignedStudents.length})</h3>
                   </div>
                   <SortableContext id="unassigned" items={unassignedStudents.map(s => s.id.toString())} strategy={rectSortingStrategy}>
-                    <div ref={setUnassignedDropRef} className={`p-4 transition-colors rounded-xl min-h-[100px]`}>
+                    <div ref={setUnassignedDropRef} className={`p-4 transition-colors rounded-xl min-h-[100px] ${isOverUnassigned ? 'bg-blue-50 dark:bg-blue-900/30' : ''}`}>
                       {isLoading ? <p className="text-center text-gray-500 dark:text-slate-400 p-4 text-sm font-medium">Loading...</p> : 
                         !activeClassId ? (
                           <div className="text-center text-gray-500 dark:text-slate-400 p-4 text-sm font-medium">
@@ -445,16 +478,23 @@ export default function GroupsPage() {
                   </SortableContext>
                 </div>
 
-                {/* Gruppen-Container rechts: Grid mit max. 2 Columns, wrapping vertical */}
                 <div className="flex-1 min-w-0">
                   <div className="grid grid-cols-[repeat(auto-fit,minmax(300px,1fr))] gap-6 items-start w-full">
-                    {groupKeys.map((key, index) => {
-                      const group = columns[key];
-                      const groupStudents = group.studentIds.map(id => studentsById[id]).filter(Boolean);
-                      return (
-                        <GroupBox key={group.id} group={group} students={groupStudents} index={index} handleDeleteStudent={handleDeleteStudent} />
-                      );
-                    })}
+                    {groups.length > 0 ? (
+                      groups.map((group, index) => (
+                        <GroupBox 
+                          key={group.id} 
+                          group={group} 
+                          students={group.student_ids.map(id => studentsById[id]).filter(Boolean)} 
+                          index={index} 
+                          handleDeleteStudent={handleDeleteStudent} 
+                        />
+                      ))
+                    ) : (
+                      <div className="text-center text-gray-500 dark:text-slate-400 p-4 text-sm font-medium">
+                        No groups created. Click "Create Groups" to start.
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>

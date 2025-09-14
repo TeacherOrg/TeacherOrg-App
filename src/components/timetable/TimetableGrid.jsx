@@ -6,21 +6,21 @@ import { useDroppable } from "@dnd-kit/core";
 import TimeSlot from "./TimeSlot";
 import DayHeader, { DAYS } from "./DayHeader";
 import LessonCard from "./LessonCard";
-import { useDraggable } from "@dnd-kit/core"
+import { useDraggable } from "@dnd-kit/core";
 
 const getHolidayDisplay = (holiday) => {
   if (!holiday) return { emoji: '', color: '' };
   switch (holiday.type) {
-      case 'vacation': 
-          if (holiday.name.includes('Sommer')) return { emoji: '☀️', color: 'bg-yellow-800/60' };
-          if (holiday.name.includes('Herbst')) return { emoji: '🍂', color: 'bg-orange-800/60' };
-          if (holiday.name.includes('Weihnacht')) return { emoji: '🎄', color: 'bg-green-800/60' };
-          if (holiday.name.includes('Sport')) return { emoji: '⛷️', color: 'bg-blue-800/60' };
-          if (holiday.name.includes('Frühling')) return { emoji: '🌸', color: 'bg-pink-800/60' };
-          return { emoji: '🏖️', color: 'bg-cyan-800/60' };
-      case 'holiday': return { emoji: '🎉', color: 'bg-purple-800/60' };
-      case 'training': return { emoji: '📚', color: 'bg-indigo-800/60' };
-      default: return { emoji: '📅', color: 'bg-gray-800/60' };
+    case 'vacation': 
+      if (holiday.name.includes('Sommer')) return { emoji: '☀️', color: 'bg-yellow-800/60' };
+      if (holiday.name.includes('Herbst')) return { emoji: '🍂', color: 'bg-orange-800/60' };
+      if (holiday.name.includes('Weihnacht')) return { emoji: '🎄', color: 'bg-green-800/60' };
+      if (holiday.name.includes('Sport')) return { emoji: '⛷️', color: 'bg-blue-800/60' };
+      if (holiday.name.includes('Frühling')) return { emoji: '🌸', color: 'bg-pink-800/60' };
+      return { emoji: '🏖️', color: 'bg-cyan-800/60' };
+    case 'holiday': return { emoji: '🎉', color: 'bg-purple-800/60' };
+    case 'training': return { emoji: '📚', color: 'bg-indigo-800/60' };
+    default: return { emoji: '📅', color: 'bg-gray-800/60' };
   }
 };
 
@@ -33,13 +33,28 @@ const DraggableItem = ({ id, data, children }) => {
   return <div ref={setNodeRef} style={style} {...listeners} {...attributes} className="h-full w-full select-none lesson-card">{children}</div>;
 };
 
-const SlotCell = ({ dayIndex, rowNum, holiday, holidayDisplay, isOccupied, lesson, droppableId, onCreateLesson, day, slot, onEditLesson, onShowHover, onHideHover, isLastRow }) => {
+const SlotCell = ({ dayIndex, rowNum, holiday, holidayDisplay, isOccupied, lesson, droppableId, onCreateLesson, day, slot, onEditLesson, onShowHover, onHideHover, isLastRow, subjects }) => {
   const { setNodeRef: dropRef, isOver } = useDroppable({ 
     id: droppableId, 
     disabled: !!lesson || !!holiday || isOccupied 
   });
 
-  if (isOccupied) return null; // Return null for slots occupied by double lesson to avoid overlap
+  // Neu: Render leeren Platzhalter für occupied (vermeidet Layout-Shift/Border-Lücken)
+  if (isOccupied) {
+    return (
+      <div
+        className={`relative border-r border-b border-slate-300 dark:border-slate-700 bg-transparent pointer-events-none ${
+          dayIndex < DAYS.length - 1 ? 'border-r-slate-300 dark:border-r-slate-700' : 'border-r-transparent'
+        } ${isLastRow ? 'border-b-0' : ''}`}
+        style={{
+          gridRow: rowNum,
+          gridColumn: dayIndex + 2,
+          minHeight: 'var(--cell-height, 80px)',
+          height: 0,  // Flach, aber Borders sichtbar
+        }}
+      />
+    );
+  }
 
   return (
     <div
@@ -71,6 +86,7 @@ const SlotCell = ({ dayIndex, rowNum, holiday, holidayDisplay, isOccupied, lesso
               onMouseEnter={(e) => onShowHover(lesson, e)}
               onMouseLeave={onHideHover}
               onMouseMove={() => {}}
+              subjects={subjects} // Pass subjects prop to LessonCard
             />
           </DraggableItem>
         ) : holiday ? (
@@ -96,7 +112,7 @@ const SlotCell = ({ dayIndex, rowNum, holiday, holidayDisplay, isOccupied, lesso
 };
 
 const TimetableGrid = React.forwardRef(
-  ({ lessons, onCreateLesson, onEditLesson, timeSlots, currentWeek, holidays, weekInfo, onShowHover, onHideHover }, ref) => {
+  ({ lessons, onCreateLesson, onEditLesson, timeSlots, currentWeek, holidays, weekInfo, onShowHover, onHideHover, subjects }, ref) => {
     // Remove useCallback - normal function for latest state
     const getLessonForSlot = (day, period) => {
       return lessons.find(lesson => lesson.day_of_week === day && lesson.period_slot === period);
@@ -137,9 +153,9 @@ const TimetableGrid = React.forwardRef(
 
     const gridStyle = useMemo(() => ({
       display: 'grid',
-      gridTemplateColumns: `120px repeat(5, var(--cell-width, 120px))`,  // Neu: Verwende var(--cell-width) für manuelle Einstellung
+      gridTemplateColumns: `120px repeat(5, var(--cell-width, 120px))`,
       gridTemplateRows: `auto repeat(${timeSlots?.length || 8}, min-content)`,
-      width: 'fit-content',  // Neu: fit-content statt 100%, damit Breite an Cells anpasst
+      width: 'fit-content',
       gap: '0px',
       borderSpacing: '0px',
     }), [timeSlots?.length]);
@@ -189,6 +205,7 @@ const TimetableGrid = React.forwardRef(
                 onShowHover={onShowHover}
                 onHideHover={onHideHover}
                 isLastRow={isLastRow}
+                subjects={subjects} // Pass subjects prop to SlotCell
               />
             );
           })}
@@ -196,7 +213,6 @@ const TimetableGrid = React.forwardRef(
       );
     };
 
-    // Hier ist der return mit ref und key – er muss genau so platziert werden, wie im Original (am Ende der Funktion)
     return (
       <div ref={ref} className="grid gap-0 bg-white dark:bg-slate-800 rounded-2xl" style={gridStyle} key={lessons.length}>
         {/* Header Row */}
@@ -210,7 +226,7 @@ const TimetableGrid = React.forwardRef(
         {DAYS.map((day, dayIndex) => (
           <div 
             key={day.key} 
-            className={`bg-white dark:bg-slate-800 sticky top-0 z-10 border-b border-r ${dayIndex < DAYS.length - 1 ? 'border-r-slate-300 dark:border-r-slate-700' : 'border-r-transparent'} border-slate-300 dark:border-slate-700 text-center min-w-0 overflow-hidden text-black dark:text-white font-semibold`}  // Hinzugefügt: text-black dark:text-white font-semibold für bessere Sichtbarkeit
+            className={`bg-white dark:bg-slate-800 sticky top-0 z-10 border-b border-r ${dayIndex < DAYS.length - 1 ? 'border-r-slate-300 dark:border-r-slate-700' : 'border-r-transparent'} border-slate-300 dark:border-slate-700 text-center min-w-0 overflow-hidden text-black dark:text-white font-semibold`}
             style={{ ...headerCellStyle, gridRow: 1, gridColumn: dayIndex + 2 }}
           >
             <DayHeader day={day.key} currentWeek={currentWeek} />

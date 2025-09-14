@@ -1,20 +1,22 @@
-import React, { useState, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { ResponsiveContainer, RadarChart, PolarGrid, PolarAngleAxis, Radar, LineChart, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Line, BarChart, Bar } from 'recharts';
 import { motion } from 'framer-motion';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { useToast } from "@/components/ui/use-toast";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Performance, UeberfachlichKompetenz, Subject, Competency, Fachbereich } from '@/api/entities'; // Added Fachbereich
+import { Performance, UeberfachlichKompetenz, Subject, Competency, Fachbereich, UserPreferences, User } from '@/api/entities';
 import { Plus, Filter, BarChart3, ChevronDown, ChevronUp, Star, Activity } from 'lucide-react';
 import LeistungenTable from './LeistungenTable';
 import UeberfachlichTable from './UeberfachlichTable';
 import PerformanceModal from './PerformanceModal';
 import UeberfachlichModal from './UeberfachlichModal';
 import CalendarLoader from '../ui/CalendarLoader';
-
+import pb from '@/api/pb'; // Import PocketBase für Realtime-Subscriptions
+import { debounce } from '../../utils/utils';
 
 // Enhanced color palette with more vibrant colors for students
 const STUDENT_COLORS = [
@@ -26,7 +28,8 @@ const STUDENT_COLORS = [
 
 const getStudentColor = (index) => STUDENT_COLORS[index % STUDENT_COLORS.length];
 
-const PerformanceView = ({ students = [], performances = [], ueberfachlich = [], activeClassId, classes = [], onDataChange }) => {
+const PerformanceView = ({ students = [], performances = [], activeClassId, classes = [], onDataChange }) => {
+  const { toast } = useToast();
   const [tab, setTab] = useState('diagramme');
   const [selectedStudents, setSelectedStudents] = useState([]);
   const [selectedSubject, setSelectedSubject] = useState('Alle');
@@ -44,7 +47,90 @@ const PerformanceView = ({ students = [], performances = [], ueberfachlich = [],
   const [expandedLeistungenRows, setExpandedLeistungenRows] = useState(new Set());
   const [expandedUeberfachlichHistories, setExpandedUeberfachlichHistories] = useState(new Set());
   const [expandedUeberfachlichCompetencies, setExpandedUeberfachlichCompetencies] = useState(new Set());
+  const [ueberfachlich, setUeberfachlich] = useState([]);
   const prevClassIdRef = useRef(activeClassId);
+  const prevTabRef = useRef(tab); // Add ref to track previous tab
+
+  
+  const handleDataChange = async (updatedUeberfachlich) => {
+    try {
+      if (updatedUeberfachlich) {
+        setUeberfachlich(updatedUeberfachlich);
+      } else {
+        const [subjectsData, competenciesData, fachbereicheData, ueberfachlichData, performancesData] = await Promise.all([
+          Subject.filter({ class_id: activeClassId }),
+          Competency.filter({ class_id: activeClassId }),
+          Fachbereich.filter({ class_id: activeClassId }),
+          UeberfachlichKompetenz.list({
+            filter: `class_id = '${activeClassId}'`,
+            perPage: 500,
+            expand: 'student_id,class_id,competency_id',
+            $cancelKey: `list-ueberfachliche_kompetenz-data-change-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+          }),
+          Performance.list({
+            filter: `class_id = '${activeClassId}'`,
+            perPage: 500,
+            expand: 'student_id,class_id,subject',
+            $cancelKey: `list-performance-data-change-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+          })
+        ]);
+        setSubjects(subjectsData || []);
+        setAllCompetencies(competenciesData || []);
+        setUeberfachlich(ueberfachlichData || []);
+        if (onDataChange) onDataChange(performancesData);
+      }
+
+      // Reload preferences to ensure expansion states are up-to-date
+      const user = User.current();
+      if (user && activeClassId) {
+        const preference = await UserPreferences.findOne({
+          user_id: user.id,
+          class_id: activeClassId,
+        });
+        if (preference?.preferences) {
+          setExpandedLeistungenRows(new Set(Array.isArray(preference.preferences.expandedLeistungenRows) ? preference.preferences.expandedLeistungenRows : []));
+          setExpandedUeberfachlichHistories(new Set(Array.isArray(preference.preferences.expandedUeberfachlichHistories) ? preference.preferences.expandedUeberfachlichHistories : []));
+          setExpandedUeberfachlichCompetencies(new Set(Array.isArray(preference.preferences.expandedUeberfachlichCompetencies) ? preference.preferences.expandedUeberfachlichCompetencies : []));
+          // Only set tab if no save flag to prevent overriding recent save
+          if (!localStorage.getItem('performanceSaveFlag') && preference.preferences.performanceTab) {
+            setTab(preference.preferences.performanceTab);
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error in handleDataChange:', error);
+      toast({
+        title: "Fehler",
+        description: "Fehler beim Aktualisieren der Daten. Bitte versuchen Sie es erneut.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  // NEW: Add handleDeletePerformance function
+  const handleDeletePerformance = async (performanceId) => {
+    const group = performances.filter(p => {
+      const target = performances.find(p => p.id === performanceId);
+      const key = `${target.assessment_name}-${target.subject}-${target.date}`;
+      return `${p.assessment_name}-${p.subject}-${p.date}` === key;
+    });
+
+    if (!window.confirm(`Möchten Sie ${group.length} Leistungsbeurteilungen für "${group[0].assessment_name}" wirklich löschen?`)) return;
+
+    try {
+      const deletePromises = group.map(p => Performance.delete(p.id));
+      const results = await Promise.all(deletePromises);
+      if (results.every(success => success)) {
+        localStorage.setItem('performanceSaveFlag', 'true');
+        if (onDataChange) onDataChange();
+      } else {
+        throw new Error('Ein oder mehrere Löschvorgänge fehlgeschlagen');
+      }
+    } catch (error) {
+      console.error('Fehler beim Löschen der Leistungsbeurteilungen:', error);
+      alert('Fehler beim Löschen der Leistungsbeurteilungen. Bitte versuchen Sie es erneut.');
+    }
+  };
 
   // Safe rendering helper
   const canRenderChart = (data) => {
@@ -53,27 +139,170 @@ const PerformanceView = ({ students = [], performances = [], ueberfachlich = [],
     return data.every(item => item && typeof item === 'object' && item.name);
   };
 
-  // Load subjects AND competencies for the active class
+  // Debugging: Log activeClassId changes
+  useEffect(() => {
+    console.log('activeClassId changed:', activeClassId);
+  }, [activeClassId]);
+
+  // Load preferences from PocketBase
+  useEffect(() => {
+    const loadPreferences = async () => {
+      if (!activeClassId) return;
+      const saveFlag = localStorage.getItem('performanceSaveFlag');
+      if (saveFlag) return; // Skip loading preferences if saveFlag is present to avoid overwriting local changes
+      try {
+        const user = User.current();
+        if (!user) throw new Error('Kein Benutzer eingeloggt');
+
+        const preference = await UserPreferences.findOne({
+          user_id: user.id,
+          class_id: activeClassId,
+        });
+
+        if (preference && preference.preferences) {
+          setExpandedLeistungenRows(new Set(Array.isArray(preference.preferences.expandedLeistungenRows) ? preference.preferences.expandedLeistungenRows : []));
+          setExpandedUeberfachlichHistories(new Set(Array.isArray(preference.preferences.expandedUeberfachlichHistories) ? preference.preferences.expandedUeberfachlichHistories : []));
+          setExpandedUeberfachlichCompetencies(new Set(Array.isArray(preference.preferences.expandedUeberfachlichCompetencies) ? preference.preferences.expandedUeberfachlichCompetencies : []));
+          if (!saveFlag && preference.preferences.performanceTab) {
+            setTab(preference.preferences.performanceTab);
+          }
+        }
+      } catch (error) {
+        console.error('Error loading preferences:', error);
+        // Kein Alert hier, um Loop zu vermeiden
+      }
+    };
+
+    loadPreferences();
+  }, [activeClassId]);
+
+  // Save preferences to PocketBase with debounce
+  const savePreferences = useCallback(
+    debounce(async () => {
+      if (!activeClassId) return;
+      try {
+        const user = User.current();
+        if (!user) throw new Error('Kein Benutzer eingeloggt');
+
+        const preferencesData = {
+          expandedLeistungenRows: Array.from(expandedLeistungenRows),
+          expandedUeberfachlichHistories: Array.from(expandedUeberfachlichHistories),
+          expandedUeberfachlichCompetencies: Array.from(expandedUeberfachlichCompetencies),
+          performanceTab: tab,
+        };
+
+        const preference = await UserPreferences.findOne({
+          user_id: user.id,
+          class_id: activeClassId,
+        });
+
+        if (preference) {
+          await UserPreferences.update(preference.id, {
+            preferences: preferencesData,
+          });
+        } else {
+          await UserPreferences.create({
+            user_id: user.id,
+            class_id: activeClassId,
+            preferences: preferencesData,
+          });
+        }
+      } catch (error) {
+        console.error('Error saving preferences:', error);
+        // Kein Alert hier, um Loop zu vermeiden
+      }
+    }, 1000), // Debounce mit 1 Sekunde
+    [expandedLeistungenRows, expandedUeberfachlichHistories, expandedUeberfachlichCompetencies, activeClassId, tab]
+  );
+
+  // Realtime-Sync mit Schutz vor Loops
+  useEffect(() => {
+    if (!activeClassId) return;
+    const user = User.current();
+    if (!user) return;
+
+    let lastProcessedRecordId = null;
+
+    const subscription = pb.collection('user_preferences').subscribe('*', async (e) => {
+      if (e.record.user_id === user.id && e.record.class_id === activeClassId && e.record.id !== lastProcessedRecordId) {
+        try {
+          lastProcessedRecordId = e.record.id; // Verhindert erneutes Verarbeiten desselben Records
+          const updated = await UserPreferences.findOne({
+            user_id: user.id,
+            class_id: activeClassId,
+          });
+          if (updated?.preferences) {
+            setExpandedLeistungenRows(new Set(Array.isArray(updated.preferences.expandedLeistungenRows) ? updated.preferences.expandedLeistungenRows : []));
+            setExpandedUeberfachlichHistories(new Set(Array.isArray(updated.preferences.expandedUeberfachlichHistories) ? updated.preferences.expandedUeberfachlichHistories : []));
+            setExpandedUeberfachlichCompetencies(new Set(Array.isArray(updated.preferences.expandedUeberfachlichCompetencies) ? updated.preferences.expandedUeberfachlichCompetencies : []));
+            if (!localStorage.getItem('performanceSaveFlag') && updated.preferences.performanceTab) {
+              setTab(updated.preferences.performanceTab);
+            }
+          }
+        } catch (error) {
+          console.error('Error in subscription update:', error);
+        }
+      }
+    });
+
+    return () => {
+      pb.collection('user_preferences').unsubscribe('*');
+    };
+  }, [activeClassId]);
+
+  const loadRef = useRef(false); // FIX: Flag gegen Loop
+
   useEffect(() => {
     const loadClassSpecificData = async () => {
+      if (loadRef.current) return;
+      loadRef.current = true;
       try {
         if (activeClassId) {
           setIsLoading(true);
-          const [subjectsData, competenciesData, fachbereicheData] = await Promise.all([
+          console.log('Loading data for class_id:', activeClassId);
+          const [subjectsData, competenciesData, fachbereicheData, ueberfachlichData] = await Promise.all([
             Subject.filter({ class_id: activeClassId }),
             Competency.filter({ class_id: activeClassId }),
-            Fachbereich.filter({ class_id: activeClassId })  // Neu: Lade fachbereiche
+            Fachbereich.filter({ class_id: activeClassId }),
+            UeberfachlichKompetenz.filter({ class_id: activeClassId })
           ]);
+          // Validierung der überfachlichen Kompetenzen
+          const validUeberfachlich = ueberfachlichData.filter(u => {
+            const hasValidCompetency = competenciesData.some(c => c.id === u.competency_id);
+            if (!hasValidCompetency) {
+              console.warn(`Invalid competency_id ${u.competency_id} in ueberfachlich entry:`, u);
+            }
+            return hasValidCompetency;
+          });
+          setUeberfachlich(validUeberfachlich || []);
+          console.log('Loaded data:', {
+            subjects: subjectsData,
+            competencies: competenciesData,
+            fachbereiche: fachbereicheData,
+            ueberfachlich: validUeberfachlich
+          });
           setSubjects(subjectsData || []);
           setAllCompetencies(competenciesData || []);
-          // Setze fachbereiche, falls benötigt (in fachbereichData useMemo)
+          setUeberfachlich(validUeberfachlich || []);
+          if (validUeberfachlich.length > 0) {
+            console.log('ueberfachlich details:', validUeberfachlich);
+          } else {
+            console.warn('No valid ueberfachlich data found for class_id:', activeClassId);
+          }
         }
       } catch (error) {
         console.error("Error loading class-specific data:", error);
+        toast({
+          title: "Fehler",
+          description: "Fehler beim Laden der Daten. Bitte versuchen Sie es erneut.",
+          variant: "destructive",
+        });
         setSubjects([]);
         setAllCompetencies([]);
+        setUeberfachlich([]);
       } finally {
         setIsLoading(false);
+        loadRef.current = false;
       }
     };
     loadClassSpecificData();
@@ -83,9 +312,9 @@ const PerformanceView = ({ students = [], performances = [], ueberfachlich = [],
     };
 
     const handleOpenPerformanceModalForEdit = (event) => {
-        const performanceToEdit = (performances || []).find(p => p.id === event.detail.id);
-        setEditingPerformance(performanceToEdit);
-        setIsPerformanceModalOpen(true);
+      const performanceToEdit = (performances || []).find(p => p.id === event.detail.id);
+      setEditingPerformance(performanceToEdit);
+      setIsPerformanceModalOpen(true);
     };
 
     window.addEventListener('openUeberfachlichModal', handleOpenUeberfachlichModal);
@@ -97,15 +326,49 @@ const PerformanceView = ({ students = [], performances = [], ueberfachlich = [],
     };
   }, [activeClassId, performances]);
 
-  // Effect to set the default selected competency
+  // Load tab state from PocketBase
   useEffect(() => {
-    if (allCompetencies && allCompetencies.length > 0 && !selectedCompetencyForProgression) {
-        setSelectedCompetencyForProgression(allCompetencies[0].name);
-    } else if ((!allCompetencies || allCompetencies.length === 0)) {
-        // Clear selection if competencies are cleared
-        setSelectedCompetencyForProgression(null);
+    const loadTabState = async () => {
+      const saveFlag = localStorage.getItem('performanceSaveFlag');
+      if (!activeClassId) {
+        setTab('diagramme');
+        setExpandedLeistungenRows(new Set());
+        setExpandedUeberfachlichHistories(new Set());
+        setExpandedUeberfachlichCompetencies(new Set());
+        return;
+      }
+
+      try {
+        const user = User.current();
+        if (!user) throw new Error('Kein Benutzer eingeloggt');
+        const preference = await UserPreferences.findOne({
+          user_id: user.id,
+          class_id: activeClassId,
+        });
+        if (preference?.preferences?.performanceTab && !saveFlag) {
+          setTab(preference.preferences.performanceTab);
+        }
+        localStorage.removeItem('performanceSaveFlag');
+      } catch (error) {
+        console.error('Error loading tab state:', error);
+        if (!saveFlag) {
+          setTab('diagramme');
+        }
+      }
+    };
+
+    loadTabState();
+  }, [activeClassId]);
+
+  // Collapse on tab change only if tab actually changes
+  useEffect(() => {
+    if (prevTabRef.current !== tab) {
+      setExpandedLeistungenRows(new Set());
+      setExpandedUeberfachlichHistories(new Set());
+      setExpandedUeberfachlichCompetencies(new Set());
+      prevTabRef.current = tab; // Update previous tab
     }
-  }, [allCompetencies, selectedCompetencyForProgression]);
+  }, [tab]);
 
   const studentOptions = useMemo(() => {
     if (!Array.isArray(students)) return [];
@@ -135,79 +398,160 @@ const PerformanceView = ({ students = [], performances = [], ueberfachlich = [],
     setEditingPerformance(null);
     setIsPerformanceModalOpen(true);
   };
-  
+
   const handleCreateUeberfachlich = () => setIsUeberfachlichModalOpen(true);
 
   const handleSavePerformance = async (data, performanceIdToUpdate) => {
     try {
-      // Neu: Merke und speichere den aktuellen Tab vor dem Speichern/Reload
-      const currentTab = tab;
-      localStorage.setItem('performanceTab', currentTab);
-
-      // Set save flag for remount after save
-      localStorage.setItem('performanceSaveFlag', 'true');
+      const user = User.current();
+      if (!user) throw new Error('Kein Benutzer eingeloggt');
 
       if (performanceIdToUpdate) {
-        await Performance.update(performanceIdToUpdate, { ...data, class_id: activeClassId });
+        await Performance.update(performanceIdToUpdate, {
+          ...data[0],
+          class_id: activeClassId,
+          user_id: user.id
+        });
       } else {
-        const performancesWithClassId = Array.isArray(data) ? data.map(p => ({ ...p, class_id: activeClassId })) : [{ ...data, class_id: activeClassId }];
-        await Performance.bulkCreate(performancesWithClassId);
+        const performancesWithClassId = Array.isArray(data) ? data.map(p => ({
+          ...p,
+          class_id: activeClassId,
+          user_id: user.id
+        })) : [{
+          ...data,
+          class_id: activeClassId,
+          user_id: user.id
+        }];
+        const results = await Performance.bulkCreate(performancesWithClassId);
+        if (results.some(result => result === null)) {
+          console.warn('Some performance records failed to create:', results);
+          alert('Einige Leistungen konnten nicht gespeichert werden. Bitte überprüfen Sie die Daten und versuchen Sie es erneut.');
+        }
       }
-
+      // Do not set performanceSaveFlag here to prevent tab switching
       if (onDataChange) onDataChange();
       setIsPerformanceModalOpen(false);
       setEditingPerformance(null);
+
+      // Persist tab and expanded states
+      const preference = await UserPreferences.findOne({
+        user_id: user.id,
+        class_id: activeClassId,
+      });
+      const preferencesData = preference?.preferences || {};
+      preferencesData.performanceTab = 'leistungen';
+      preferencesData.expandedLeistungenRows = Array.from(expandedLeistungenRows);
+      if (preference) {
+        await UserPreferences.update(preference.id, { preferences: preferencesData });
+      } else {
+        await UserPreferences.create({
+          user_id: user.id,
+          class_id: activeClassId,
+          preferences: preferencesData,
+        });
+      }
     } catch (error) {
       console.error("Error saving performance:", error);
+      alert(`Fehler beim Speichern der Leistung: ${error.message || 'Unbekannter Fehler'}`);
     }
   };
 
   const handleSaveUeberfachlichBatch = async (batchData) => {
     if (!batchData) return;
-    const { competencyName, date, ratings } = batchData;
+    const { competencyId, date, ratings } = batchData;
 
     setIsUeberfachlichModalOpen(false);
 
     try {
-      // Neu: Merke und speichere den aktuellen Tab vor dem Speichern/Reload
-      const currentTab = tab;
-      localStorage.setItem('performanceTab', currentTab);
-
-      // Set save flag for remount after save
-      localStorage.setItem('performanceSaveFlag', 'true');
-
-      const competencies = await Competency.filter({ class_id: activeClassId });
-      setAllCompetencies(competencies);
-
-      const existingEntries = await UeberfachlichKompetenz.filter({
-        class_id: activeClassId,
-        competency_name: competencyName
+      const competencies = await Competency.filter({
+        filter: `class_id = '${activeClassId}'`,
+        perPage: 500,
+        expand: 'user_id,class_id',
+        $cancelKey: `list-competencie-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
       });
-      const promises = Object.entries(ratings).map(async ([studentId, score]) => {
-        const studentExistingEntry = existingEntries.find(e => 
-          e.student_id === studentId && e.competency_name === competencyName
+      setAllCompetencies(competencies || []);
+      console.log('Loaded competencies after save:', competencies);
+
+      let existingEntries = [];
+      try {
+        const filterParams = {
+          filter: `class_id = '${activeClassId}' && competency_id = '${competencyId}'`,
+          perPage: 500,
+          expand: 'student_id,class_id,competency_id',
+          $cancelKey: `list-ueberfachliche_kompetenz-filter-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+        };
+        existingEntries = await UeberfachlichKompetenz.list(filterParams);
+        console.log('Existing ueberfachlich entries:', existingEntries);
+      } catch (error) {
+        console.error('Fehler beim Filtern von ueberfachliche_kompetenzen:', error);
+        existingEntries = [];
+      }
+
+      const user = User.current();
+      if (!user || !user.id) throw new Error('Kein Benutzer eingeloggt');
+
+      const promises = Object.entries(ratings).map(async ([studentId, score], index) => {
+        const studentExistingEntry = existingEntries.find(e =>
+          e.student_id === studentId && e.competency_id === competencyId
         );
 
-        const newAssessment = { date, score };
+        const newAssessment = { date, score: Number(score) };
 
         if (studentExistingEntry) {
           const updatedAssessments = [...(studentExistingEntry.assessments || []), newAssessment];
-          return UeberfachlichKompetenz.update(studentExistingEntry.id, { assessments: updatedAssessments });
+          const updated = await UeberfachlichKompetenz.update(studentExistingEntry.id, { 
+            assessments: updatedAssessments,
+            user_id: user.id,
+            $cancelKey: `update-ueberfachliche_kompetenz-${studentId}-${Date.now()}-${index}-${Math.random().toString(36).substr(2, 9)}`
+          });
+          console.log(`Updated ueberfachlich entry for student ${studentId}:`, updated);
+          return updated;
         } else {
-          return UeberfachlichKompetenz.create({
+          const created = await UeberfachlichKompetenz.create({
             student_id: studentId,
             class_id: activeClassId,
-            competency_name: competencyName,
-            assessments: [newAssessment]
+            competency_id: competencyId,
+            assessments: [newAssessment],
+            user_id: user.id
+          }, {
+            $cancelKey: `create-ueberfachliche_kompetenz-${studentId}-${Date.now()}-${index}-${Math.random().toString(36).substr(2, 9)}`
           });
+          console.log(`Created ueberfachlich entry for student ${studentId}:`, created);
+          return created;
         }
       });
 
-      await Promise.all(promises);
+      const results = await Promise.all(promises);
+      console.log('Batch create/update results:', results);
+
+      // FIX: Warte kurz, um sicherzustellen, dass die Datenbank-Transaktion abgeschlossen ist
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      // FIX: Lade ueberfachlich-Daten neu mit breiterem Filter
+      const updatedUeberfachlich = await UeberfachlichKompetenz.list({
+        filter: `class_id = '${activeClassId}'`,
+        perPage: 500,
+        expand: 'student_id,class_id,competency_id',
+        $cancelKey: `list-ueberfachliche_kompetenz-postsave-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+      });
+      console.log('Updated ueberfachlich data:', updatedUeberfachlich);
+      setUeberfachlich(updatedUeberfachlich || []);
+
+      toast({
+        title: "Erfolg",
+        description: "Kompetenz und Bewertungen gespeichert",
+        variant: "success",
+      });
+
+      localStorage.setItem('performanceSaveFlag', 'true');
+      if (onDataChange) onDataChange();
     } catch (error) {
       console.error("Fehler beim Speichern der überfachlichen Kompetenzen:", error);
-    } finally {
-      if (onDataChange) onDataChange();
+      toast({
+        title: "Fehler",
+        description: `Fehler beim Speichern der Kompetenzen: ${error.message}`,
+        variant: "destructive",
+      });
     }
   };
 
@@ -252,7 +596,7 @@ const PerformanceView = ({ students = [], performances = [], ueberfachlich = [],
               .filter(p => Array.isArray(p.fachbereiche) && p.fachbereiche.includes(fachbereich))
               .map(p => p.grade)
               .filter(g => typeof g === 'number' && g > 0);
-            
+
             if (allGrades.length > 0) {
               const avgGrade = allGrades.reduce((sum, grade) => sum + grade, 0) / allGrades.length;
               fachbereichMap[fachbereich]['Klassenschnitt'] = parseFloat(avgGrade.toFixed(2));
@@ -261,7 +605,7 @@ const PerformanceView = ({ students = [], performances = [], ueberfachlich = [],
             }
           }
 
-          selectedStudents.forEach((studentId) => { 
+          selectedStudents.forEach((studentId) => {
             const student = students.find(s => s && s.id === studentId);
             if (student) {
               const studentPerfsForFachbereich = filteredPerfs.filter(p =>
@@ -272,7 +616,7 @@ const PerformanceView = ({ students = [], performances = [], ueberfachlich = [],
                 const grades = studentPerfsForFachbereich
                   .map(p => p.grade)
                   .filter(g => typeof g === 'number' && g > 0);
-                
+
                 if (grades.length > 0) {
                   const avgGrade = grades.reduce((sum, grade) => sum + grade, 0) / grades.length;
                   fachbereichMap[fachbereich][student.name || 'Unnamed'] = parseFloat(avgGrade.toFixed(2));
@@ -296,27 +640,28 @@ const PerformanceView = ({ students = [], performances = [], ueberfachlich = [],
     if (!Array.isArray(ueberfachlich) || !Array.isArray(students)) return [];
 
     const competencyMap = {};
-    const validUeberfachlich = (ueberfachlich || []).filter(comp => comp && typeof comp.competency_name === 'string');
+    const validUeberfachlich = (ueberfachlich || []).filter(comp => comp && typeof comp.competency_id === 'string');
 
     if (validUeberfachlich.length === 0) return [];
 
     validUeberfachlich.forEach(comp => {
-      if (!competencyMap[comp.competency_name]) {
-        competencyMap[comp.competency_name] = { name: comp.competency_name };
+      const competencyName = comp.competency_name_display || comp.competency_id;
+      if (!competencyMap[comp.competency_id]) {
+        competencyMap[comp.competency_id] = { name: competencyName };
       }
 
       if (showClassAverage) {
         const allScores = validUeberfachlich
-          .filter(u => u.competency_name === comp.competency_name)
+          .filter(u => u.competency_id === comp.competency_id)
           .flatMap(u => Array.isArray(u.assessments) ? u.assessments : [])
           .map(a => a && typeof a.score === 'number' ? a.score : null)
           .filter(s => typeof s === 'number' && s >= 1 && s <= 5);
-        
+
         if (allScores.length > 0) {
           const avgScore = allScores.reduce((sum, score) => sum + score, 0) / allScores.length;
-          competencyMap[comp.competency_name]['Klassenschnitt'] = parseFloat(avgScore.toFixed(2));
+          competencyMap[comp.competency_id]['Klassenschnitt'] = parseFloat(avgScore.toFixed(2));
         } else {
-          competencyMap[comp.competency_name]['Klassenschnitt'] = null;
+          competencyMap[comp.competency_id]['Klassenschnitt'] = null;
         }
       }
 
@@ -324,7 +669,7 @@ const PerformanceView = ({ students = [], performances = [], ueberfachlich = [],
         const student = students.find(s => s && s.id === studentId);
         if (student) {
           const studentComp = validUeberfachlich.find(u =>
-            u.student_id === studentId && u.competency_name === comp.competency_name
+            u.student_id === studentId && u.competency_id === comp.competency_id
           );
 
           if (studentComp && Array.isArray(studentComp.assessments) && studentComp.assessments.length > 0) {
@@ -333,12 +678,12 @@ const PerformanceView = ({ students = [], performances = [], ueberfachlich = [],
               const latestAssessment = validAssessments.reduce((latest, assessment) => {
                 return !latest || new Date(assessment.date) > new Date(latest.date) ? assessment : latest;
               }, null);
-              competencyMap[comp.competency_name][student.name || 'Unnamed'] = latestAssessment?.score || null;
+              competencyMap[comp.competency_id][student.name || 'Unnamed'] = latestAssessment?.score || null;
             } else {
-              competencyMap[comp.competency_name][student.name || 'Unnamed'] = null;
+              competencyMap[comp.competency_id][student.name || 'Unnamed'] = null;
             }
           } else {
-            competencyMap[comp.competency_name][student.name || 'Unnamed'] = null;
+            competencyMap[comp.competency_id][student.name || 'Unnamed'] = null;
           }
         }
       });
@@ -352,33 +697,36 @@ const PerformanceView = ({ students = [], performances = [], ueberfachlich = [],
     if (!selectedCompetencyForProgression || !Array.isArray(ueberfachlich) || ueberfachlich.length === 0) {
       return [];
     }
-  
-    const filteredUeberfachlich = (ueberfachlich || []).filter(u => u.competency_name === selectedCompetencyForProgression);
+
+    const selectedCompetency = allCompetencies.find(c => c.name === selectedCompetencyForProgression);
+    if (!selectedCompetency) return [];
+
+    const filteredUeberfachlich = (ueberfachlich || []).filter(u => u.competency_id === selectedCompetency.id);
     const allAssessments = filteredUeberfachlich.flatMap(u => u.assessments || []).filter(a => a && a.date);
     const uniqueDates = [...new Set(allAssessments.map(a => a.date))].sort((a, b) => new Date(a) - new Date(b));
-  
+
     if (uniqueDates.length === 0) return [];
-  
+
     return uniqueDates.map(date => {
       const point = {
         name: new Date(date).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: '2-digit' }),
         date: date,
       };
-  
+
       if (showClassAverage) {
         const scoresForDate = filteredUeberfachlich
           .flatMap(u => u.assessments || [])
           .filter(a => a.date === date && typeof a.score === 'number' && a.score >= 1 && a.score <= 5)
           .map(a => a.score);
-        
+
         if (scoresForDate.length > 0) {
           const avgScore = scoresForDate.reduce((sum, score) => sum + score, 0) / scoresForDate.length;
           point['Klassenschnitt'] = parseFloat(avgScore.toFixed(2));
         } else {
-            point['Klassenschnitt'] = null;
+          point['Klassenschnitt'] = null;
         }
       }
-  
+
       selectedStudents.forEach(studentId => {
         const student = students.find(s => s && s.id === studentId);
         if (student) {
@@ -387,15 +735,15 @@ const PerformanceView = ({ students = [], performances = [], ueberfachlich = [],
           point[student.name || 'Unnamed'] = (assessmentForDate && typeof assessmentForDate.score === 'number') ? assessmentForDate.score : null;
         }
       });
-  
+
       return point;
     });
-  }, [ueberfachlich, selectedStudents, students, showClassAverage, selectedCompetencyForProgression]);
+  }, [ueberfachlich, selectedStudents, students, showClassAverage, selectedCompetencyForProgression, allCompetencies]);
 
   const lineData = useMemo(() => {
     if (!Array.isArray(performances) || !Array.isArray(students)) return [];
 
-    const validPerformances = (performances || []).filter(p => 
+    const validPerformances = (performances || []).filter(p =>
       p && typeof p.date === 'string' && typeof p.assessment_name === 'string' && typeof p.grade === 'number'
     );
 
@@ -426,7 +774,7 @@ const PerformanceView = ({ students = [], performances = [], ueberfachlich = [],
         const validGrades = sameAssessments
           .map(perf => perf.grade)
           .filter(g => typeof g === 'number' && g > 0);
-        
+
         if (validGrades.length > 0) {
           const avgGrade = validGrades.reduce((sum, perf) => sum + perf, 0) / validGrades.length;
           point['Klassenschnitt'] = parseFloat(avgGrade.toFixed(2));
@@ -455,14 +803,6 @@ const PerformanceView = ({ students = [], performances = [], ueberfachlich = [],
   const shouldUseBarChart = fachbereichData.length < 3 && fachbereichData.length > 0;
   const shouldUseUeberfachlichBarChart = ueberfachlichData.length < 3 && ueberfachlichData.length > 0;
 
-  if (!activeClassId) {
-    return (
-      <div className="flex items-center justify-center h-64 text-slate-400">
-        Bitte wählen Sie eine Klasse aus
-      </div>
-    );
-  }
-
   const renderChartContent = (chartType, data, yDomain, showReverse = false) => {
     const isBarChart = chartType === 'bar';
     const isRadarChart = chartType === 'radar';
@@ -484,18 +824,17 @@ const PerformanceView = ({ students = [], performances = [], ueberfachlich = [],
       stroke: "hsl(var(--muted-foreground))",
       tick: { fontSize: 12 },
     };
-    
-    // Customization for specific charts
-    if (chartType === 'line' && showReverse) { // Leistungsverlauf
+
+    if (chartType === 'line' && showReverse) {
       yAxisProps.ticks = [1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5, 5.5, 6];
-      yAxisProps.reversed = false; // Y-Achse von 1 (unten) nach 6 (oben)
+      yAxisProps.reversed = false;
     }
-    if (chartType === 'bar' && !showReverse) { // Kompetenzübersicht
+    if (chartType === 'bar' && !showReverse) {
       yAxisProps.ticks = [1, 2, 3, 4, 5];
     }
-    if (chartType === 'bar' && showReverse) { // Fachbereiche
+    if (chartType === 'bar' && showReverse) {
       yAxisProps.ticks = [1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5, 5.5, 6];
-      yAxisProps.reversed = false; // Balken wachsen von unten
+      yAxisProps.reversed = false;
     }
 
     return (
@@ -503,15 +842,15 @@ const PerformanceView = ({ students = [], performances = [], ueberfachlich = [],
         {isBarChart ? (
           <BarChart data={data} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-            <XAxis 
-              dataKey="name" 
-              stroke="hsl(var(--muted-foreground))" 
-              tick={{ fontSize: 12 }} 
+            <XAxis
+              dataKey="name"
+              stroke="hsl(var(--muted-foreground))"
+              tick={{ fontSize: 12 }}
             />
             <YAxis {...yAxisProps} />
             <Tooltip
-              contentStyle={{ 
-                backgroundColor: 'hsl(var(--card))', 
+              contentStyle={{
+                backgroundColor: 'hsl(var(--card))',
                 border: '1px solid hsl(var(--border))',
                 color: 'hsl(var(--card-foreground))'
               }}
@@ -520,32 +859,32 @@ const PerformanceView = ({ students = [], performances = [], ueberfachlich = [],
             />
             <Legend />
             {showClassAverage && (
-              <Bar 
-                dataKey="Klassenschnitt" 
-                fill="#10B981" 
+              <Bar
+                dataKey="Klassenschnitt"
+                fill="#10B981"
                 opacity={0.8}
               />
             )}
             {selectedStudents.map((studentId, index) => {
-                const student = students.find(s => s && s.id === studentId);
-                if (!student || !student.name) return null;
-                
-                return (
-                    <Bar 
-                      key={`bar-student-${student.id}`}
-                      dataKey={student.name} 
-                      fill={getStudentColor(index)} 
-                      opacity={0.8}
-                    />
-                );
+              const student = students.find(s => s && s.id === studentId);
+              if (!student || !student.name) return null;
+
+              return (
+                <Bar
+                  key={`bar-student-${student.id}`}
+                  dataKey={student.name}
+                  fill={getStudentColor(index)}
+                  opacity={0.8}
+                />
+              );
             })}
           </BarChart>
         ) : isRadarChart ? (
           <RadarChart data={data} margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
             <PolarGrid stroke="hsl(var(--border))" />
-            <PolarAngleAxis 
-              dataKey="name" 
-              tick={{ fontSize: 12, fill: 'hsl(var(--muted-foreground))' }} 
+            <PolarAngleAxis
+              dataKey="name"
+              tick={{ fontSize: 12, fill: 'hsl(var(--muted-foreground))' }}
             />
             {showClassAverage && (
               <Radar
@@ -559,26 +898,26 @@ const PerformanceView = ({ students = [], performances = [], ueberfachlich = [],
               />
             )}
             {selectedStudents.map((studentId, index) => {
-                const student = students.find(s => s && s.id === studentId);
-                if (!student || !student.name) return null;
-                
-                return (
-                    <Radar
-                      key={`radar-student-${student.id}`}
-                      name={student.name}
-                      dataKey={student.name}
-                      stroke={getStudentColor(index)}
-                      fill={getStudentColor(index)}
-                      fillOpacity={0.1}
-                      strokeWidth={2}
-                      connectNulls={false}
-                    />
-                );
+              const student = students.find(s => s && s.id === studentId);
+              if (!student || !student.name) return null;
+
+              return (
+                <Radar
+                  key={`radar-student-${student.id}`}
+                  name={student.name}
+                  dataKey={student.name}
+                  stroke={getStudentColor(index)}
+                  fill={getStudentColor(index)}
+                  fillOpacity={0.1}
+                  strokeWidth={2}
+                  connectNulls={false}
+                />
+              );
             })}
             <Legend />
             <Tooltip
-              contentStyle={{ 
-                backgroundColor: 'hsl(var(--card))', 
+              contentStyle={{
+                backgroundColor: 'hsl(var(--card))',
                 border: '1px solid hsl(var(--border))',
                 color: 'hsl(var(--card-foreground))'
               }}
@@ -589,16 +928,16 @@ const PerformanceView = ({ students = [], performances = [], ueberfachlich = [],
         ) : (
           <LineChart data={data} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-            <XAxis 
-              dataKey="name" 
-              stroke="hsl(var(--muted-foreground))" 
-              tick={{ fontSize: 12 }} 
+            <XAxis
+              dataKey="name"
+              stroke="hsl(var(--muted-foreground))"
+              tick={{ fontSize: 12 }}
               interval="preserveStartEnd"
             />
             <YAxis {...yAxisProps} />
             <Tooltip
-              contentStyle={{ 
-                backgroundColor: 'hsl(var(--card))', 
+              contentStyle={{
+                backgroundColor: 'hsl(var(--card))',
                 border: '1px solid hsl(var(--border))',
                 color: 'hsl(var(--card-foreground))'
               }}
@@ -607,29 +946,29 @@ const PerformanceView = ({ students = [], performances = [], ueberfachlich = [],
             />
             <Legend />
             {showClassAverage && (
-              <Line 
-                type="monotone" 
-                dataKey="Klassenschnitt" 
-                stroke="#10B981" 
-                strokeWidth={2} 
-                dot={{ r: 4 }} 
+              <Line
+                type="monotone"
+                dataKey="Klassenschnitt"
+                stroke="#10B981"
+                strokeWidth={2}
+                dot={{ r: 4 }}
                 connectNulls={false}
               />
             )}
             {selectedStudents.map((studentId, index) => {
-                const student = students.find(s => s && s.id === studentId);
-                if (!student || !student.name) return null;
-                
-                return (
-                    <Line 
-                      key={`student-${student.id}`}
-                      type="monotone" 
-                      dataKey={student.name} 
-                      stroke={getStudentColor(index)} 
-                      strokeWidth={2}
-                      connectNulls={false}
-                    />
-                );
+              const student = students.find(s => s && s.id === studentId);
+              if (!student || !student.name) return null;
+
+              return (
+                <Line
+                  key={`student-${student.id}`}
+                  type="monotone"
+                  dataKey={student.name}
+                  stroke={getStudentColor(index)}
+                  strokeWidth={2}
+                  connectNulls={false}
+                />
+              );
             })}
           </LineChart>
         )}
@@ -640,94 +979,6 @@ const PerformanceView = ({ students = [], performances = [], ueberfachlich = [],
   if (isLoading) {
     return <CalendarLoader />;
   }
-
-  if (!activeClassId) {
-    return (
-      <div className="flex items-center justify-center h-64 text-slate-400 dark:text-slate-400">
-        Bitte wählen Sie eine Klasse aus
-      </div>
-    );
-  }
-
-  // Load and save expansion states per class
-  useEffect(() => {
-    if (activeClassId) {
-      if (prevClassIdRef.current && prevClassIdRef.current !== activeClassId) {
-        // Save old class expansions
-        localStorage.setItem(`leistungenExpandedRows-${prevClassIdRef.current}`, JSON.stringify(Array.from(expandedLeistungenRows)));
-        localStorage.setItem(`ueberfachlichExpandedHistories-${prevClassIdRef.current}`, JSON.stringify(Array.from(expandedUeberfachlichHistories)));
-        localStorage.setItem(`ueberfachlichExpandedCompetencies-${prevClassIdRef.current}`, JSON.stringify(Array.from(expandedUeberfachlichCompetencies)));
-      }
-
-      // Load new class expansions
-      const rowsKey = `leistungenExpandedRows-${activeClassId}`;
-      const savedRows = localStorage.getItem(rowsKey);
-      setExpandedLeistungenRows(savedRows ? new Set(JSON.parse(savedRows)) : new Set());
-
-      const historiesKey = `ueberfachlichExpandedHistories-${activeClassId}`;
-      const savedHistories = localStorage.getItem(historiesKey);
-      setExpandedUeberfachlichHistories(savedHistories ? new Set(JSON.parse(savedHistories)) : new Set());
-
-      const competenciesKey = `ueberfachlichExpandedCompetencies-${activeClassId}`;
-      const savedCompetencies = localStorage.getItem(competenciesKey);
-      setExpandedUeberfachlichCompetencies(savedCompetencies ? new Set(JSON.parse(savedCompetencies)) : new Set());
-
-      prevClassIdRef.current = activeClassId;
-    }
-  }, [activeClassId]);
-
-  // Save on state changes
-  useEffect(() => {
-    if (activeClassId) {
-      localStorage.setItem(`leistungenExpandedRows-${activeClassId}`, JSON.stringify(Array.from(expandedLeistungenRows)));
-    }
-  }, [expandedLeistungenRows, activeClassId]);
-
-  useEffect(() => {
-    if (activeClassId) {
-      localStorage.setItem(`ueberfachlichExpandedHistories-${activeClassId}`, JSON.stringify(Array.from(expandedUeberfachlichHistories)));
-    }
-  }, [expandedUeberfachlichHistories, activeClassId]);
-
-  useEffect(() => {
-    if (activeClassId) {
-      localStorage.setItem(`ueberfachlichExpandedCompetencies-${activeClassId}`, JSON.stringify(Array.from(expandedUeberfachlichCompetencies)));
-    }
-  }, [expandedUeberfachlichCompetencies, activeClassId]);
-
-  useEffect(() => {
-    const savedTab = localStorage.getItem('performanceTab');
-    const saveFlag = localStorage.getItem('performanceSaveFlag');
-
-    if (saveFlag) {
-      // After save: Load saved tab and clear flag
-      if (savedTab) {
-        setTab(savedTab);
-      }
-      localStorage.removeItem('performanceSaveFlag');
-    } else {
-      // Fresh mount: Reset to 'diagramme'
-      setTab('diagramme');
-    }
-  }, []);
-
-  useEffect(() => {
-    const saveFlag = localStorage.getItem('performanceSaveFlag');
-
-    if (!saveFlag) {
-      // Fresh mount: Collapse all
-      setExpandedLeistungenRows(new Set());
-      setExpandedUeberfachlichHistories(new Set());
-      setExpandedUeberfachlichCompetencies(new Set());
-    }
-  }, []);
-
-  useEffect(() => {
-    // Collapse on tab change
-    setExpandedLeistungenRows(new Set());
-    setExpandedUeberfachlichHistories(new Set());
-    setExpandedUeberfachlichCompetencies(new Set());
-  }, [tab]);
 
   return (
     <div className="p-4 sm:p-6 bg-white/0 dark:bg-slate-900/0">
@@ -760,10 +1011,10 @@ const PerformanceView = ({ students = [], performances = [], ueberfachlich = [],
 
         <div className="flex gap-2">
           {tab === 'leistungen' && (
-              <Button onClick={handleCreatePerformance} className="bg-blue-600 hover:bg-blue-700">
-                <Plus className="w-4 h-4 mr-2"/>
-                Neue Leistungsbeurteilung
-              </Button>
+            <Button onClick={handleCreatePerformance} className="bg-blue-600 hover:bg-blue-700">
+              <Plus className="w-4 h-4 mr-2"/>
+              Neue Leistungsbeurteilung
+            </Button>
           )}
           {tab === 'ueberfachlich' && (
             <Button onClick={handleCreateUeberfachlich} className="bg-purple-600 hover:bg-purple-700">
@@ -774,7 +1025,7 @@ const PerformanceView = ({ students = [], performances = [], ueberfachlich = [],
         </div>
       </div>
 
-      {/* Conditional Content - No early returns! */}
+      {/* Conditional Content */}
       {!activeClassId ? (
         <div className="flex items-center justify-center h-64 text-slate-400 dark:text-slate-400">
           Bitte wählen Sie eine Klasse aus
@@ -785,22 +1036,22 @@ const PerformanceView = ({ students = [], performances = [], ueberfachlich = [],
         <div className="space-y-6">
           {/* Main Diagram View Toggle */}
           <div className="flex justify-start gap-3 p-2 bg-white/50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700 max-w-sm">
-              <Button
-                  variant={diagramView === 'leistung' ? 'default' : 'ghost'}
-                  className={`w-full ${diagramView === 'leistung' ? 'bg-blue-600' : 'text-slate-300 hover:bg-slate-700'}`}
-                  onClick={() => setDiagramView('leistung')}
-              >
-                  <Activity className="w-4 h-4 mr-2" />
-                  Leistung
-              </Button>
-              <Button
-                  variant={diagramView === 'kompetenzen' ? 'default' : 'ghost'}
-                  className={`w-full ${diagramView === 'kompetenzen' ? 'bg-blue-600' : 'text-slate-300 hover:bg-slate-700'}`}
-                  onClick={() => setDiagramView('kompetenzen')}
-              >
-                  <Star className="w-4 h-4 mr-2" />
-                  Kompetenzen
-              </Button>
+            <Button
+              variant={diagramView === 'leistung' ? 'default' : 'ghost'}
+              className={`w-full ${diagramView === 'leistung' ? 'bg-blue-600' : 'text-slate-300 hover:bg-slate-700'}`}
+              onClick={() => setDiagramView('leistung')}
+            >
+              <Activity className="w-4 h-4 mr-2" />
+              Leistung
+            </Button>
+            <Button
+              variant={diagramView === 'kompetenzen' ? 'default' : 'ghost'}
+              className={`w-full ${diagramView === 'kompetenzen' ? 'bg-blue-600' : 'text-slate-300 hover:bg-slate-700'}`}
+              onClick={() => setDiagramView('kompetenzen')}
+            >
+              <Star className="w-4 h-4 mr-2" />
+              Kompetenzen
+            </Button>
           </div>
 
           {/* Filters */}
@@ -822,8 +1073,8 @@ const PerformanceView = ({ students = [], performances = [], ueberfachlich = [],
                   </SelectContent>
                 </Select>
               ) : (
-                <Select 
-                  value={selectedCompetencyForProgression || 'none'} 
+                <Select
+                  value={selectedCompetencyForProgression || 'none'}
                   onValueChange={(value) => setSelectedCompetencyForProgression(value === 'none' ? null : value)}
                   disabled={competencyOptions.length === 0}
                 >
@@ -941,7 +1192,7 @@ const PerformanceView = ({ students = [], performances = [], ueberfachlich = [],
               {/* Fachbereiche Chart */}
               <Card className="bg-white dark:bg-slate-800 text-black dark:text-white border-slate-200 dark:border-slate-700">
                 <CardHeader>
-                   <CardTitle className="flex items-center justify-between">
+                  <CardTitle className="flex items-center justify-between">
                     Fachbereiche
                     <Button
                       variant="ghost"
@@ -962,49 +1213,49 @@ const PerformanceView = ({ students = [], performances = [], ueberfachlich = [],
             </div>
           ) : (
             <div className="grid md:grid-cols-2 gap-6">
-                {/* Kompetenzverlauf */}
-                <Card className="bg-white dark:bg-slate-800 text-black dark:text-white border-slate-200 dark:border-slate-700">
-                    <CardHeader>
-                      <CardTitle className="flex items-center justify-between">
-                        Kompetenzverlauf
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => setEnlargedChart('kompetenzverlauf')}
-                          className="text-slate-400 hover:text-white"
-                        >
-                          Vergrößern
-                        </Button>
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div style={{ width: '100%', height: 300 }}>
-                        {renderChartContent('line', ueberfachlichProgressionData, [1, 5], false)}
-                      </div>
-                    </CardContent>
-                </Card>
+              {/* Kompetenzverlauf */}
+              <Card className="bg-white dark:bg-slate-800 text-black dark:text-white border-slate-200 dark:border-slate-700">
+                <CardHeader>
+                  <CardTitle className="flex items-center justify-between">
+                    Kompetenzverlauf
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setEnlargedChart('kompetenzverlauf')}
+                      className="text-slate-400 hover:text-white"
+                    >
+                      Vergrößern
+                    </Button>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div style={{ width: '100%', height: 300 }}>
+                    {renderChartContent('line', ueberfachlichProgressionData, [1, 5], false)}
+                  </div>
+                </CardContent>
+              </Card>
 
-                {/* Kompetenzübersicht Chart */}
-                <Card className="bg-white dark:bg-slate-800 text-black dark:text-white border-slate-200 dark:border-slate-700">
-                  <CardHeader>
-                    <CardTitle className="flex items-center justify-between">
-                      Kompetenzübersicht
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setEnlargedChart('ueberfachlich')}
-                        className="text-slate-400 hover:text-white"
-                      >
-                        Vergrößern
-                      </Button>
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div style={{ width: '100%', height: 300 }}>
-                      {renderChartContent(shouldUseUeberfachlichBarChart ? 'bar' : 'radar', ueberfachlichData, [1, 5], false)}
-                    </div>
-                  </CardContent>
-                </Card>
+              {/* Kompetenzübersicht Chart */}
+              <Card className="bg-white dark:bg-slate-800 text-black dark:text-white border-slate-200 dark:border-slate-700">
+                <CardHeader>
+                  <CardTitle className="flex items-center justify-between">
+                    Kompetenzübersicht
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setEnlargedChart('ueberfachlich')}
+                      className="text-slate-400 hover:text-white"
+                    >
+                      Vergrößern
+                    </Button>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div style={{ width: '100%', height: 300 }}>
+                    {renderChartContent(shouldUseUeberfachlichBarChart ? 'bar' : 'radar', ueberfachlichData, [1, 5], false)}
+                  </div>
+                </CardContent>
+              </Card>
             </div>
           )}
         </div>
@@ -1017,17 +1268,25 @@ const PerformanceView = ({ students = [], performances = [], ueberfachlich = [],
           onDataChange={onDataChange}
           expandedRows={expandedLeistungenRows}
           setExpandedRows={setExpandedLeistungenRows}
+          onDelete={handleDeletePerformance}
+          onEdit={(performance) => {
+            setEditingPerformance(performance);
+            setIsPerformanceModalOpen(true);
+          }}
         />
       ) : (
         <UeberfachlichTable
-          students={students}
-          ueberfachlich={ueberfachlich}
+          students={Array.isArray(students) ? students.filter(s => s && s.id && s.name) : []}
+          ueberfachlich={Array.isArray(ueberfachlich) ? ueberfachlich.filter(u => u && u.competency_id && u.student_id) : []}
           activeClassId={activeClassId}
-          onDataChange={onDataChange}
+          onDataChange={handleDataChange}
+          setTab={setTab}
+          setUeberfachlich={setUeberfachlich}
           expandedHistories={expandedUeberfachlichHistories}
           setExpandedHistories={setExpandedUeberfachlichHistories}
           expandedCompetencies={expandedUeberfachlichCompetencies}
           setExpandedCompetencies={setExpandedUeberfachlichCompetencies}
+          allCompetencies={allCompetencies}
         />
       )}
 
@@ -1035,8 +1294,8 @@ const PerformanceView = ({ students = [], performances = [], ueberfachlich = [],
       <PerformanceModal
         isOpen={isPerformanceModalOpen}
         onClose={() => {
-            setIsPerformanceModalOpen(false);
-            setEditingPerformance(null);
+          setIsPerformanceModalOpen(false);
+          setEditingPerformance(null);
         }}
         onSave={handleSavePerformance}
         students={students}

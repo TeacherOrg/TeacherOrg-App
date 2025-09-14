@@ -1,11 +1,11 @@
 import React from 'react';
 import { adjustColor } from '@/utils/colorUtils';
 
-const LessonCard = ({ lesson, isDragging, onEdit, onMouseEnter, onMouseLeave, onMouseMove }) => {
+const LessonCard = ({ lesson, isDragging, onEdit, onMouseEnter, onMouseLeave, onMouseMove, subjects = [] }) => {
   if (!lesson) return null;
 
   const {
-    expand,  // Neu: Verwende expand für Relations
+    expand,
     description,
     topic,
     color,
@@ -14,9 +14,19 @@ const LessonCard = ({ lesson, isDragging, onEdit, onMouseEnter, onMouseLeave, on
     allerlei_subjects,
     is_half_class,
     isGradient,
+    subject_name, // Use subject_name from normalized data
+    subject, // Use subject ID for fallback
   } = lesson;
 
-  const subjectName = expand?.subject?.name || 'Unbekannt';  // Neu: Hole Name aus expand (Fallback, falls nicht geladen)
+  // Determine subject name with fallbacks
+  const subjectName = expand?.subject?.name || subject_name || subjects.find(s => s.id === subject)?.name || 'Unbekannt';
+  console.log('Debug: LessonCard subject resolution', {
+    lessonId: lesson.id,
+    subjectId: subject,
+    expandSubjectName: expand?.subject?.name,
+    subject_name,
+    derivedSubjectName: subjectName,
+  });
 
   const cardStyle = {
     background: isGradient ? color : `linear-gradient(135deg, ${color} 0%, ${adjustColor(color, -20)} 100%)`,
@@ -49,7 +59,8 @@ const LessonCard = ({ lesson, isDragging, onEdit, onMouseEnter, onMouseLeave, on
           primaryLessonNumber: lesson?.primaryYearlyLesson?.lesson_number,
           secondName: lesson?.secondYearlyLesson?.name,
           secondLessonNumber: lesson?.secondYearlyLesson?.lesson_number,
-          topicTitle: lesson?.topic?.title
+          topicTitle: lesson?.topic?.title,
+          subjectName,
         })}
         {is_allerlei ? (
           'Allerlei'

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { User } from "@/api/entities";
 import { createPageUrl } from "@/utils";
-import { Calendar, Users, Settings, BookOpen, GraduationCap, LogOut, ClipboardList } from "lucide-react"; // Füge ClipboardList hinzu
+import { Calendar, Users, Settings, BookOpen, GraduationCap, LogOut, ClipboardList } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
 import {
@@ -22,6 +22,7 @@ import {
 import SettingsModal from "../components/settings/SettingsModal";
 import ThemeToggle from "../components/ui/ThemeToggle";
 import CalendarLoader from "../components/ui/CalendarLoader";
+import pb from '@/api/pb';
 
 const navigationItems = [
   {
@@ -39,9 +40,9 @@ const navigationItems = [
     url: createPageUrl("Groups"),
     icon: Users,
   },
-  { // Neuer Eintrag für Chores
+  {
     title: "Ämtliplan",
-    url: createPageUrl("Chores"), // Angenommen, die Route ist "/chores" oder ähnlich; passe bei Bedarf an
+    url: createPageUrl("Chores"),
     icon: ClipboardList,
   },
 ];
@@ -70,46 +71,65 @@ const ScrollbarStyles = `
 
 export default function Layout({ children, currentPageName }) {
   const location = useLocation();
+  const navigate = useNavigate();
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [user, setUser] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [sidebarError, setSidebarError] = useState(null);
 
   useEffect(() => {
     const checkAuth = async () => {
       try {
-        const currentUser = await User.me();
-        setUser(currentUser);
+        console.log('Layout.jsx: Checking auth...');
+        if (pb.authStore.isValid && pb.authStore.model) {
+          console.log('Layout.jsx: User found in authStore:', pb.authStore.model);
+          setUser(pb.authStore.model);
+        } else {
+          console.log('Layout.jsx: Attempting to refresh auth token...');
+          await pb.collection('users').authRefresh();
+          console.log('Layout.jsx: Auth refresh result:', pb.authStore.model);
+          setUser(pb.authStore.model || null);
+        }
       } catch (error) {
-        // User not logged in - base44 will handle authentication
-        console.log("User not authenticated");
+        console.error("Layout.jsx: User not authenticated", error);
+        setSidebarError('Authentication failed. Redirecting to login...');
+        navigate('/login');
       } finally {
         setIsLoading(false);
       }
     };
     
     checkAuth();
-  }, [location.pathname]);
+  }, [navigate]);
 
   const handleLogout = async () => {
     try {
+      console.log('Layout.jsx: Logging out...');
       await User.logout();
-      // Redirect zu Login (nutze react-router's useNavigate, da du useLocation hast)
-      const navigate = useNavigate(); // Import: import { useNavigate } from "react-router-dom";
-      navigate('/login'); // Oder wo dein Login ist
-      // Optional: Toast zeigen (wenn du Toaster hast)
-      // toast.success('Erfolgreich ausgeloggt!');
+      navigate('/login');
     } catch (error) {
-      console.error("Logout error:", error);
-      // Optional: Error-Toast
-      // toast.error('Logout fehlgeschlagen. Bitte versuchen Sie es erneut.');
+      console.error("Layout.jsx: Logout error:", error);
+      setSidebarError('Logout failed. Please try again.');
     }
   };
 
-  // Show loading while checking auth
   if (isLoading) {
     return (
       <div className="min-h-screen bg-white dark:bg-slate-900 flex items-center justify-center">
         <CalendarLoader />
+      </div>
+    );
+  }
+
+  if (!user) {
+    console.log('Layout.jsx: No user, returning null');
+    return null; // App.jsx will handle redirect to Login
+  }
+
+  if (sidebarError) {
+    return (
+      <div className="min-h-screen bg-white dark:bg-slate-900 flex items-center justify-center">
+        <p className="text-red-500">{sidebarError}</p>
       </div>
     );
   }
@@ -122,67 +142,64 @@ export default function Layout({ children, currentPageName }) {
           <Sidebar 
             className="bg-white dark:bg-slate-900/95 backdrop-blur-lg shadow-xl transition-colors duration-300 border-r border-slate-200 dark:border-slate-700/80 flex flex-col"
           >
-            <div>
-              <SidebarHeader 
-                className="border-b border-slate-200 dark:border-slate-700/80 p-4"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-gradient-to-br from-slate-200 to-slate-50 dark:from-slate-700 dark:to-slate-800 rounded-xl flex items-center justify-center shadow-lg">
-                    <BookOpen className="w-5 h-5 text-slate-800 dark:text-white" />
-                  </div>
-                  <div>
-                    <h2 className="text-xl font-bold text-slate-800 dark:text-white tracking-tight">TimeGrid</h2>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">Academic Planner</p>
-                  </div>
+            <SidebarHeader 
+              className="border-b border-slate-200 dark:border-slate-700/80 p-4"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-gradient-to-br from-slate-200 to-slate-50 dark:from-slate-700 dark:to-slate-800 rounded-xl flex items-center justify-center shadow-lg">
+                  <BookOpen className="w-5 h-5 text-slate-800 dark:text-white" />
                 </div>
-                {user && (
-                  <div className="mt-3 p-3 bg-slate-100 dark:bg-slate-800 rounded-lg">
-                    <p className="text-sm font-medium text-slate-900 dark:text-white truncate">{user.full_name || user.username}</p> {/* Neu: Fallback zu username */}
-                    <p className="text-xs text-slate-500 dark:text-slate-400 truncate">{user.email}</p>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 truncate">@{user.username}</p> {/* Neu: Username als @-Handle anzeigen */}
-                  </div>
-                )}
-              </SidebarHeader>
-              
-              <SidebarContent 
-                className="p-4"
-              >
-                <SidebarGroup>
-                  <SidebarGroupLabel className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-widest px-3 py-3 mb-2">
-                    Navigation
-                  </SidebarGroupLabel>
-                  <SidebarGroupContent>
-                    <SidebarMenu>
-                      {navigationItems.map((item) => {
-                        const isActive = location.pathname === item.url;
-                        return (
-                          <SidebarMenuItem key={item.title}>
-                            <SidebarMenuButton 
-                              asChild 
-                              className={`
-                                relative overflow-hidden rounded-xl mb-2 transition-all duration-200 group border-0
-                                ${isActive 
-                                  ? 'bg-blue-600 text-white shadow-lg' 
-                                  : 'hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 bg-transparent'
-                                }
-                              `}
+                <div>
+                  <h2 className="text-xl font-bold text-slate-800 dark:text-white tracking-tight">TimeGrid</h2>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">Academic Planner</p>
+                </div>
+              </div>
+              {user && (
+                <div className="mt-3 p-3 bg-slate-100 dark:bg-slate-800 rounded-lg">
+                  <p className="text-sm font-medium text-slate-900 dark:text-white truncate">{user.full_name || user.username || 'Unknown'}</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 truncate">{user.email || 'No email'}</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 truncate">@{user.username || 'unknown'}</p>
+                </div>
+              )}
+            </SidebarHeader>
+            
+            <SidebarContent className="p-4">
+              <SidebarGroup>
+                <SidebarGroupLabel className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-widest px-3 py-3 mb-2">
+                  Navigation
+                </SidebarGroupLabel>
+                <SidebarGroupContent>
+                  <SidebarMenu>
+                    {navigationItems.map((item) => {
+                      const isActive = location.pathname === item.url;
+                      const IconComponent = item.icon;
+                      return (
+                        <SidebarMenuItem key={item.title}>
+                          <SidebarMenuButton 
+                            asChild 
+                            className={`
+                              relative overflow-hidden rounded-xl mb-2 transition-all duration-200 group border-0
+                              ${isActive 
+                                ? 'bg-blue-600 text-white shadow-lg' 
+                                : 'hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 bg-transparent'
+                              }
+                            `}
+                          >
+                            <Link 
+                              to={item.url} 
+                              className="flex items-center gap-3 px-4 py-3 font-medium relative z-10"
                             >
-                              <Link 
-                                to={item.url} 
-                                className="flex items-center gap-3 px-4 py-3 font-medium relative z-10"
-                              >
-                                <item.icon className="w-4 h-4" />
-                                <span className="font-medium tracking-tight">{item.title}</span>
-                              </Link>
-                            </SidebarMenuButton>
-                          </SidebarMenuItem>
-                        );
-                      })}
-                    </SidebarMenu>
-                  </SidebarGroupContent>
-                </SidebarGroup>
-              </SidebarContent>
-            </div>
+                              {IconComponent ? <IconComponent className="w-4 h-4" /> : <span>?</span>}
+                              <span className="font-medium tracking-tight">{item.title}</span>
+                            </Link>
+                          </SidebarMenuButton>
+                        </SidebarMenuItem>
+                      );
+                    })}
+                  </SidebarMenu>
+                </SidebarGroupContent>
+              </SidebarGroup>
+            </SidebarContent>
             
             <SidebarFooter 
               className="mt-auto p-4 border-t border-slate-200 dark:border-slate-700/80"
@@ -197,16 +214,14 @@ export default function Layout({ children, currentPageName }) {
                   <Settings className="w-4 h-4" />
                 </Button>
                 <ThemeToggle />
-                {user && (
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={handleLogout}
-                    className="w-8 h-8 rounded-lg text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800"
-                  >
-                    <LogOut className="w-4 h-4" />
-                  </Button>
-                )}
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={handleLogout}
+                  className="w-8 h-8 rounded-lg text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800"
+                >
+                  <LogOut className="w-4 h-4" />
+                </Button>
               </div>
             </SidebarFooter>
           </Sidebar>
@@ -215,10 +230,10 @@ export default function Layout({ children, currentPageName }) {
             <header className="px-6 py-4 md:hidden shadow-sm transition-colors duration-300 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                    <SidebarTrigger 
-                      className="p-2 rounded-lg transition-all duration-200 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-800 dark:text-white"
-                    />
-                    <h1 className="text-xl font-bold text-slate-800 dark:text-white tracking-tight">TimeGrid</h1>
+                  <SidebarTrigger 
+                    className="p-2 rounded-lg transition-all duration-200 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-800 dark:text-white"
+                  />
+                  <h1 className="text-xl font-bold text-slate-800 dark:text-white tracking-tight">TimeGrid</h1>
                 </div>
                 <ThemeToggle />
               </div>
