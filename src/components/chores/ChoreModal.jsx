@@ -1,4 +1,3 @@
-// src/components/chores/ChoreModal.jsx
 import React, { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -19,7 +18,7 @@ export default function ChoreModal({ isOpen, onClose, onSave, onDelete, chore })
         icon: '',
         frequency: 'weekly',
         days_of_week: [],
-        required_students: '1',  // Changed to string for controlled input
+        required_students: '1'
     });
     const [showAllIcons, setShowAllIcons] = useState(false);
 
@@ -31,9 +30,9 @@ export default function ChoreModal({ isOpen, onClose, onSave, onDelete, chore })
                 icon: chore?.icon || '',
                 frequency: chore?.frequency || 'weekly',
                 days_of_week: chore?.days_of_week || [],
-                required_students: chore?.required_students ? String(chore.required_students) : '1',  // Ensure string
+                required_students: chore?.required_students ? String(chore.required_students) : '1'
             });
-            setShowAllIcons(false); // Reset on open
+            setShowAllIcons(false);
         }
     }, [isOpen, chore]);
 
@@ -47,10 +46,19 @@ export default function ChoreModal({ isOpen, onClose, onSave, onDelete, chore })
 
     const handleSubmit = (e) => {
         e.preventDefault();
+        if (!formData.description.trim()) {
+            alert("Bitte geben Sie eine Beschreibung ein.");
+            return;
+        }
         const saveData = {
-            ...formData,
-            required_students: parseInt(formData.required_students, 10) || 1,  // Parse to number on save, default to 1
+            name: formData.name,
+            description: formData.description,
+            icon: formData.icon,
+            frequency: formData.frequency,
+            days_of_week: formData.days_of_week,
+            required_students: parseInt(formData.required_students, 10) || 1
         };
+        console.log('Form data before save:', JSON.stringify(saveData, null, 2));
         onSave(saveData);
     };
 
@@ -68,11 +76,23 @@ export default function ChoreModal({ isOpen, onClose, onSave, onDelete, chore })
                 <form onSubmit={handleSubmit} className="space-y-4 py-4">
                     <div>
                         <Label htmlFor="name">Name</Label>
-                        <Input id="name" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} required className="bg-white dark:bg-slate-700 border-gray-300 dark:border-slate-600 text-gray-800 dark:text-white"/>
+                        <Input 
+                            id="name" 
+                            value={formData.name} 
+                            onChange={e => setFormData({...formData, name: e.target.value})} 
+                            required 
+                            className="bg-white dark:bg-slate-700 border-gray-300 dark:border-slate-600 text-gray-800 dark:text-white"
+                        />
                     </div>
                     <div>
                         <Label htmlFor="description">Beschreibung</Label>
-                        <Textarea id="description" value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} className="bg-white dark:bg-slate-700 border-gray-300 dark:border-slate-600 text-gray-800 dark:text-white"/>
+                        <Textarea 
+                            id="description" 
+                            value={formData.description} 
+                            onChange={e => setFormData({...formData, description: e.target.value})} 
+                            required
+                            className="bg-white dark:bg-slate-700 border-gray-300 dark:border-slate-600 text-gray-800 dark:text-white"
+                        />
                     </div>
                     <div>
                         <Label>Icon</Label>
@@ -133,7 +153,7 @@ export default function ChoreModal({ isOpen, onClose, onSave, onDelete, chore })
                                 type="number" 
                                 min="1" 
                                 value={formData.required_students} 
-                                onChange={e => setFormData({...formData, required_students: e.target.value})}  // Keep as string
+                                onChange={e => setFormData({...formData, required_students: e.target.value})}
                                 className="bg-white dark:bg-slate-700 border-gray-300 dark:border-slate-600 text-gray-800 dark:text-white"
                             />
                         </div>

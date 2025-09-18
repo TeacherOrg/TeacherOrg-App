@@ -1,10 +1,8 @@
 import React, { useState, useEffect } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { User } from "@/api/entities";
 import { createPageUrl } from "@/utils";
-import { Calendar, Users, Settings, BookOpen, GraduationCap, LogOut, ClipboardList } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { useNavigate } from "react-router-dom";
+import { Calendar, Users, Settings, GraduationCap, LogOut, ClipboardList } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -14,11 +12,11 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
-  SidebarHeader,
   SidebarProvider,
   SidebarTrigger,
   SidebarFooter
 } from "@/components/ui/sidebar";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import SettingsModal from "../components/settings/SettingsModal";
 import ThemeToggle from "../components/ui/ThemeToggle";
 import CalendarLoader from "../components/ui/CalendarLoader";
@@ -44,6 +42,19 @@ const navigationItems = [
     title: "Ämtliplan",
     url: createPageUrl("Chores"),
     icon: ClipboardList,
+  },
+];
+
+const footerItems = [
+  {
+    title: "Settings",
+    icon: Settings,
+    action: (setIsSettingsModalOpen) => () => setIsSettingsModalOpen(true),
+  },
+  {
+    title: "Logout",
+    icon: LogOut,
+    action: (handleLogout) => handleLogout,
   },
 ];
 
@@ -76,6 +87,7 @@ export default function Layout({ children, currentPageName }) {
   const [user, setUser] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [sidebarError, setSidebarError] = useState(null);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -113,6 +125,14 @@ export default function Layout({ children, currentPageName }) {
     }
   };
 
+  const handleMouseEnter = () => {
+    setIsSidebarOpen(true);
+  };
+
+  const handleMouseLeave = () => {
+    setIsSidebarOpen(false);
+  };
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-white dark:bg-slate-900 flex items-center justify-center">
@@ -123,7 +143,7 @@ export default function Layout({ children, currentPageName }) {
 
   if (!user) {
     console.log('Layout.jsx: No user, returning null');
-    return null; // App.jsx will handle redirect to Login
+    return null;
   }
 
   if (sidebarError) {
@@ -140,59 +160,54 @@ export default function Layout({ children, currentPageName }) {
       <SidebarProvider>
         <div className="min-h-screen flex w-full bg-slate-100 dark:bg-slate-900 transition-colors duration-300">
           <Sidebar 
-            className="bg-white dark:bg-slate-900/95 backdrop-blur-lg shadow-xl transition-colors duration-300 border-r border-slate-200 dark:border-slate-700/80 flex flex-col"
+            className={`
+              bg-white dark:bg-slate-900/95 backdrop-blur-lg shadow-xl transition-all duration-300 border-r border-slate-200 dark:border-slate-700/80 flex flex-col
+              ${isSidebarOpen ? 'w-64' : 'w-20'}
+              md:${isSidebarOpen ? 'w-64' : 'w-20'}
+            `}
+            onMouseEnter={handleMouseEnter}
+            onMouseLeave={handleMouseLeave}
           >
-            <SidebarHeader 
-              className="border-b border-slate-200 dark:border-slate-700/80 p-4"
-            >
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-gradient-to-br from-slate-200 to-slate-50 dark:from-slate-700 dark:to-slate-800 rounded-xl flex items-center justify-center shadow-lg">
-                  <BookOpen className="w-5 h-5 text-slate-800 dark:text-white" />
-                </div>
-                <div>
-                  <h2 className="text-xl font-bold text-slate-800 dark:text-white tracking-tight">TimeGrid</h2>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">Academic Planner</p>
-                </div>
-              </div>
-              {user && (
-                <div className="mt-3 p-3 bg-slate-100 dark:bg-slate-800 rounded-lg">
-                  <p className="text-sm font-medium text-slate-900 dark:text-white truncate">{user.full_name || user.username || 'Unknown'}</p>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 truncate">{user.email || 'No email'}</p>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 truncate">@{user.username || 'unknown'}</p>
-                </div>
-              )}
-            </SidebarHeader>
-            
-            <SidebarContent className="p-4">
+            <SidebarContent className={`p-4 ${isSidebarOpen ? '' : 'pt-10'}`}>
               <SidebarGroup>
-                <SidebarGroupLabel className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-widest px-3 py-3 mb-2">
+                <SidebarGroupLabel className={`text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-widest px-3 py-3 mb-2 ${isSidebarOpen ? '' : 'hidden'}`}>
                   Navigation
                 </SidebarGroupLabel>
                 <SidebarGroupContent>
-                  <SidebarMenu>
+                  <SidebarMenu className={`${isSidebarOpen ? '' : 'mt-0'}`}>
                     {navigationItems.map((item) => {
                       const isActive = location.pathname === item.url;
                       const IconComponent = item.icon;
                       return (
                         <SidebarMenuItem key={item.title}>
-                          <SidebarMenuButton 
-                            asChild 
-                            className={`
-                              relative overflow-hidden rounded-xl mb-2 transition-all duration-200 group border-0
-                              ${isActive 
-                                ? 'bg-blue-600 text-white shadow-lg' 
-                                : 'hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 bg-transparent'
-                              }
-                            `}
-                          >
-                            <Link 
-                              to={item.url} 
-                              className="flex items-center gap-3 px-4 py-3 font-medium relative z-10"
-                            >
-                              {IconComponent ? <IconComponent className="w-4 h-4" /> : <span>?</span>}
-                              <span className="font-medium tracking-tight">{item.title}</span>
-                            </Link>
-                          </SidebarMenuButton>
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <SidebarMenuButton 
+                                  asChild 
+                                  className={`
+                                    relative overflow-hidden rounded-xl mb-2 transition-all duration-200 group border-0
+                                    ${isActive 
+                                      ? 'bg-blue-600 text-white shadow-lg' 
+                                      : 'hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 bg-transparent'
+                                    }
+                                    ${isSidebarOpen ? 'justify-start' : 'justify-center'}
+                                  `}
+                                >
+                                  <Link 
+                                    to={item.url} 
+                                    className={`flex items-center ${isSidebarOpen ? 'gap-3 px-4 py-3' : 'px-0 py-3'} font-medium relative z-10`}
+                                  >
+                                    {IconComponent ? <IconComponent className="w-5 h-5" /> : <span>?</span>}
+                                    <span className={`font-medium tracking-tight ${isSidebarOpen ? '' : 'hidden'}`}>{item.title}</span>
+                                  </Link>
+                                </SidebarMenuButton>
+                              </TooltipTrigger>
+                              <TooltipContent side="right" className={`${isSidebarOpen ? 'hidden' : ''} bg-slate-800 text-white dark:bg-slate-200 dark:text-slate-900`}>
+                                {item.title}
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
                         </SidebarMenuItem>
                       );
                     })}
@@ -202,31 +217,70 @@ export default function Layout({ children, currentPageName }) {
             </SidebarContent>
             
             <SidebarFooter 
-              className="mt-auto p-4 border-t border-slate-200 dark:border-slate-700/80"
+              className={`mt-auto px-0 py-4 border-t border-slate-200 dark:border-slate-700/80`}
             >
-              <div className="flex items-center justify-between">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => setIsSettingsModalOpen(true)}
-                  className="w-8 h-8 rounded-lg text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800"
-                >
-                  <Settings className="w-4 h-4" />
-                </Button>
-                <ThemeToggle />
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={handleLogout}
-                  className="w-8 h-8 rounded-lg text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800"
-                >
-                  <LogOut className="w-4 h-4" />
-                </Button>
-              </div>
+              <SidebarGroup>
+                <SidebarGroupContent>
+                  <SidebarMenu className={`${isSidebarOpen ? '' : 'mt-0'}`}>
+                    {footerItems.map((item) => {
+                      const IconComponent = item.icon;
+                      return (
+                        <SidebarMenuItem key={item.title}>
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <SidebarMenuButton 
+                                  className={`
+                                    relative overflow-hidden rounded-xl mb-2 transition-all duration-200 group border-0
+                                    hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 bg-transparent
+                                    ${isSidebarOpen ? 'justify-start' : 'justify-center'}
+                                  `}
+                                  onClick={item.action ? item.action(setIsSettingsModalOpen, handleLogout) : undefined}
+                                >
+                                  <div className={`flex items-center ${isSidebarOpen ? 'gap-3 px-4 py-3' : 'px-0 py-3'} font-medium relative z-10`}>
+                                    <IconComponent className="w-5 h-5" />
+                                    <span className={`font-medium tracking-tight ${isSidebarOpen ? '' : 'hidden'}`}>{item.title}</span>
+                                  </div>
+                                </SidebarMenuButton>
+                              </TooltipTrigger>
+                              <TooltipContent side="right" className={`${isSidebarOpen ? 'hidden' : ''} bg-slate-800 text-white dark:bg-slate-200 dark:text-slate-900`}>
+                                {item.title}
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        </SidebarMenuItem>
+                      );
+                    })}
+                    <SidebarMenuItem>
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <div 
+                              className={`
+                                relative overflow-hidden rounded-xl mb-2 transition-all duration-200 group border-0
+                                hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 bg-transparent
+                                ${isSidebarOpen ? 'justify-start px-4 py-3' : 'justify-center px-0 py-3'}
+                              `}
+                            >
+                              <div className={`flex items-center ${isSidebarOpen ? 'gap-3' : ''} font-medium relative z-10`}>
+                                <ThemeToggle />
+                                <span className={`font-medium tracking-tight ${isSidebarOpen ? '' : 'hidden'}`}>Theme</span>
+                              </div>
+                            </div>
+                          </TooltipTrigger>
+                          <TooltipContent side="right" className={`${isSidebarOpen ? 'hidden' : ''} bg-slate-800 text-white dark:bg-slate-200 dark:text-slate-900`}>
+                            Theme
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    </SidebarMenuItem>
+                  </SidebarMenu>
+                </SidebarGroupContent>
+              </SidebarGroup>
             </SidebarFooter>
           </Sidebar>
 
-          <main className="flex-1 flex flex-col overflow-hidden relative bg-slate-100 dark:bg-slate-900">
+          <main className="flex-1 flex flex-col relative bg-slate-100 dark:bg-slate-900">
             <header className="px-6 py-4 md:hidden shadow-sm transition-colors duration-300 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
@@ -239,7 +293,7 @@ export default function Layout({ children, currentPageName }) {
               </div>
             </header>
 
-            <div className="flex-1 overflow-auto">
+            <div className="flex-1">
               {children}
             </div>
           </main>

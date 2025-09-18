@@ -4,24 +4,27 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogDescription, // FIX: DialogDescription hinzufügen
+  DialogDescription,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Save, X, Star, Plus } from 'lucide-react';
+import { Save, X, Star, Plus, FileText } from 'lucide-react';
 import { Competency, User } from '@/api/entities';
 import { useToast } from "@/components/ui/use-toast";
 
-const InteractiveStarRating = ({ student, rating, onRatingChange }) => {
+const InteractiveStarRating = ({ student, rating, onRatingChange, notes, onNotesChange }) => {
+  const [showNotes, setShowNotes] = useState(false);
   const stars = [1, 2, 3, 4, 5];
+  
   return (
-    <div className="bg-slate-700/50 rounded-lg p-3 text-center border border-slate-600">
+    <div className="bg-slate-700/50 rounded-lg p-3 border border-slate-600">
       <div className="text-sm font-medium text-white mb-2 truncate" title={student.name}>
         {student.name}
       </div>
-      <div className="flex justify-center items-center gap-1">
+      <div className="flex justify-center items-center gap-1 mb-2">
         {stars.map((star) => (
           <Star
             key={star}
@@ -34,6 +37,28 @@ const InteractiveStarRating = ({ student, rating, onRatingChange }) => {
           />
         ))}
       </div>
+      <div className="flex justify-center">
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          onClick={() => setShowNotes(!showNotes)}
+          className={`text-xs px-2 py-1 h-auto ${notes ? 'text-blue-400' : 'text-slate-400'} hover:text-blue-300`}
+        >
+          <FileText className="w-3 h-3 mr-1" />
+          Notiz {notes ? '✓' : ''}
+        </Button>
+      </div>
+      {showNotes && (
+        <div className="mt-2">
+          <Textarea
+            value={notes || ''}
+            onChange={(e) => onNotesChange(e.target.value)}
+            placeholder="Notiz zur Bewertung..."
+            className="bg-slate-800 border-slate-600 text-white text-xs min-h-[60px] resize-none"
+          />
+        </div>
+      )}
     </div>
   );
 };
@@ -47,149 +72,97 @@ export default function UeberfachlichModal({
   allCompetencies = [],
   onDataChange
 }) {
-  const [selectedCompetencyId, setSelectedCompetencyId] = useState('');
+  const [selectedCompetency, setSelectedCompetency] = useState('');
   const [newCompetencyName, setNewCompetencyName] = useState('');
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [ratings, setRatings] = useState({});
+  const [notes, setNotes] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isLoadingCompetencies, setIsLoadingCompetencies] = useState(false);
-  const [currentCompetencies, setCurrentCompetencies] = useState([]);
-  const { toast } = useToast(); // FIX: Toast hook
+  const [currentCompetencies, setCurrentCompetencies] = useState(allCompetencies);
+  const { toast } = useToast();
 
-  // FIX: Entferne redundanten useEffect
   useEffect(() => {
-    const loadCompetenciesIfNeeded = async () => {
-      if (isOpen && currentCompetencies.length === 0 && allCompetencies.length === 0 && activeClassId) {
-        setIsLoadingCompetencies(true);
-        try {
-          const competencies = await Competency.filter({ class_id: activeClassId });
-          setCurrentCompetencies(competencies || []);
-        } catch (error) {
-          console.error('Fehler beim Laden der Kompetenzen:', error);
-          toast({
-            title: "Fehler",
-            description: "Fehler beim Laden der Kompetenzen. Bitte versuchen Sie es erneut.",
-            variant: "destructive",
-          });
-        } finally {
-          setIsLoadingCompetencies(false);
-        }
-      } else {
-        setCurrentCompetencies(allCompetencies || []);
-      }
-    };
+      setCurrentCompetencies(allCompetencies);
+  }, [allCompetencies]);
 
-    loadCompetenciesIfNeeded();
-  }, [isOpen, allCompetencies, activeClassId, toast]);
+  const studentsForClass = students.filter(s => s.class_id === activeClassId);
 
   useEffect(() => {
     if (isOpen) {
-      setSelectedCompetencyId('');
+      setSelectedCompetency('');
       setNewCompetencyName('');
       setDate(new Date().toISOString().slice(0, 10));
       setRatings({});
+      setNotes({});
       setIsSubmitting(false);
     }
   }, [isOpen]);
 
   const handleAddCompetency = async () => {
-    if (!newCompetencyName.trim()) {
-      alert('Bitte geben Sie einen Kompetenznamen ein.');
-      return;
-    }
-    if (!activeClassId) {
-      alert('Keine Klasse ausgewählt.');
-      return;
-    }
-    const user = User.current();
-    if (!user || !user.id) {
-      alert('Kein Benutzer eingeloggt.');
-      return;
-    }
-    if (user.role !== 'teacher') {
-      alert('Nur Lehrer können Kompetenzen erstellen.');
-      return;
-    }
-
-    const payload = {
-      name: newCompetencyName.trim(),
-      class_id: activeClassId,
-      user_id: user.id,
-      description: '',
-      level: 0
-    };
-    console.log('Sending Competency.create payload:', payload);
-
-    const existing = await Competency.filter({
-      name: newCompetencyName.trim(),
-      class_id: activeClassId
-    });
-    if (existing.length > 0) {
-      alert('Eine Kompetenz mit diesem Namen existiert bereits für diese Klasse.');
-      setSelectedCompetencyId(existing[0].id);
-      setNewCompetencyName('');
-      return;
-    }
-
-    try {
-      setIsSubmitting(true);
-      const newComp = await Competency.create(payload);
-      console.log('Competency.create response:', newComp);
-      if (!newComp || !newComp.id) {
-        throw new Error('Ungültige Antwort vom Server');
+      if (!newCompetencyName.trim()) return;
+      const existing = currentCompetencies.find(c => c.name.toLowerCase() === newCompetencyName.trim().toLowerCase());
+      if (existing) {
+          setSelectedCompetency(existing.name);
+          setNewCompetencyName('');
+          return;
       }
-      setCurrentCompetencies(prev => [...prev, newComp]);
-      setSelectedCompetencyId(newComp.id);
-      setNewCompetencyName('');
-      if (onDataChange) onDataChange();
-    } catch (error) {
-      console.error("Fehler beim Erstellen der Kompetenz:", error);
-      alert(`Fehler beim Erstellen der Kompetenz: ${error.message || 'Unbekannter Fehler'}`);
-    } finally {
-      setIsSubmitting(false);
-    }
+      try {
+          const newComp = await Competency.create({ name: newCompetencyName.trim(), class_id: activeClassId });
+          setCurrentCompetencies([...currentCompetencies, newComp]);
+          setSelectedCompetency(newComp.name);
+          setNewCompetencyName('');
+          if (onDataChange) onDataChange();
+      } catch (error) {
+          console.error("Fehler beim Erstellen der Kompetenz:", error);
+          toast({
+            title: "Fehler",
+            description: "Fehler beim Erstellen der Kompetenz.",
+            variant: "destructive",
+          });
+      }
   };
 
   const handleRatingChange = (studentId, rating) => {
     setRatings(prev => ({ ...prev, [studentId]: rating }));
   };
 
+  const handleNotesChange = (studentId, noteText) => {
+    setNotes(prev => ({ ...prev, [studentId]: noteText }));
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!selectedCompetencyId) {
-      alert('Bitte wählen oder erstellen Sie eine Kompetenz.');
+    if (!selectedCompetency.trim()) {
+      toast({
+        title: "Fehler",
+        description: 'Bitte wählen oder erstellen Sie eine Kompetenz.',
+        variant: "destructive",
+      });
       return;
     }
     const studentsWithRatings = Object.entries(ratings);
     if (studentsWithRatings.length === 0) {
-      alert('Bitte bewerten Sie mindestens einen Schüler.');
+      toast({
+        title: "Fehler",
+        description: 'Bitte bewerten Sie mindestens einen Schüler.',
+        variant: "destructive",
+      });
       return;
     }
-    console.log('Submitting ratings:', {
-      competencyId: selectedCompetencyId,
-      date,
-      ratings
-    });
     setIsSubmitting(true);
     try {
       await onSave({
-        competencyId: selectedCompetencyId,
+        competencyName: selectedCompetency,
         date: date,
-        ratings: Object.fromEntries(
-          Object.entries(ratings).map(([studentId, score]) => [studentId, Number(score)])
-        )
-      });
-      toast({
-        title: "Erfolg",
-        description: "Bewertungen erfolgreich gespeichert",
-        variant: "success",
+        ratings: ratings,
+        notes: notes // Notizen mit übergeben
       });
       onClose();
     } catch (error) {
       console.error('Fehler beim Speichern der Kompetenzbewertungen:', error);
       toast({
         title: "Fehler",
-        description: "Fehler beim Speichern der Kompetenzen. Bitte versuchen Sie es erneut.",
+        description: 'Fehler beim Speichern. Bitte versuchen Sie es erneut.',
         variant: "destructive",
       });
     } finally {
@@ -198,11 +171,11 @@ export default function UeberfachlichModal({
   };
 
   const getStudentColumns = () => {
-    const studentsPerColumn = Math.ceil(students.length / 3);
+    const studentsPerColumn = Math.ceil(studentsForClass.length / 3);
     return [
-      students.filter(s => s.class_id === activeClassId).slice(0, studentsPerColumn),
-      students.filter(s => s.class_id === activeClassId).slice(studentsPerColumn, studentsPerColumn * 2),
-      students.filter(s => s.class_id === activeClassId).slice(studentsPerColumn * 2)
+      studentsForClass.slice(0, studentsPerColumn),
+      studentsForClass.slice(studentsPerColumn, studentsPerColumn * 2),
+      studentsForClass.slice(studentsPerColumn * 2)
     ];
   };
 
@@ -211,17 +184,16 @@ export default function UeberfachlichModal({
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent 
-        className="max-w-6xl w-full mx-4 my-4 bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-black dark:text-white"
+        className="max-w-6xl w-full mx-4 my-4 bg-slate-900 border-slate-700 text-white"
         style={{
           maxHeight: '95vh',
           height: 'auto'
         }}
-        aria-describedby="dialog-description" // FIX: Entferne bedingte Logik
       >
         <DialogHeader className="flex-shrink-0 pb-4 border-b border-slate-700">
           <DialogTitle className="text-2xl font-bold">Neue Kompetenzerfassung</DialogTitle>
-          <DialogDescription className="text-sm text-slate-500 mt-2" id="dialog-description">
-            Dialog zur Erfassung neuer überfachlicher Kompetenzen für Schüler.
+          <DialogDescription className="text-sm text-slate-400">
+            Erfassen Sie Bewertungen und Notizen für überfachliche Kompetenzen der Schüler.
           </DialogDescription>
         </DialogHeader>
         
@@ -229,56 +201,35 @@ export default function UeberfachlichModal({
           <form onSubmit={handleSubmit} className="flex flex-col h-full">
             <div className="p-6 flex-shrink-0 space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <Label className="text-base font-semibold mb-2 block">Kompetenz</Label>
-                  <div className="flex gap-2 items-center">
-                    <Select value={selectedCompetencyId} onValueChange={setSelectedCompetencyId}>
-                      <SelectTrigger className="flex-1 bg-slate-800 border-slate-600">
-                        <SelectValue placeholder="Bestehende Kompetenz auswählen..." />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {isLoadingCompetencies ? (
-                          <SelectItem value="loading">Lade Kompetenzen...</SelectItem>
-                        ) : currentCompetencies.length === 0 ? (
-                          <SelectItem disabled value="none">Keine Kompetenzen gefunden (erstellen Sie eine neue)</SelectItem>
-                        ) : (
-                          currentCompetencies.map(c => (
-                            <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-                          ))
-                        )}
-                      </SelectContent>
-                    </Select>
-                    <Input 
-                      value={newCompetencyName}
-                      onChange={e => setNewCompetencyName(e.target.value)}
-                      placeholder="Oder neue erstellen"
-                      className="flex-1 bg-slate-800 border-slate-600"
-                      onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), handleAddCompetency())}
-                      disabled={isSubmitting}
-                    />
-                    <Button 
-                      type="button" 
-                      size="icon" 
-                      onClick={handleAddCompetency} 
-                      className="bg-blue-600 hover:bg-blue-700"
-                      disabled={isSubmitting}
-                    >
-                      <Plus className="w-4 h-4" />
-                    </Button>
+                  <div>
+                      <Label className="text-base font-semibold mb-2 block">Kompetenz</Label>
+                      <div className="flex gap-2 items-center">
+                          <Select value={selectedCompetency} onValueChange={setSelectedCompetency}>
+                              <SelectTrigger className="flex-1 bg-slate-800 border-slate-600">
+                                  <SelectValue placeholder="Bestehende Kompetenz auswählen..." />
+                              </SelectTrigger>
+                              <SelectContent>
+                                  {currentCompetencies.map(c => (
+                                      <SelectItem key={c.id} value={c.name}>{c.name}</SelectItem>
+                                  ))}
+                              </SelectContent>
+                          </Select>
+                          <Input 
+                              value={newCompetencyName}
+                              onChange={e => setNewCompetencyName(e.target.value)}
+                              placeholder="Oder neue erstellen"
+                              className="flex-1 bg-slate-800 border-slate-600"
+                              onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), handleAddCompetency())}
+                          />
+                          <Button type="button" size="icon" onClick={handleAddCompetency} className="bg-blue-600 hover:bg-blue-700">
+                              <Plus className="w-4 h-4" />
+                          </Button>
+                      </div>
                   </div>
-                </div>
-                <div>
-                  <Label htmlFor="date" className="text-base font-semibold mb-2 block">Datum</Label>
-                  <Input 
-                    id="date" 
-                    type="date" 
-                    value={date} 
-                    onChange={e => setDate(e.target.value)} 
-                    required 
-                    className="w-full bg-slate-800 border-slate-600" 
-                    disabled={isSubmitting}
-                  />
-                </div>
+                  <div>
+                      <Label htmlFor="date" className="text-base font-semibold mb-2 block">Datum</Label>
+                      <Input id="date" type="date" value={date} onChange={e => setDate(e.target.value)} required className="w-full bg-slate-800 border-slate-600" />
+                  </div>
               </div>
             </div>
 
@@ -295,6 +246,8 @@ export default function UeberfachlichModal({
                         student={student}
                         rating={ratings[student.id] || 0}
                         onRatingChange={(rating) => handleRatingChange(student.id, rating)}
+                        notes={notes[student.id] || ''}
+                        onNotesChange={(noteText) => handleNotesChange(student.id, noteText)}
                       />
                     ))}
                   </div>
@@ -303,20 +256,10 @@ export default function UeberfachlichModal({
             </div>
 
             <div className="p-6 flex-shrink-0 flex justify-end gap-3 border-t border-slate-700">
-              <Button 
-                type="button" 
-                variant="outline" 
-                onClick={onClose} 
-                className="bg-slate-700 hover:bg-slate-600"
-                disabled={isSubmitting}
-              >
+              <Button type="button" variant="outline" onClick={onClose} className="bg-slate-700 hover:bg-slate-600">
                 <X className="w-4 h-4 mr-2" /> Abbrechen
               </Button>
-              <Button 
-                type="submit" 
-                disabled={isSubmitting} 
-                className="bg-blue-600 hover:bg-blue-700"
-              >
+              <Button type="submit" disabled={isSubmitting} className="bg-blue-600 hover:bg-blue-700">
                 <Save className="w-4 h-4 mr-2" /> {isSubmitting ? 'Speichern...' : 'Speichern'}
               </Button>
             </div>

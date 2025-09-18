@@ -54,6 +54,17 @@ export default function GradesPage() {
     loadData();
   }, [loadData]);
 
+  const handleDataChange = useCallback(async (updatedPerformances, updatedUeberfachlich) => {
+    if (updatedPerformances) {
+      setPerformances(updatedPerformances);
+    }
+    if (updatedUeberfachlich) {
+      setUeberfachlich(updatedUeberfachlich);
+    } else {
+      await loadData(); // Vollständiger Reload, falls nicht spezifiziert
+    }
+  }, [loadData]);
+
   const studentsForActiveClass = students.filter(s => s.class_id === activeClassId);
   const performancesForActiveClass = performances.filter(p => p.class_id === activeClassId);
   const ueberfachlichForActiveClass = ueberfachlich.filter(u => u.class_id === activeClassId);
@@ -107,7 +118,7 @@ export default function GradesPage() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
-          className="bg-white/60 dark:bg-slate-900/80 backdrop-blur-xl rounded-2xl shadow-xl border border-slate-200/50 dark:border-slate-700/50 overflow-hidden"
+          className="bg-white/60 dark:bg-slate-900/80 backdrop-blur-xl rounded-2xl shadow-xl border border-white/20 dark:border-slate-700/50 overflow-hidden"
         >
           {isLoading ? (
             <CalendarLoader />
@@ -116,19 +127,20 @@ export default function GradesPage() {
               {error}
               <Button onClick={loadData} className="ml-4">Erneut versuchen</Button>
             </div>
-          ) : classes.length > 0 ? (
+          ) : activeClassId ? (
             <PerformanceView
               students={studentsForActiveClass}
               performances={performancesForActiveClass}
+              ueberfachlich={ueberfachlichForActiveClass}
               activeClassId={activeClassId}
               classes={classes}
-              onDataChange={loadData}
+              onDataChange={handleDataChange}
             />
           ) : (
             <div className="text-center py-20">
               <Users className="w-16 h-16 mx-auto mb-4 text-slate-400 dark:text-slate-400" />
-              <h3 className="text-xl font-semibold text-slate-900 dark:text-white mb-2">Keine Klasse verfügbar</h3>
-              <p className="text-slate-600 dark:text-slate-400">Es wurden keine Klassen gefunden.</p>
+              <h3 className="text-xl font-semibold text-slate-900 dark:text-white mb-2">Keine Klasse ausgewählt</h3>
+              <p className="text-slate-600 dark:text-slate-400">Bitte wählen Sie eine Klasse aus, um die Leistungsübersicht anzuzeigen.</p>
             </div>
           )}
         </motion.div>

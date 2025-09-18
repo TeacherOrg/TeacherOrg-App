@@ -34,6 +34,12 @@ const DraggableItem = ({ id, data, children }) => {
 };
 
 const SlotCell = ({ dayIndex, rowNum, holiday, holidayDisplay, isOccupied, lesson, droppableId, onCreateLesson, day, slot, onEditLesson, onShowHover, onHideHover, isLastRow, subjects }) => {
+  const validDays = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+  if (!validDays.includes(day.key)) {
+    console.error(`Invalid day.key in SlotCell: ${day.key} for slot ${slot.period}`);
+    return null; // Oder rendern eines leeren Slots
+  }
+
   const { setNodeRef: dropRef, isOver } = useDroppable({ 
     id: droppableId, 
     disabled: !!lesson || !!holiday || isOccupied 

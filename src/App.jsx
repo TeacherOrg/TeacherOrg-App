@@ -1,8 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import './App.css';
 import Pages from "@/pages/index.jsx";
-import { Toaster as ShadcnToaster } from "@/components/ui/toaster"; // Renamed to avoid conflict
-import { Toaster as HotToastToaster } from 'react-hot-toast'; // Added react-hot-toast
+import { Toaster as HotToastToaster } from 'react-hot-toast';
 import Login from "@/components/auth/Login";  
 import pb from '@/api/pb';  
 import { User } from '@/api/entities';  
@@ -58,19 +57,18 @@ function App() {
       <AuthGuard>
         <Pages />
       </AuthGuard>
-      <ShadcnToaster /> {/* Keep existing Toaster */}
       <HotToastToaster
         position="top-right"
         toastOptions={{
           duration: 4000,
           style: {
-            background: '#1e293b', // Dark background for dark mode
-            color: '#ffffff', // White text
-            border: '1px solid #475569', // Slate border
+            background: '#1e293b',
+            color: '#ffffff',
+            border: '1px solid #475569',
           },
           error: {
             style: {
-              background: '#7f1d1d', // Red background for errors
+              background: '#7f1d1d',
               color: '#ffffff',
             },
           },

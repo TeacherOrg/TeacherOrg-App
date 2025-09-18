@@ -2,7 +2,17 @@ import { motion } from 'framer-motion';
 import { Plus } from 'lucide-react';
 import { adjustColor } from '@/utils/colorUtils';
 
-export default function YearLessonCell({ lesson, onClick, activeTopicId, defaultColor = '#3b82f6', isDoubleLesson = false, onMouseEnter = () => {}, onMouseLeave = () => {}, allYearlyLessons = [] }) {
+export default function YearLessonCell({ 
+  lesson, 
+  onClick, 
+  activeTopicId, 
+  defaultColor = '#3b82f6', 
+  isDoubleLesson = false, 
+  onMouseEnter = () => {}, 
+  onMouseLeave = () => {}, 
+  allYearlyLessons = [],
+  showCopyIndicator = false // ← HINZUFÜGEN
+}) {
   const handleClick = () => {
     onClick(lesson, !lesson ? {
       week_number: lesson?.week_number,
@@ -32,6 +42,12 @@ export default function YearLessonCell({ lesson, onClick, activeTopicId, default
   // Bestimme den Anzeigetext für den Titel
   let lessonTitle = lesson.name !== 'Neue Lektion' ? lesson.name : `Lektion ${lesson.lesson_number}`;
   let lessonNumberDisplay = `Lektion ${lesson.lesson_number}`;
+
+  // Kopie-Markierung hinzufügen
+  if (lesson.is_copy) {
+    lessonTitle = `${lessonTitle} (Kopie)`;
+    lessonNumberDisplay = `${lessonNumberDisplay} (K)`;
+  }
 
   if (isDoubleLesson && lesson.second_yearly_lesson_id) {
     const secondLesson = allYearlyLessons.find(l => String(l.id) === String(lesson.second_yearly_lesson_id));
@@ -74,8 +90,14 @@ export default function YearLessonCell({ lesson, onClick, activeTopicId, default
         ) : (
           // Für Lektionen ohne Thema
           <div className="text-center">
-            <div>{lessonTitle}</div>
-            {lessonTitle !== lessonNumberDisplay && <div className="text-[10px] opacity-75">{lessonNumberDisplay}</div>}
+            <div className={lesson.is_copy ? "text-yellow-200 font-bold" : ""}>
+              {lessonTitle}
+            </div>
+            {lessonTitle !== lessonNumberDisplay && (
+              <div className={`text-[10px] opacity-75 ${lesson.is_copy ? "text-yellow-100" : ""}`}>
+                {lessonNumberDisplay}
+              </div>
+            )}
           </div>
         )}
       </div>

@@ -3,9 +3,10 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { UeberfachlichKompetenz, Competency, UserPreferences, User } from '@/api/entities';
-import { Search, ChevronDown, ChevronRight, Trash2, Star, Clock, Plus, Save, X } from 'lucide-react';
+import { Search, ChevronDown, ChevronRight, Trash2, Star, Clock, Plus, Save, X, FileText } from 'lucide-react';
 import { format } from "date-fns";
 import { useToast } from "@/components/ui/use-toast";
 
@@ -48,10 +49,17 @@ const StarRating = ({ rating, size = "w-4 h-4", showDecimal = false }) => {
   );
 };
 
-const InteractiveStarRating = ({ rating, onRatingChange, size = "w-5 h-5" }) => {
+const InteractiveStarRating = ({ rating, onRatingChange, size = "w-5 h-5", notes, onNotesChange }) => {
   const stars = [1, 2, 3, 4, 5];
   return (
     <div className="flex items-center gap-3">
+      <EditableNote
+        assessment={{ date: new Date().toISOString().slice(0, 10), score: rating, notes }}
+        studentId={null}
+        competencyId={null}
+        onSave={(studentId, competencyId, date, newNoteText) => onNotesChange(newNoteText)}
+        isQuickAdd
+      />
       {stars.map((star) => (
         <Star
           key={star}
@@ -59,6 +67,131 @@ const InteractiveStarRating = ({ rating, onRatingChange, size = "w-5 h-5" }) => 
           onClick={() => onRatingChange(star)}
         />
       ))}
+    </div>
+  );
+};
+
+const EditableNote = ({ assessment, studentId, competencyId, onSave, isQuickAdd = false }) => {
+  const [isEditing, setIsEditing] = useState(false);
+  const [noteText, setNoteText] = useState(assessment.notes || '');
+  const [isSaving, setIsSaving] = useState(false);
+  const { toast } = useToast();
+
+  const hasNote = assessment.notes && assessment.notes.trim();
+
+  const handleSave = async () => {
+    if (isQuickAdd) {
+      onSave(null, null, assessment.date, noteText);
+      setIsEditing(false);
+    } else {
+      setIsSaving(true);
+      try {
+        await onSave(studentId, competencyId, assessment.date, noteText);
+        setIsEditing(false);
+        toast({
+          title: "Erfolg",
+          description: "Notiz erfolgreich gespeichert",
+          variant: "success",
+        });
+      } catch (error) {
+        console.error('Error saving note:', error);
+        toast({
+          title: "Fehler",
+          description: "Fehler beim Speichern der Notiz.",
+          variant: "destructive",
+        });
+      } finally {
+        setIsSaving(false);
+      }
+    }
+  };
+
+  const handleCancel = () => {
+    setNoteText(assessment.notes || '');
+    setIsEditing(false);
+  };
+
+  return (
+    <div className="relative inline-block">
+      <Button
+        variant="ghost"
+        size="icon"
+        onClick={() => setIsEditing(true)}
+        className={`editable-note-button w-5 h-5 p-0 ${hasNote ? 'text-blue-400' : 'text-slate-400'} hover:text-blue-300`}
+        title={hasNote ? 'Notiz bearbeiten' : 'Notiz hinzufügen'}
+      >
+        <FileText className="w-3 h-3" />
+      </Button>
+      
+      <AnimatePresence>
+        {isEditing && (
+          <>
+            <div 
+              className="fixed inset-0 z-40 bg-black/20" 
+              onClick={handleCancel}
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="fixed z-50 bg-slate-800 border border-slate-600 rounded-lg p-4 shadow-2xl min-w-[300px] max-w-[400px]"
+              style={{
+                top: '50%',
+                left: '50%',
+                transform: 'translate(-50%, -50%)'
+              }}
+            >
+              <div className="mb-3">
+                <h4 className="text-sm font-semibold text-white mb-1">Notiz bearbeiten</h4>
+                <p className="text-xs text-slate-400">
+                  Bewertung vom {format(new Date(assessment.date), 'dd.MM.yyyy')} 
+                  ({assessment.score} Sterne)
+                </p>
+              </div>
+              
+              <Textarea
+                value={noteText}
+                onChange={(e) => setNoteText(e.target.value)}
+                placeholder="Notiz zur Bewertung..."
+                className="bg-slate-700 border-slate-600 text-white text-sm mb-3 min-h-[80px] w-full"
+                autoFocus
+                onKeyDown={(e) => {
+                  if (e.key === 'Escape') {
+                    handleCancel();
+                  } else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                    handleSave();
+                  }
+                }}
+              />
+              
+              <div className="flex justify-end gap-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleCancel}
+                  className="text-slate-400 hover:text-white"
+                >
+                  <X className="w-3 h-3 mr-1" />
+                  Abbrechen
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={handleSave}
+                  disabled={isSaving}
+                  className="bg-blue-600 hover:bg-blue-700"
+                >
+                  <Save className="w-3 h-3 mr-1" />
+                  {isSaving ? 'Speichern...' : 'Speichern'}
+                </Button>
+              </div>
+              
+              <div className="text-xs text-slate-500 mt-2 text-center">
+                Tipp: Strg+Enter zum Speichern, Esc zum Abbrechen
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
     </div>
   );
 };
@@ -74,11 +207,11 @@ export default function UeberfachlichTable({
   setExpandedHistories, 
   expandedCompetencies, 
   setExpandedCompetencies,
-  allCompetencies = [], // Correct prop name
+  allCompetencies = [],
 }) {
   const [searchTerm, setSearchTerm] = useState('');
   const debouncedSearchTerm = useDebounce(searchTerm, 300);
-  const [quickAddState, setQuickAddState] = useState({ key: null, score: 0 });
+  const [quickAddState, setQuickAddState] = useState({ key: null, score: 0, notes: '' });
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
 
@@ -125,7 +258,6 @@ export default function UeberfachlichTable({
   // Kombiniere allCompetencies aus Props mit lokalen Kompetenzen
   const allCompetenciesCombined = useMemo(() => {
     if (Array.isArray(allCompetencies) && allCompetencies.length > 0) {
-      // Verwende Props, falls verfügbar
       return allCompetencies.filter(c => c.class_id === activeClassId);
     }
     return allCompetenciesLocal;
@@ -150,11 +282,6 @@ export default function UeberfachlichTable({
       const assessments = u.assessments
         .filter(a => a && a.date && typeof a.score === 'number' && a.score >= 1 && a.score <= 5)
         .sort((a, b) => new Date(b.date) - new Date(a.date));
-      if (assessments.length === 0) {
-        console.warn('No valid assessments for entry:', u);
-      } else {
-        console.log('Valid assessments for entry:', u, assessments);
-      }
       studentMap.set(u.competency_id, assessments);
       map.set(u.student_id, studentMap);
     });
@@ -188,7 +315,6 @@ export default function UeberfachlichTable({
     }
     setIsLoading(true);
     try {
-      // Zuerst Entries löschen
       const entriesToDelete = ueberfachlich.filter(u => u.competency_id === competencyId && u.class_id === activeClassId);
       await Promise.all(entriesToDelete.map(async (entry) => {
         if (entry.id) {
@@ -198,23 +324,20 @@ export default function UeberfachlichTable({
         }
       }));
 
-      // Dann Competency löschen
       if (competencyToDelete) {
         await Competency.delete(competencyToDelete.id);
       } else {
         console.warn('Competency not found for deletion:', competencyId);
       }
 
-      // Neu laden der überfachlichen Kompetenzen
       const updatedUeberfachlich = await UeberfachlichKompetenz.list({
         filter: `class_id = '${activeClassId}'`,
         perPage: 500,
         expand: 'student_id,class_id,competency_id',
         $cancelKey: `list-ueberfachliche_kompetenz-postdelete-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
       });
-      onDataChange?.(updatedUeberfachlich); // Übergib die aktualisierten Daten an die Parent-Komponente
+      onDataChange?.(updatedUeberfachlich);
 
-      // Preferences update
       const user = User.current();
       if (user && activeClassId) {
         const preference = await UserPreferences.findOne({
@@ -222,7 +345,6 @@ export default function UeberfachlichTable({
           class_id: activeClassId,
         });
         const preferencesData = preference?.preferences || {};
-        preferencesData.performanceTab = 'ueberfachlich';
         if (preference) {
           await UserPreferences.update(preference.id, { preferences: preferencesData });
         } else {
@@ -233,7 +355,6 @@ export default function UeberfachlichTable({
           });
         }
       }
-      localStorage.setItem('performanceSaveFlag', 'true');
       setExpandedCompetencies(new Set());
       toast({
         title: "Erfolg",
@@ -242,13 +363,9 @@ export default function UeberfachlichTable({
       });
     } catch (error) {
       console.error("Fehler beim Löschen der Kompetenz:", error);
-      let errorMessage = 'Fehler beim Löschen der Kompetenz.';
-      if (error.status === 400 && error.message.includes('required relation reference')) {
-        errorMessage = 'Die Bewertungen wurden gelöscht, aber die Kompetenz konnte nicht entfernt werden (noch referenziert). Versuchen Sie es erneut.';
-      }
       toast({
         title: "Fehler",
-        description: errorMessage,
+        description: `Fehler beim Löschen der Kompetenz: ${error.message}`,
         variant: "destructive",
       });
     } finally {
@@ -258,6 +375,7 @@ export default function UeberfachlichTable({
 
   const handleDeleteAssessment = async (studentId, competencyId, assessmentDate) => {
     if (!window.confirm(`Möchten Sie diese einzelne Bewertung vom ${format(new Date(assessmentDate), 'dd.MM.yyyy')} wirklich löschen?`)) return;
+    setIsLoading(true);
     try {
       const comp = ueberfachlich.find(u => u.student_id === studentId && u.competency_id === competencyId);
       if (!comp) return;
@@ -265,14 +383,9 @@ export default function UeberfachlichTable({
       const updatedAssessments = comp.assessments.filter(a => a.date !== assessmentDate);
 
       if (updatedAssessments.length === 0) {
-        await UeberfachlichKompetenz.delete(comp.id, {
-          $cancelKey: `delete-ueberfachliche_kompetenz-${studentId}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
-        });
+        await UeberfachlichKompetenz.delete(comp.id);
       } else {
-        await UeberfachlichKompetenz.update(comp.id, { 
-          assessments: updatedAssessments,
-          $cancelKey: `update-ueberfachliche_kompetenz-${studentId}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
-        });
+        await UeberfachlichKompetenz.update(comp.id, { assessments: updatedAssessments });
       }
 
       const user = User.current();
@@ -282,7 +395,6 @@ export default function UeberfachlichTable({
           class_id: activeClassId,
         });
         const preferencesData = preference?.preferences || {};
-        preferencesData.performanceTab = 'ueberfachlich';
         if (preference) {
           await UserPreferences.update(preference.id, { preferences: preferencesData });
         } else {
@@ -293,7 +405,6 @@ export default function UeberfachlichTable({
           });
         }
       }
-      localStorage.setItem('performanceSaveFlag', 'true');
       onDataChange?.();
       toast({
         title: "Erfolg",
@@ -307,6 +418,83 @@ export default function UeberfachlichTable({
         description: `Fehler beim Löschen der Bewertung: ${error.message}`,
         variant: "destructive",
       });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleEditNote = async (studentId, competencyId, assessmentDate, newNoteText) => {
+    setIsLoading(true);
+    try {
+      const comp = ueberfachlich.find(u => u.student_id === studentId && u.competency_id === competencyId);
+      if (!comp) {
+        throw new Error("Competency not found for note update.");
+      }
+
+      const updatedAssessments = comp.assessments.map(assessment => {
+        if (assessment.date === assessmentDate) {
+          return { ...assessment, notes: newNoteText };
+        }
+        return assessment;
+      });
+
+      const updatedComp = await UeberfachlichKompetenz.update(comp.id, { assessments: updatedAssessments });
+
+      setUeberfachlich(prev => {
+        const newUeberfachlich = prev.filter(u => !(u.student_id === studentId && u.competency_id === competencyId));
+        return [...newUeberfachlich, updatedComp];
+      });
+
+      const user = User.current();
+      if (user && activeClassId) {
+        const newExpandedCompetencies = new Set(expandedCompetencies);
+        newExpandedCompetencies.add(competencyId);
+        setExpandedCompetencies(newExpandedCompetencies);
+
+        const newExpandedHistories = new Set(expandedHistories);
+        const historyKey = `${studentId}-${competencyId}`;
+        newExpandedHistories.add(historyKey);
+        setExpandedHistories(newExpandedHistories);
+
+        const preference = await UserPreferences.findOne({
+          user_id: user.id,
+          class_id: activeClassId,
+        });
+        const preferencesData = preference?.preferences || {};
+        preferencesData.performanceTab = 'ueberfachlich';
+        preferencesData.expandedCompetencies = Array.from(newExpandedCompetencies);
+        preferencesData.expandedHistories = Array.from(newExpandedHistories);
+        preferencesData.expandedLeistungenRows = Array.from(preferencesData.expandedLeistungenRows || []);
+
+        if (preference) {
+          await UserPreferences.update(preference.id, { preferences: preferencesData });
+        } else {
+          await UserPreferences.create({
+            user_id: user.id,
+            class_id: activeClassId,
+            preferences: preferencesData,
+          });
+        }
+      }
+
+      setTab('ueberfachlich');
+      onDataChange?.();
+
+      toast({
+        title: "Erfolg",
+        description: "Notiz erfolgreich gespeichert",
+        variant: "success",
+      });
+    } catch (error) {
+      console.error("Fehler beim Speichern der Notiz:", error);
+      toast({
+        title: "Fehler",
+        description: `Fehler beim Speichern der Notiz: ${error.message}`,
+        variant: "destructive",
+      });
+      throw error;
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -317,8 +505,14 @@ export default function UeberfachlichTable({
       const user = User.current();
       if (!user || !user.id) throw new Error('Kein Benutzer eingeloggt');
 
+      console.log('handleQuickAdd - Start:', { studentId, competencyId, quickAddState });
+
       const comp = ueberfachlich.find(u => u.student_id === studentId && u.competency_id === competencyId);
-      const newAssessment = { date: new Date().toISOString().slice(0, 10), score: quickAddState.score };
+      const newAssessment = { 
+        date: new Date().toISOString().slice(0, 10), 
+        score: quickAddState.score,
+        notes: quickAddState.notes || ''
+      };
 
       let updatedComp;
       if (comp) {
@@ -326,8 +520,7 @@ export default function UeberfachlichTable({
         updatedComp = await UeberfachlichKompetenz.update(comp.id, { 
           assessments: updatedAssessments,
           user_id: user.id,
-          $cancelKey: `update-ueberfachliche_kompetenz-${studentId}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-          expand: 'competency_id'
+          $cancelKey: `update-ueberfachliche_kompetenz-${studentId}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
         });
       } else {
         updatedComp = await UeberfachlichKompetenz.create({
@@ -337,22 +530,17 @@ export default function UeberfachlichTable({
           assessments: [newAssessment],
           user_id: user.id
         }, {
-          $cancelKey: `create-ueberfachliche_kompetenz-${studentId}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-          expand: 'competency_id'
+          $cancelKey: `create-ueberfachliche_kompetenz-${studentId}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
         });
       }
 
-      // Kompetenzname aus allCompetencies oder API-Antwort holen
-      const competency = allCompetenciesCombined.find(c => c.id === competencyId);
-      updatedComp.competency_name_display = updatedComp.expand?.competency_id?.name || competency?.name || `Kompetenz-ID: ${competencyId} (Name fehlt)`;
+      console.log('handleQuickAdd - Updated/Created Competency:', updatedComp);
 
-      // Lokale Aktualisierung des ueberfachlich-States
       setUeberfachlich(prev => {
         const newUeberfachlich = prev.filter(u => !(u.student_id === studentId && u.competency_id === competencyId));
         return [...newUeberfachlich, updatedComp];
       });
 
-      // Explizit State persistieren und History erweitern
       const newExpandedCompetencies = new Set(expandedCompetencies);
       newExpandedCompetencies.add(competencyId);
       setExpandedCompetencies(newExpandedCompetencies);
@@ -362,17 +550,22 @@ export default function UeberfachlichTable({
       newExpandedHistories.add(historyKey);
       setExpandedHistories(newExpandedHistories);
 
-      // Preferences speichern, inklusive performanceTab
+      console.log('handleQuickAdd - Expansion States:', {
+        expandedCompetencies: Array.from(newExpandedCompetencies),
+        expandedHistories: Array.from(newExpandedHistories)
+      });
+
       const preference = await UserPreferences.findOne({
         user_id: user.id,
         class_id: activeClassId,
       });
       const preferencesData = preference?.preferences || {};
-      preferencesData.performanceTab = 'ueberfachlich';
       preferencesData.expandedCompetencies = Array.from(newExpandedCompetencies);
       preferencesData.expandedHistories = Array.from(newExpandedHistories);
       preferencesData.expandedLeistungenRows = Array.from(preferencesData.expandedLeistungenRows || []);
-      
+
+      console.log('handleQuickAdd - Saving Preferences:', preferencesData);
+
       if (preference) {
         await UserPreferences.update(preference.id, { preferences: preferencesData });
       } else {
@@ -383,18 +576,31 @@ export default function UeberfachlichTable({
         });
       }
 
-      // Clear performanceSaveFlag to ensure preferences are loaded on next render
-      localStorage.removeItem('performanceSaveFlag');
+      console.log('handleQuickAdd - Preferences Saved');
 
-      // QuickAdd-Status komplett zurücksetzen
-      setQuickAddState({ key: null, score: 0 });
-      setTab('ueberfachlich'); // Sicherstellen, dass die Ansicht auf Überfachlich bleibt
+      const updatedPreference = await UserPreferences.findOne({
+        user_id: user.id,
+        class_id: activeClassId,
+      });
+      if (updatedPreference?.preferences) {
+        setExpandedLeistungenRows(new Set(Array.isArray(updatedPreference.preferences.expandedLeistungenRows) ? updatedPreference.preferences.expandedLeistungenRows : []));
+        setExpandedUeberfachlichHistories(new Set(Array.isArray(updatedPreference.preferences.expandedUeberfachlichHistories) ? updatedPreference.preferences.expandedUeberfachlichHistories : []));
+        setExpandedUeberfachlichCompetencies(new Set(Array.isArray(updatedPreference.preferences.expandedUeberfachlichCompetencies) ? updatedPreference.preferences.expandedUeberfachlichCompetencies : []));
+        setTab(updatedPreference.preferences.performanceTab || 'diagramme');
+        console.log('handleQuickAdd - Loaded Preferences:', updatedPreference);
+      }
 
-      // Force a re-render after a slight delay to ensure UI updates
-      setTimeout(() => {
-        setExpandedCompetencies(new Set(newExpandedCompetencies));
-        setExpandedHistories(new Set(newExpandedHistories));
-      }, 0);
+      const updatedUeberfachlich = await UeberfachlichKompetenz.list({
+        filter: `class_id = '${activeClassId}'`,
+        perPage: 500,
+        expand: 'student_id,class_id,competency_id',
+        $cancelKey: `list-ueberfachliche_kompetenz-quickadd-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+      });
+      setUeberfachlich(updatedUeberfachlich || []);
+
+      console.log('handleQuickAdd - Updated Ueberfachlich:', updatedUeberfachlich);
+
+      setQuickAddState({ key: null, score: 0, notes: '' });
 
       toast({
         title: "Erfolg",
@@ -402,7 +608,7 @@ export default function UeberfachlichTable({
         variant: "success",
       });
     } catch (error) {
-      console.error("Fehler beim schnellen Hinzufügen der Bewertung:", error);
+      console.error('handleQuickAdd - Error:', error);
       toast({
         title: "Fehler",
         description: `Fehler beim schnellen Hinzufügen der Bewertung: ${error.message}`,
@@ -433,7 +639,6 @@ export default function UeberfachlichTable({
     });
   };
 
-  // Ladeprüfung vor dem Rendern
   if (isLoading) {
     return <div>Loading...</div>;
   }
@@ -529,8 +734,9 @@ export default function UeberfachlichTable({
                                   size="icon"
                                   className="w-6 h-6 text-slate-400 hover:text-white"
                                   onClick={() => {
-                                    setQuickAddState({ key: historyKey, score: 0 });
-                                    if (!isHistoryExpanded) toggleHistoryExpansion(historyKey);
+                                    const historyKey = `${student.id}-${competencyId}`;
+                                    setQuickAddState({ key: historyKey, score: 0, notes: '' });
+                                    toggleHistoryExpansion(historyKey);
                                   }}
                                   disabled={isLoading}
                                 >
@@ -551,7 +757,7 @@ export default function UeberfachlichTable({
                                     variant="ghost"
                                     size="icon"
                                     className="w-6 h-6 text-slate-400 hover:text-red-500"
-                                    onClick={() => setQuickAddState({ key: null, score: 0 })}
+                                    onClick={() => setQuickAddState({ key: null, score: 0, notes: '' })}
                                     disabled={isLoading}
                                   >
                                     <X className="w-4 h-4" />
@@ -578,6 +784,8 @@ export default function UeberfachlichTable({
                                           rating={quickAddState.score}
                                           onRatingChange={(score) => setQuickAddState(prev => ({ ...prev, score }))}
                                           size="w-3 h-3"
+                                          notes={quickAddState.notes}
+                                          onNotesChange={(newNoteText) => setQuickAddState(prev => ({ ...prev, notes: newNoteText }))}
                                         />
                                       </div>
                                     )}
@@ -588,6 +796,12 @@ export default function UeberfachlichTable({
                                           <span>{format(new Date(assessment.date), 'dd.MM.yyyy')}</span>
                                         </div>
                                         <div className="flex items-center gap-2">
+                                          <EditableNote
+                                            assessment={assessment}
+                                            studentId={student.id}
+                                            competencyId={competencyId}
+                                            onSave={handleEditNote}
+                                          />
                                           <StarRating rating={assessment.score} size="w-3 h-3" />
                                           <Button
                                             variant="ghost"

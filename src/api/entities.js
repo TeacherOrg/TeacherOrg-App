@@ -25,8 +25,8 @@ class PbEntity {
       fachbereich: '',
       daily_note: '',
       announcement: '',
-      chore: '',
-      chore_assignment: '',
+      chore: 'class_id,user_id',
+      chore_assignment: 'student_id,chore_id,class_id',
       group: 'student_ids,class_id,user_id',
       user_preference: 'user_id,class_id'
     };
@@ -34,7 +34,6 @@ class PbEntity {
     this.expandFields = expandMap[this.name] || '';
   }
 
-  // Rest des Codes unverändert
   formatValue(value) {
     if (value === null || value === undefined) return 'null';
     if (typeof value === 'string') return `'${value.replace(/'/g, "\\'")}'`;
@@ -61,6 +60,15 @@ class PbEntity {
     if (this.name === 'lesson') {
       prepared.is_hidden = typeof prepared.is_hidden === 'boolean' ? prepared.is_hidden : false;
       if (isDebug) console.log(`Debug: Set is_hidden to ${prepared.is_hidden} for lesson:`, JSON.stringify(prepared, null, 2));
+    }
+
+    // NEU: Für chore_assignment: assignment_date als ISO-Datum formatieren
+    if (this.name === 'chore_assignment' && prepared.assignment_date) {
+      const date = new Date(prepared.assignment_date);
+      prepared.assignment_date = date.toISOString().split('T')[0];
+      if (isDebug) {
+        console.log(`Debug: Normalized assignment_date to ${prepared.assignment_date} for chore_assignment`);
+      }
     }
 
     // Spezifische Handhabungen
@@ -101,6 +109,32 @@ class PbEntity {
         expandSubjectName: item.expand?.subject?.name,
         week_number: normalizedItem.week_number
       });
+    }
+
+    // NEU: Normalize chore_assignment
+    if (this.name === 'chore_assignment') {
+      normalizedItem.student_name = normalizedItem.expand?.student_id?.name || 'Unknown Student';
+      normalizedItem.chore_name = normalizedItem.expand?.chore_id?.name || normalizedItem.expand?.chore_id?.description || 'Unknown Chore';
+      normalizedItem.class_name = normalizedItem.expand?.class_id?.name || 'Unknown Class';
+      
+      // NEU: assignment_date auf ISO-Datum normalisieren
+      if (normalizedItem.assignment_date) {
+        const date = new Date(normalizedItem.assignment_date);
+        normalizedItem.assignment_date = date.toISOString().split('T')[0];
+      }
+      
+      if (isDebug) {
+        console.log('Debug: Normalizing chore_assignment', {
+          id: normalizedItem.id,
+          student_id: normalizedItem.student_id,
+          student_name: normalizedItem.student_name,
+          chore_id: normalizedItem.chore_id,
+          chore_name: normalizedItem.chore_name,
+          class_id: normalizedItem.class_id,
+          class_name: normalizedItem.class_name,
+          assignment_date: normalizedItem.assignment_date
+        });
+      }
     }
 
     ['lesson_number', 'week_number', 'school_year'].forEach(field => {

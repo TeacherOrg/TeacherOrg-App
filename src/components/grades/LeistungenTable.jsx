@@ -243,7 +243,6 @@ const LeistungenTable = ({ performances = [], students = [], subjects = [], acti
         }
       }
 
-      // Batch updates and creates
       if (updateList.length > 0) {
         await Promise.all(
           updateList.map(({ id, data }) =>
@@ -260,26 +259,21 @@ const LeistungenTable = ({ performances = [], students = [], subjects = [], acti
         });
       }
 
-      // Update expandedRows and persist preferences
       const newExpanded = new Set(expandedRows);
       newExpanded.add(groupKey);
       setExpandedRows(newExpanded);
       saveExpandedRows(newExpanded);
 
-      // Clear editing state
       setEditingGrades({});
       setEditingFachbereiche({});
       setNewFachbereichInputs({});
 
-      // Force re-render to ensure UI reflects expanded state
       setTimeout(() => {
         setExpandedRows(new Set(newExpanded));
       }, 0);
 
-      // Clear performanceSaveFlag to prevent tab switching
-      localStorage.removeItem('performanceSaveFlag');
-
       if (onDataChange) onDataChange();
+      saveExpandedRows(newExpanded); // Speichere Präferenzen
 
       toast({
         title: "Erfolg",
@@ -562,7 +556,7 @@ const LeistungenTable = ({ performances = [], students = [], subjects = [], acti
                                             ? 'text-red-400 bg-red-900/30' 
                                             : 'text-green-400 bg-green-900/30'
                                           : 'text-slate-500'
-                                      }`}>
+                                      }`} title={perf && perf.grade === 0 ? 'Nicht teilgenommen' : ''}>
                                         {perf && typeof perf.grade === 'number' ? perf.grade : '-'}
                                       </span>
                                     )}

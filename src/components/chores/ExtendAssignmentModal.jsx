@@ -1,10 +1,10 @@
-// src/components/chores/ExtendAssignmentModal.jsx
 import React, { useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Calendar, User, ClipboardList } from 'lucide-react';
+import toast from 'react-hot-toast';
 
 export default function ExtendAssignmentModal({ 
     isOpen, 
@@ -19,7 +19,8 @@ export default function ExtendAssignmentModal({
     const handleSubmit = (e) => {
         e.preventDefault();
         onConfirm(weeksToExtend);
-        setWeeksToExtend(1); // Reset for next time
+        toast.success(`Zuweisung für ${weeksToExtend} Woche${weeksToExtend !== 1 ? 'n' : ''} erfolgreich erstellt!`);
+        setWeeksToExtend(1);
     };
 
     if (!student || !chore) return null;

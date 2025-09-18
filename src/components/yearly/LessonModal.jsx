@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Save, X, Trash2, PlusCircle, BookOpen } from "lucide-react";
 import { debounce } from 'lodash';
+import pb from '@/api/pb';
 
 const WORK_FORMS = ['👤 Single', '👥 Partner', '👨‍👩‍👧‍👦 Group', '🏛️ Plenum'];
 const generateId = () => Math.random().toString(36).substr(2, 9);

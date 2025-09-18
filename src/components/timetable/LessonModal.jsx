@@ -98,6 +98,7 @@ export default function LessonModal({
 
   const originalLessonRef = useRef(null);
 
+  // FEHLENDE VARIABLE: scheduledLessonIds
   const scheduledLessonIds = useMemo(() => 
     new Set([
       ...allLessons.filter(l => l.yearly_lesson_id).map(l => l.yearly_lesson_id),
@@ -105,6 +106,22 @@ export default function LessonModal({
     ]),
     [allLessons]
   );
+
+  const scheduledLessonsForSubject = useMemo(() => {
+    if (!selectedSubject) return [];
+    return allLessons
+      .filter(l => 
+        l.subject === selectedSubject && 
+        l.week_number === currentWeek && 
+        !l.is_hidden
+      )
+      .map(l => ({
+        yearly_lesson_id: l.yearly_lesson_id,
+        day_of_week: l.day_of_week,
+        period_slot: l.period_slot,
+        isHidden: l.is_hidden
+      }));
+  }, [selectedSubject, allLessons, currentWeek]);
   
   const subjectOptions = useMemo(() => {
     if (!subjects || !activeClassId) return [];
@@ -167,35 +184,36 @@ export default function LessonModal({
   }, [allLessons, currentWeek]);
 
   // NEW: Calculate available lessons for double lesson based on position logic - RESTRICTED to next lesson only
-  const availableSecondLessons = useMemo(() => {
-    if (!formData.is_double_lesson || !selectedSubject) return [];
-    
-    const subjectYearlyLessons = allYearlyLessons
-      .filter(yl => 
-        yl.subject === selectedSubject && 
-        yl.week_number === currentWeek &&
-        // Nur primäre Doppellektionen oder nicht-geplante Lektionen
-        (!yl.is_double_lesson || (yl.is_double_lesson && yl.second_yearly_lesson_id !== null)) &&
-        !scheduledLessonIds.has(yl.id)
-      )
-      .sort((a, b) => a.lesson_number - b.lesson_number);
-
-    let currentLessonNumber = 1;
-    if (lesson?.yearly_lesson_id) {
-      const currentYearlyLesson = subjectYearlyLessons.find(yl => yl.id === lesson.yearly_lesson_id);
-      currentLessonNumber = currentYearlyLesson?.lesson_number || 1;
-    } else if (slotInfo) {
-      const firstAvailableYearlyLesson = subjectYearlyLessons.find(yl => !scheduledLessonIds.has(yl.id));
-      currentLessonNumber = firstAvailableYearlyLesson?.lesson_number || 1;
-    }
-
-    const nextLesson = subjectYearlyLessons.find(yl => 
-      yl.lesson_number === currentLessonNumber + 1 && 
+  // NEW: Calculate available lessons for double lesson based on position logic - RESTRICTED to next lesson only
+const availableSecondLessons = useMemo(() => {
+  if (!formData.is_double_lesson || !selectedSubject) return [];
+  
+  const subjectYearlyLessons = allYearlyLessons
+    .filter(yl => 
+      yl.subject === selectedSubject && 
+      yl.week_number === currentWeek &&
+      // Nur primäre Doppellektionen oder nicht-geplante Lektionen
+      (!yl.is_double_lesson || (yl.is_double_lesson && yl.second_yearly_lesson_id !== null)) &&
       !scheduledLessonIds.has(yl.id)
-    );
-    
-    return nextLesson ? [nextLesson] : [];
-  }, [formData.is_double_lesson, selectedSubject, allYearlyLessons, currentWeek, lesson, slotInfo, scheduledLessonIds]);
+    )
+    .sort((a, b) => a.lesson_number - b.lesson_number);
+
+  let currentLessonNumber = 1;
+  if (lesson?.yearly_lesson_id) {
+    const currentYearlyLesson = subjectYearlyLessons.find(yl => yl.id === lesson.yearly_lesson_id);
+    currentLessonNumber = currentYearlyLesson?.lesson_number || 1;
+  } else if (slotInfo) {
+    const firstAvailableYearlyLesson = subjectYearlyLessons.find(yl => !scheduledLessonIds.has(yl.id));
+    currentLessonNumber = firstAvailableYearlyLesson?.lesson_number || 1;
+  }
+
+  const nextLesson = subjectYearlyLessons.find(yl => 
+    yl.lesson_number === currentLessonNumber + 1 && 
+    !scheduledLessonIds.has(yl.id)
+  );
+  
+  return nextLesson ? [nextLesson] : [];
+}, [formData.is_double_lesson, selectedSubject, allYearlyLessons, currentWeek, lesson, slotInfo, scheduledLessonIds]);
 
   // Calculate available lessons for Allerlei based on position and scheduling logic
   const getAvailableAllerleiLessons = useCallback((subjectName, subjectIndex) => {
@@ -1071,13 +1089,13 @@ export default function LessonModal({
                       <SelectValue placeholder="Lektion zum Hinzufügen auswählen" />
                     </SelectTrigger>
                     <SelectContent>
-                      {availableLessons.length > 0 ? (
-                        availableLessons.map(yl => {
-                          const isScheduled = scheduledLessonsForSubject.some(sl => sl.yearly_lesson_id === yl.id && !sl.isHidden);
+                      {availableSecondLessons.length > 0 ? (
+                        availableSecondLessons.map(yl => {
+                          const isScheduled = allLessons.some(l => l.yearly_lesson_id === yl.id && l.week_number === currentWeek && !l.is_hidden);
                           return (
                             <SelectItem key={yl.id} value={yl.id}>
-                              {yl.name || `Lektion ${yl.lesson_number}`} {/* Priorisiere name, Fallback auf Nummer */}
-                              {yl.notes ? ` - ${yl.notes}` : ''} {/* Optional: Notes anhängen, wenn vorhanden */}
+                              {yl.name || `Lektion ${yl.lesson_number}`}
+                              {yl.notes ? ` - ${yl.notes}` : ''}
                               {isScheduled ? ' (bereits geplant)' : ''}
                             </SelectItem>
                           );
@@ -1089,7 +1107,7 @@ export default function LessonModal({
                   </Select>
                   {availableSecondLessons.length === 0 && (
                     <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                      Alle nachfolgenden Lektionen für {subjects.find(s => s.id === selectedSubject)?.name} sind bereits geplant oder nicht verfügbar.  {/* Geändert: Name aus ID */}
+                      Alle nachfolgenden Lektionen für {subjects.find(s => s.id === selectedSubject)?.name} sind bereits geplant oder nicht verfügbar.
                     </p>
                   )}
                 </div>

@@ -1,4 +1,3 @@
-// src/components/chores/ChoreColumn.jsx
 import React from 'react';
 import { Droppable, Draggable } from '@hello-pangea/dnd';
 import { Button } from '@/components/ui/button';
