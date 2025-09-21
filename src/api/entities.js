@@ -59,7 +59,9 @@ class PbEntity {
     // Ensure is_hidden is always a boolean for lesson, default to false
     if (this.name === 'lesson') {
       prepared.is_hidden = typeof prepared.is_hidden === 'boolean' ? prepared.is_hidden : false;
-      if (isDebug) console.log(`Debug: Set is_hidden to ${prepared.is_hidden} for lesson:`, JSON.stringify(prepared, null, 2));
+      if (isDebug) {
+        console.log(`Debug: Set is_hidden to ${prepared.is_hidden} for lesson:`, JSON.stringify(prepared, null, 2));
+      }
     }
 
     // NEU: Für chore_assignment: assignment_date als ISO-Datum formatieren
@@ -71,7 +73,7 @@ class PbEntity {
       }
     }
 
-    // Spezifische Handhabungen
+    // Spezifische Handhabungen für user_preference
     if (this.name === 'user_preference' && prepared.preferences && typeof prepared.preferences === 'string') {
       try {
         prepared.preferences = JSON.parse(prepared.preferences);
@@ -84,6 +86,9 @@ class PbEntity {
     // Entferne jegliche denormalisierten Felder
     const denormFields = ['user_name', 'class_name', 'subject_name', 'topic_name', 'yearly_lesson_name', 'second_yearly_lesson_name', 'competency_name_display'];
     denormFields.forEach(field => delete prepared[field]);
+
+    // ✅ ENTFERNE $cancelKey aus den Daten (das ist ein Parameter, kein Feld!)
+    delete prepared.$cancelKey;
 
     if (isDebug) console.log(`Debug: Final prepared payload for ${this.name}:`, JSON.stringify(prepared, null, 2));
     return prepared;
@@ -207,12 +212,15 @@ class PbEntity {
   }
 
   async list(query = {}) {
+    // ✅ $cancelKey separat handhaben - NICHT im Filter!
+    const cancelKey = query.$cancelKey || `list-${this.name}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     const params = {
-      filter: this.buildFilter(query),
+      filter: this.buildFilter({ ...query, $cancelKey: undefined }), // $cancelKey entfernen
       perPage: 500,
       expand: this.expandFields,
-      $cancelKey: `list-${this.name}-${Date.now()}`
+      $cancelKey: cancelKey // Als separater Parameter
     };
+    
     try {
       const currentUser = pb.authStore.model;
       if (isDebug) {
@@ -245,6 +253,12 @@ class PbEntity {
       const normalizedItems = validItems.map(item => this.normalizeData(item)).filter(item => item !== null);
       return normalizedItems;
     } catch (error) {
+      // ✅ Bessere Autocancellation-Behandlung auch hier
+      if (error.message?.includes('autocancelled') && isDebug) {
+        console.warn(`Debug: List request for ${this.name} was autocancelled`);
+        return []; // Leere Liste zurückgeben statt Fehler werfen
+      }
+      
       console.error(`Error listing ${this.name}s:`, error.message, error.data, error.stack);
       return [];
     }
@@ -259,7 +273,9 @@ class PbEntity {
   }
 
   async findOne(query = {}) {
-    const results = await this.find(query);
+    // ✅ $cancelKey separat handhaben
+    const cancelKey = query.$cancelKey || `findOne-${this.name}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    const results = await this.find({ ...query, $cancelKey: cancelKey });
     return results[0] || null;
   }
 
@@ -267,7 +283,7 @@ class PbEntity {
     try {
       const params = {
         expand: this.expandFields,
-        $cancelKey: `getOne-${this.name}-${id}-${Date.now()}`
+        $cancelKey: `getOne-${this.name}-${id}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
       };
       const item = await this.collection.getOne(id, params);
       return this.normalizeData(item);
@@ -279,24 +295,42 @@ class PbEntity {
     }
   }
 
-  async create(data) {
-    console.log('Debug: Raw create payload before sending:', JSON.stringify(data, null, 2));
-    const preparedData = this.prepareForPersist(data);
-    console.log('Debug: Prepared create for lesson:', JSON.stringify(preparedData, null, 2));
+  async create(data, options = {}) {
+    // ✅ $cancelKey aus data entfernen und separat handhaben
+    const cancelKey = options.$cancelKey || `create-${this.name}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    const cleanData = { ...data };
+    delete cleanData.$cancelKey; // Falls jemand es in data gesteckt hat
+    
+    const preparedData = this.prepareForPersist(cleanData);
+    
+    if (isDebug) {
+      console.log(`Debug: Raw create payload for ${this.name}:`, JSON.stringify(cleanData, null, 2));
+      console.log(`Debug: Prepared create for ${this.name}:`, JSON.stringify(preparedData, null, 2));
+    }
+    
     try {
-      console.log('Debug: Using collectionName:', this.collectionName);
-      const response = await pb.collection(this.collectionName).create(preparedData);
-      console.log('Debug: Create response:', JSON.stringify(response, null, 2));
+      console.log(`Debug: Using collectionName:`, this.collectionName);
+      const response = await pb.collection(this.collectionName).create(preparedData, { $cancelKey: cancelKey });
+      if (isDebug) console.log(`Debug: Create response for ${this.name}:`, JSON.stringify(response, null, 2));
       return response;
     } catch (error) {
-      console.error('Error creating in lesson:', {
-        message: error.message,
-        data: error.data ? JSON.stringify(error.data, null, 2) : error,
-        requestData: JSON.stringify(preparedData, null, 2),
-        stack: error.stack
-      });
-      // Fallback für Validierungsfehler
-      if (error.data?.data) {
+      if (isDebug) {
+        console.error(`Error creating in ${this.name}:`, {
+          message: error.message,
+          data: error.data ? JSON.stringify(error.data, null, 2) : error,
+          requestData: JSON.stringify(preparedData, null, 2),
+          stack: error.stack
+        });
+      }
+      
+      // ✅ Bessere Fehlerbehandlung: Unterscheide zwischen Autocancellation und Validierungsfehlern
+      if (error.message?.includes('autocancelled')) {
+        if (isDebug) console.warn(`Create request for ${this.name} was autocancelled`);
+        throw error; // Weiterwerfen, damit Retry-Logik im aufrufenden Code greifen kann
+      }
+      
+      // Fallback für Validierungsfehler (nur für lesson-spezifische Felder)
+      if (this.name === 'lesson' && error.data?.data) {
         const validationErrors = error.data.data;
         const fallbackData = { ...preparedData };
         
@@ -316,49 +350,94 @@ class PbEntity {
         });
         
         try {
-          const fallbackResponse = await pb.collection(this.collectionName).create(fallbackData);
-          console.log('Debug: Fallback create response:', JSON.stringify(fallbackResponse, null, 2));
+          const fallbackResponse = await pb.collection(this.collectionName).create(fallbackData, { $cancelKey: cancelKey });
+          if (isDebug) console.log(`Debug: Fallback create response for ${this.name}:`, JSON.stringify(fallbackResponse, null, 2));
           return fallbackResponse;
         } catch (fallbackError) {
-          console.error('Error in fallback create:', {
+          if (isDebug) console.error(`Error in fallback create for ${this.name}:`, {
             message: fallbackError.message,
             data: fallbackError.data ? JSON.stringify(fallbackError.data, null, 2) : fallbackError,
             stack: fallbackError.stack
           });
           import('react-hot-toast').then(({ toast }) => {
-            toast.error('Fehler beim Erstellen der Lektion. Bitte versuchen Sie es erneut.');
+            toast.error(`Fehler beim Erstellen von ${this.name}. Bitte versuchen Sie es erneut.`);
           });
           throw fallbackError;
         }
       }
+      
+      // Allgemeine Fehlerbehandlung
       import('react-hot-toast').then(({ toast }) => {
         const message = error.message.includes('Missing or invalid collection context')
-          ? 'Fehler beim Erstellen der Lektion: Ungültige Sammlung. Bitte überprüfen Sie die Konfiguration.'
-          : 'Fehler beim Erstellen der Lektion. Bitte versuchen Sie es erneut.';
+          ? `Fehler beim Erstellen von ${this.name}: Ungültige Sammlung. Bitte überprüfen Sie die Konfiguration.`
+          : `Fehler beim Erstellen von ${this.name}. Bitte versuchen Sie es erneut.`;
         toast.error(message);
       });
       throw error;
     }
   }
 
-  async update(id, updates) {
-    const params = { $cancelKey: `update-${this.name}-${id}-${Date.now()}` };
+  async update(id, updates, options = {}) {
+    const cancelKey = options.$cancelKey || `update-${this.name}-${id}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    const params = { $cancelKey: cancelKey };
+    
+    // ✅ $cancelKey aus updates entfernen
+    const cleanUpdates = { ...updates };
+    delete cleanUpdates.$cancelKey;
+    
+    let preparedUpdates;
+    
     try {
-      const preparedUpdates = this.prepareForPersist(updates);
+      preparedUpdates = this.prepareForPersist(cleanUpdates);
       if (isDebug) console.log(`Debug: Prepared updates for ${this.name}:`, preparedUpdates);
       if (!preparedUpdates) {
         throw new Error(`Invalid update data for ${this.name}`);
       }
+      
+      const currentUser = pb.authStore.model;
+      if (currentUser && isDebug) {
+        console.log(`Debug: Updating ${this.name} ${id} for user ${currentUser.id}`);
+      }
+      
       const updated = await this.collection.update(id, preparedUpdates, params);
       const fullUpdated = await this.collection.getOne(id, { expand: this.expandFields });
       return this.normalizeData(fullUpdated);
     } catch (error) {
-      console.error(`Error updating in ${this.name}:`, {
-        message: error.message,
-        data: error.data,
-        stack: error.stack,
-        requestData: JSON.stringify(updates, null, 2)
-      });
+      // ✅ BESSERE FEHLERBEHANDLUNG für Autocancellation
+      if (error.message?.includes('autocancelled') && preparedUpdates) {
+        if (isDebug) {
+          console.warn(`Debug: Update request for ${this.name} ${id} was autocancelled - likely due to parallel request`);
+        }
+        // ✅ Retry-Logik nur für user_preference (KORRIGIERT)
+        if (this.name === 'user_preference') {
+          return new Promise((resolve, reject) => {
+            setTimeout(async () => {
+              try {
+                const retryParams = { 
+                  $cancelKey: `retry-update-${this.name}-${id}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+                };
+                const updated = await this.collection.update(id, preparedUpdates, retryParams);
+                const fullUpdated = await this.collection.getOne(id, { expand: this.expandFields });
+                resolve(this.normalizeData(fullUpdated));
+              } catch (retryError) {
+                if (isDebug) console.error(`Retry failed for ${this.name} ${id}:`, retryError);
+                reject(error); // Original error weiterwerfen
+              }
+            }, 150); // 150ms Wartezeit
+          });
+        }
+        throw error; // Für andere Entities normal weiterwerfen
+      }
+      
+      if (isDebug) {
+        console.error(`Error updating in ${this.name}:`, {
+          message: error.message,
+          data: error.data,
+          stack: error.stack,
+          requestData: JSON.stringify(updates, null, 2)
+        });
+      }
+      
       import('react-hot-toast').then(({ toast }) => {
         toast.error(`Fehler beim Aktualisieren von ${this.name}. Bitte versuchen Sie es erneut.`);
       });
@@ -366,9 +445,10 @@ class PbEntity {
     }
   }
 
-  async delete(id) {
+  async delete(id, options = {}) {
+    const cancelKey = options.$cancelKey || `delete-${this.name}-${id}-${Date.now()}`;
+    const params = { $cancelKey: cancelKey };
     try {
-      const params = { $cancelKey: `delete-${this.name}-${id}-${Date.now()}` };
       await this.collection.delete(id, params);
       return true;
     } catch (error) {
@@ -417,6 +497,9 @@ class PbEntity {
 
     if (Object.keys(query).length === 0) return '';
     let filters = Object.entries(query).map(([key, value]) => {
+      // ✅ $cancelKey ignorieren - das ist kein Filter-Feld!
+      if (key === '$cancelKey') return null;
+      
       if (typeof value === 'object' && value !== null) {
         if (value.$gt) return `${key} > ${this.formatValue(value.$gt)}`;
         if (value.$lt) return `${key} < ${this.formatValue(value.$lt)}`;
@@ -424,7 +507,7 @@ class PbEntity {
         if (value.$eq) return `${key} = ${this.formatValue(value.$eq)}`;
       }
       return `${key} = ${this.formatValue(value)}`;
-    });
+    }).filter(Boolean); // Null-Werte entfernen
 
     if (this.name === 'ueberfachliche_kompetenz' && query.competency_id) {
       filters.push(`competency_id = '${query.competency_id}'`);

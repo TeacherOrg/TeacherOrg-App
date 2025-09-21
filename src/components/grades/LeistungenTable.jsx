@@ -63,14 +63,25 @@ const LeistungenTable = ({ performances = [], students = [], subjects = [], acti
         });
         const preferencesData = preference?.preferences || {};
         preferencesData.expandedLeistungenRows = Array.from(rows);
-        preferencesData.performanceTab = 'leistungen'; // Ensure tab remains on Leistungen
+        
+        // ENTFERNE: preferencesData.performanceTab = 'leistungen'; // Das überschreibt diagramme!
+        
+        // HARTER OVERRIDE: Stelle sicher, dass Tab diagramme bleibt
+        if (preferencesData.performanceTab !== 'diagramme') {
+          preferencesData.performanceTab = 'diagramme';
+          console.log('LeistungenTable: Forced performanceTab to diagramme');
+        }
+        
         if (preference) {
           await UserPreferences.update(preference.id, { preferences: preferencesData });
         } else {
           await UserPreferences.create({
             user_id: user.id,
             class_id: activeClassId,
-            preferences: preferencesData,
+            preferences: {
+              ...preferencesData,
+              performanceTab: 'diagramme' // HARTER Default
+            },
           });
         }
       } catch (error) {

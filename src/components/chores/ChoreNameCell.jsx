@@ -1,4 +1,5 @@
 import React, { useMemo } from 'react';
+import { motion } from 'framer-motion';
 import { Droppable, Draggable } from '@hello-pangea/dnd';
 import { Button } from '@/components/ui/button';
 import { Edit, Users, Calendar, Plus } from 'lucide-react';
@@ -35,9 +36,14 @@ const ChoreNameCell = ({
 
   const droppableId = `chore-week-${chore.id}`;
   const isFull = weeklyAssignedStudents.length >= chore.required_students;
+  
+  const displayName = useMemo(() => {
+    if (chore.name && chore.name.trim()) return chore.name.trim();
+    return 'Neues Ämtchen';
+  }, [chore.name]);
 
   return (
-    <td className="p-3 bg-gradient-to-b from-gray-50/70 to-white dark:from-slate-800/70 dark:to-slate-900 border-r border-gray-200 dark:border-slate-700 min-w-[240px] relative">
+    <td className="p-3 bg-gradient-to-b from-gray-50/70 to-white dark:from-slate-800/70 dark:to-slate-900 min-w-[420px] max-w-[420px] relative">
       <Droppable droppableId={droppableId} isDropDisabled={isFull}>
         {(provided, snapshot) => (
           <div
@@ -65,15 +71,12 @@ const ChoreNameCell = ({
                     <span className="text-lg">{chore.icon}</span>
                   </div>
                 )}
-                <div>
-                  <h4 className="font-semibold text-gray-800 dark:text-white text-sm leading-tight">
-                    {chore.name}
+                <div className="flex-1 min-w-0">
+                  <h4 className={`font-semibold text-gray-800 dark:text-white text-sm leading-tight break-words max-w-full ${
+                    displayName.length > 25 ? 'text-sm leading-tight' : 'text-base'
+                  }`}>
+                    {displayName}
                   </h4>
-                  {chore.description && (
-                    <p className="text-xs text-gray-500 dark:text-slate-400 line-clamp-1">
-                      {chore.description}
-                    </p>
-                  )}
                 </div>
               </div>
               

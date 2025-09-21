@@ -63,6 +63,7 @@ export default function GradesPage() {
     } else {
       await loadData(); // Vollständiger Reload, falls nicht spezifiziert
     }
+    // KEIN Tab-Set hier!
   }, [loadData]);
 
   const studentsForActiveClass = students.filter(s => s.class_id === activeClassId);

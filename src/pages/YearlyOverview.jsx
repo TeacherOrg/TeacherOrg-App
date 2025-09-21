@@ -11,6 +11,8 @@ import LessonModal from "../components/yearly/LessonModal";
 import YearlyGrid from "../components/yearly/YearlyGrid";
 import TopicManager from "../components/yearly/TopicManager";
 import TopicLessonsModal from "../components/yearly/TopicLessonsModal";
+import QuickActionsFloating from "../components/yearly/QuickActionsFloating";
+import QuickActionsOverlay from "../components/yearly/QuickActionsOverlay";
 import { QueryClient, QueryClientProvider, useQuery, useQueryClient } from '@tanstack/react-query';
 import debounce from 'lodash/debounce';
 import YearLessonOverlay from "../components/yearly/YearLessonOverlay";
@@ -21,6 +23,41 @@ import pb from '@/api/pb';
 const ACADEMIC_WEEKS = 52;
 
 const queryClient = new QueryClient();
+
+// SAFE STRING HELPER - gleiche Funktion wie in TopicLessonsModal
+const ultraSafeString = (value) => {
+  try {
+    if (value === null || value === undefined) return '';
+    if (typeof value === 'string') return value;
+    if (typeof value === 'number') return value.toString();
+    if (typeof value === 'boolean') return value ? 'true' : 'false';
+    if (typeof value === 'object') {
+      if (React.isValidElement(value)) return '';
+      if (Array.isArray(value)) return value.length.toString();
+      if (value.title) return ultraSafeString(value.title);
+      if (value.name) return ultraSafeString(value.name);
+      return '[Objekt]';
+    }
+    return String(value);
+  } catch (e) {
+    console.warn('ultraSafeString error:', e);
+    return '';
+  }
+};
+
+// SAFE SORT HELPER
+const safeSortByName = (items) => {
+  try {
+    return items.filter(item => item && (item.name || item.title)).sort((a, b) => {
+      const nameA = ultraSafeString(a.name || a.title || '');
+      const nameB = ultraSafeString(b.name || b.title || '');
+      return nameA.localeCompare(nameB);
+    });
+  } catch (e) {
+    console.error('safeSortByName error:', e);
+    return items || [];
+  }
+};
 
 export default function YearlyOverviewPage() {
   return <QueryClientProvider client={queryClient}><InnerYearlyOverviewPage /></QueryClientProvider>;
@@ -53,6 +90,10 @@ function InnerYearlyOverviewPage() {
 
   const [currentView, setCurrentView] = useState('Jahr');
   const [currentYear, setCurrentYear] = useState(new Date().getFullYear());
+
+  // Neue States für Quick Actions & Density
+  const [showQuickActions, setShowQuickActions] = useState(false);
+  const [densityMode, setDensityMode] = useState('standard'); // 'compact' | 'standard' | 'spacious'
 
   const [hoverLesson, setHoverLesson] = useState(null);
   const [hoverPosition, setHoverPosition] = useState({ top: 0, left: 0 });
@@ -111,7 +152,13 @@ function InnerYearlyOverviewPage() {
     if (data) {
       console.log('Debug: Loaded yearlyLessons', data.lessonsData);
       setYearlyLessons(data.lessonsData.map(l => ({ ...l, lesson_number: Number(l.lesson_number) })) || []);
-      setTopics(data.topicsData.sort((a, b) => a.title.localeCompare(b.title)) || []);
+      
+      // FIXED: SAFE SORTING FÜR TOPICS
+      console.log('Debug: Raw topicsData:', data.topicsData);
+      const safeTopics = safeSortByName(data.topicsData || []);
+      console.log('Debug: Safe topics after sorting:', safeTopics);
+      setTopics(safeTopics);
+      
       setSubjects(data.subjectsData || []);
       setClasses(data.classesData || []);
       setHolidays(data.holidaysData || []);
@@ -132,6 +179,20 @@ function InnerYearlyOverviewPage() {
     };
   }, [currentYear, queryClientLocal]);
 
+  useEffect(() => {
+    const handleResize = () => {
+      // Toggle Quick Actions basierend auf Bildschirmgröße
+      if (window.innerWidth >= 1024) {
+        setShowQuickActions(false);
+      }
+    };
+
+    window.addEventListener('resize', handleResize);
+    handleResize(); // Initial call
+    
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
   const handleViewChange = (view) => {
     setCurrentView(view);
     if (view === 'Woche') {
@@ -140,6 +201,26 @@ function InnerYearlyOverviewPage() {
   };
 
   const topicsById = useMemo(() => new Map(topics.map(t => [t.id, t])), [topics]);
+
+  // Memo für gefilterte Topics
+  const filteredTopics = useMemo(() => {
+    return topics.filter(topic => topic.subject === activeSubjectName);
+  }, [topics, activeSubjectName]);
+
+  const subjectsForClass = useMemo(() => {
+    if (!activeClassId) return [];
+    return subjects.filter(s => s.class_id === activeClassId);
+  }, [subjects, activeClassId]);
+
+  const lessonsForYear = useMemo(() => {
+    return yearlyLessons.filter(lesson => {
+      const lessonYear = Number(lesson.school_year);
+      if (!lessonYear) {
+        return currentYear === new Date().getFullYear();
+      }
+      return lessonYear === currentYear;
+    });
+  }, [yearlyLessons, currentYear]);
 
   const handleLessonClick = useCallback(async (lesson, slot) => {
     if (activeTopicId) {
@@ -545,25 +626,10 @@ function InnerYearlyOverviewPage() {
 
   const activeClassName = useMemo(() => classes.find(c => c.id === activeClassId)?.name || '', [classes, activeClassId]);
 
-  const subjectsForClass = useMemo(() => {
-    if (!activeClassId) return [];
-    return subjects.filter(s => s.class_id === activeClassId);
-  }, [subjects, activeClassId]);
-
-  const lessonsForYear = useMemo(() => {
-    return yearlyLessons.filter(lesson => {
-      const lessonYear = Number(lesson.school_year);
-      if (!lessonYear) {
-        return currentYear === new Date().getFullYear();
-      }
-      return lessonYear === currentYear;
-    });
-  }, [yearlyLessons, currentYear]);
-
   return (
     <div className="h-screen flex flex-col bg-slate-50 dark:bg-slate-900 overflow-hidden">
       <div className="flex-shrink-0 z-30 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-slate-200 dark:border-slate-700 shadow-sm sticky top-0">
-        <div className="p-6 pb-4 max-w-screen-2xl mx-auto">
+        <div className="p-6 pb-4 max-w-none mx-auto">
           <motion.div
             initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -610,17 +676,36 @@ function InnerYearlyOverviewPage() {
             >
               <ChevronsRight className="w-4 h-4" />
             </Button>
+
+            {/* Density Control */}
+            <div className="flex items-center gap-2 ml-4">
+              <label className="text-sm text-gray-600 dark:text-slate-300">Dichte:</label>
+              <div className="flex gap-1 bg-gray-100 dark:bg-slate-700 rounded-lg p-1">
+                {['compact', 'standard', 'spacious'].map((mode) => (
+                  <Button
+                    key={mode}
+                    variant={densityMode === mode ? 'default' : 'ghost'}
+                    size="sm"
+                    onClick={() => setDensityMode(mode)}
+                    className={`px-2 py-1 text-xs ${densityMode === mode ? 'bg-blue-600 text-white' : 'text-gray-600 dark:text-slate-300'}`}
+                  >
+                    {mode === 'compact' ? 'K' : mode === 'standard' ? 'S' : 'L'}
+                  </Button>
+                ))}
+              </div>
+            </div>
           </motion.div>
         </div>
       </div>
 
-      <div className="flex-1 p-6 pt-2 max-w-screen-2xl mx-auto w-full flex gap-8 bg-slate-50 dark:bg-slate-900">
-        <div className="flex-[3] overflow-auto relative">
+      <div className="flex-1 p-6 pt-2 w-full bg-slate-50 dark:bg-slate-900 yearly-main-grid">
+        {/* Table Container */}
+        <div className="flex-1 overflow-hidden relative">
           <motion.div
             initial={{ opacity: 0, x: 20 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ delay: 0.2 }}
-            className="bg-white dark:bg-slate-800 backdrop-blur-xl rounded-2xl shadow-xl border border-slate-200 dark:border-slate-700 h-full"
+            className="bg-white dark:bg-slate-800 backdrop-blur-xl rounded-2xl shadow-xl border border-slate-200 dark:border-slate-700 h-full yearly-table-container"
           >
             {isLoading ? (
               <div className="flex items-center justify-center h-full">
@@ -645,6 +730,7 @@ function InnerYearlyOverviewPage() {
                     onShowHover={handleShowHover}
                     onHideHover={handleHideHover}
                     allYearlyLessons={yearlyLessons}
+                    densityMode={densityMode}
                   />
                 )}
               </>
@@ -652,25 +738,64 @@ function InnerYearlyOverviewPage() {
           </motion.div>
         </div>
 
-        <div className="flex-1 w-80 flex-shrink-0">
-          <div className="sticky top-6">
-            <TopicManager
-              topics={topics}
-              subjects={subjects}
-              classes={classes}
-              activeClassId={activeClassId}
-              onSelectClass={setActiveClassId}
-              activeSubjectName={activeSubjectName}
-              onSelectSubject={setActiveSubjectName}
-              activeTopicId={activeTopicId}
-              onSelectTopic={setActiveTopicId}
-              onAddTopic={handleAddTopic}
-              onEditTopic={handleEditTopic}
-              yearlyLessons={lessonsForYear}
-            />
+        {/* Intelligente Sidebar - VERSTECKT bei sehr kleinen Screens */}
+        {window.innerWidth >= 768 ? ( // ← Sidebar nur ab 768px
+          <div className="yearly-sidebar flex-shrink-0">
+            <div className="sticky top-6 max-h-[70vh] overflow-hidden flex flex-col">
+              <TopicManager
+                topics={topics}
+                subjects={subjects}
+                classes={classes}
+                activeClassId={activeClassId}
+                onSelectClass={setActiveClassId}
+                activeSubjectName={activeSubjectName}
+                onSelectSubject={setActiveSubjectName}
+                activeTopicId={activeTopicId}
+                onSelectTopic={setActiveTopicId}
+                onAddTopic={handleAddTopic}
+                onEditTopic={handleEditTopic}
+                yearlyLessons={lessonsForYear}
+                isCompact={window.innerWidth < 1024}
+              />
+            </div>
           </div>
-        </div>
+        ) : null} {/* ← Bei < 768px: komplett ausblenden */}
       </div>
+
+      {/* Floating Quick Actions (nur auf Mobile) */}
+      {window.innerWidth < 768 && ( // ← Nur bei sehr kleinen Screens
+        <div className="floating-quick-actions">
+          <QuickActionsFloating
+            activeClassId={activeClassId}
+            activeSubjectName={activeSubjectName}
+            activeTopicId={activeTopicId}
+            classes={classes}
+            subjects={subjectsForClass}
+            topics={filteredTopics}
+            onSelectClass={setActiveClassId}
+            onSelectSubject={setActiveSubjectName}
+            onSelectTopic={setActiveTopicId}
+            onAddTopic={handleAddTopic}
+            onToggleQuickActions={() => setShowQuickActions(!showQuickActions)}
+          />
+        </div>
+      )}
+
+      {/* Quick Actions Overlay */}
+      <QuickActionsOverlay
+        isOpen={showQuickActions}
+        onClose={() => setShowQuickActions(false)}
+        activeClassId={activeClassId}
+        activeSubjectName={activeSubjectName}
+        activeTopicId={activeTopicId}
+        classes={classes}
+        subjects={subjectsForClass}
+        topics={filteredTopics}
+        onSelectClass={setActiveClassId}
+        onSelectSubject={setActiveSubjectName}
+        onSelectTopic={setActiveTopicId}
+        onAddTopic={handleAddTopic}
+      />
 
       {hoverLesson && (
         <YearLessonOverlay

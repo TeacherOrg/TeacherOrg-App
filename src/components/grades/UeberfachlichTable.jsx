@@ -336,7 +336,17 @@ export default function UeberfachlichTable({
         expand: 'student_id,class_id,competency_id',
         $cancelKey: `list-ueberfachliche_kompetenz-postdelete-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
       });
-      onDataChange?.(updatedUeberfachlich);
+
+      // NEU: Nach dem Löschen - setze Expansion zurück
+      setExpandedCompetencies(new Set());
+
+      const preservedStates = {
+        expandedUeberfachlichHistories: Array.from(expandedHistories || []),
+        expandedUeberfachlichCompetencies: Array.from([]), // Gelöschte Kompetenz wird nicht erweitert
+        performanceTab: 'ueberfachlich'
+      };
+
+      onDataChange?.(updatedUeberfachlich, preservedStates);
 
       const user = User.current();
       if (user && activeClassId) {
@@ -355,7 +365,7 @@ export default function UeberfachlichTable({
           });
         }
       }
-      setExpandedCompetencies(new Set());
+
       toast({
         title: "Erfolg",
         description: "Kompetenz und Bewertungen gelöscht",
@@ -405,7 +415,16 @@ export default function UeberfachlichTable({
           });
         }
       }
-      onDataChange?.();
+
+      // NEU: Behalte aktuelle Expansion-States
+      const preservedStates = {
+        expandedUeberfachlichHistories: Array.from(expandedHistories || []),
+        expandedUeberfachlichCompetencies: Array.from(expandedCompetencies || []),
+        performanceTab: 'ueberfachlich'
+      };
+
+      onDataChange?.(null, preservedStates);
+
       toast({
         title: "Erfolg",
         description: "Bewertung erfolgreich gelöscht",
@@ -445,26 +464,26 @@ export default function UeberfachlichTable({
         return [...newUeberfachlich, updatedComp];
       });
 
+      // NEU: Erweitere Kompetenz und History
+      const newExpandedCompetencies = new Set(expandedCompetencies);
+      newExpandedCompetencies.add(competencyId);
+      setExpandedCompetencies(newExpandedCompetencies);
+
+      const newExpandedHistories = new Set(expandedHistories);
+      const historyKey = `${studentId}-${competencyId}`;
+      newExpandedHistories.add(historyKey);
+      setExpandedHistories(newExpandedHistories);
+
       const user = User.current();
       if (user && activeClassId) {
-        const newExpandedCompetencies = new Set(expandedCompetencies);
-        newExpandedCompetencies.add(competencyId);
-        setExpandedCompetencies(newExpandedCompetencies);
-
-        const newExpandedHistories = new Set(expandedHistories);
-        const historyKey = `${studentId}-${competencyId}`;
-        newExpandedHistories.add(historyKey);
-        setExpandedHistories(newExpandedHistories);
-
         const preference = await UserPreferences.findOne({
           user_id: user.id,
           class_id: activeClassId,
         });
         const preferencesData = preference?.preferences || {};
-        preferencesData.performanceTab = 'ueberfachlich';
         preferencesData.expandedCompetencies = Array.from(newExpandedCompetencies);
         preferencesData.expandedHistories = Array.from(newExpandedHistories);
-        preferencesData.expandedLeistungenRows = Array.from(preferencesData.expandedLeistungenRows || []);
+        preferencesData.performanceTab = 'ueberfachlich';
 
         if (preference) {
           await UserPreferences.update(preference.id, { preferences: preferencesData });
@@ -477,8 +496,14 @@ export default function UeberfachlichTable({
         }
       }
 
-      setTab('ueberfachlich');
-      onDataChange?.();
+      // NEU: Speichere preserved states
+      const preservedStates = {
+        expandedUeberfachlichHistories: Array.from(newExpandedHistories),
+        expandedUeberfachlichCompetencies: Array.from(newExpandedCompetencies),
+        performanceTab: 'ueberfachlich'
+      };
+
+      onDataChange?.(null, preservedStates);
 
       toast({
         title: "Erfolg",
@@ -562,7 +587,7 @@ export default function UeberfachlichTable({
       const preferencesData = preference?.preferences || {};
       preferencesData.expandedCompetencies = Array.from(newExpandedCompetencies);
       preferencesData.expandedHistories = Array.from(newExpandedHistories);
-      preferencesData.expandedLeistungenRows = Array.from(preferencesData.expandedLeistungenRows || []);
+      preferencesData.performanceTab = 'ueberfachlich';
 
       console.log('handleQuickAdd - Saving Preferences:', preferencesData);
 
@@ -578,18 +603,6 @@ export default function UeberfachlichTable({
 
       console.log('handleQuickAdd - Preferences Saved');
 
-      const updatedPreference = await UserPreferences.findOne({
-        user_id: user.id,
-        class_id: activeClassId,
-      });
-      if (updatedPreference?.preferences) {
-        setExpandedLeistungenRows(new Set(Array.isArray(updatedPreference.preferences.expandedLeistungenRows) ? updatedPreference.preferences.expandedLeistungenRows : []));
-        setExpandedUeberfachlichHistories(new Set(Array.isArray(updatedPreference.preferences.expandedUeberfachlichHistories) ? updatedPreference.preferences.expandedUeberfachlichHistories : []));
-        setExpandedUeberfachlichCompetencies(new Set(Array.isArray(updatedPreference.preferences.expandedUeberfachlichCompetencies) ? updatedPreference.preferences.expandedUeberfachlichCompetencies : []));
-        setTab(updatedPreference.preferences.performanceTab || 'diagramme');
-        console.log('handleQuickAdd - Loaded Preferences:', updatedPreference);
-      }
-
       const updatedUeberfachlich = await UeberfachlichKompetenz.list({
         filter: `class_id = '${activeClassId}'`,
         perPage: 500,
@@ -600,6 +613,13 @@ export default function UeberfachlichTable({
 
       console.log('handleQuickAdd - Updated Ueberfachlich:', updatedUeberfachlich);
 
+      // NEU: Speichere Expansion-States vor onDataChange
+      const preservedStates = {
+        expandedUeberfachlichHistories: Array.from(newExpandedHistories),
+        expandedUeberfachlichCompetencies: Array.from(newExpandedCompetencies),
+        performanceTab: 'ueberfachlich'
+      };
+
       setQuickAddState({ key: null, score: 0, notes: '' });
 
       toast({
@@ -607,6 +627,10 @@ export default function UeberfachlichTable({
         description: "Bewertung erfolgreich hinzugefügt",
         variant: "success",
       });
+
+      // NEU: Übergib preservedStates an onDataChange
+      onDataChange?.(updatedUeberfachlich, preservedStates);
+
     } catch (error) {
       console.error('handleQuickAdd - Error:', error);
       toast({

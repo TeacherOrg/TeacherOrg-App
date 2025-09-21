@@ -1,17 +1,35 @@
 import { motion } from 'framer-motion';
 import { Plus } from 'lucide-react';
-import { adjustColor } from '@/utils/colorUtils';
+import { 
+  getTextColor, 
+  createGradient, 
+  adjustColor 
+} from '@/utils/colorUtils';
 
+/**
+ * YearLessonCell - Einzelne Lektionszelle im Jahresplan
+ * @param {Object} lesson - Lektionsdaten
+ * @param {Function} onClick - Click-Handler
+ * @param {string} activeTopicId - Aktives Thema ID
+ * @param {string} defaultColor - Standard-Farbe
+ * @param {boolean} isDoubleLesson - Doppelstunde?
+ * @param {boolean} isTopicBlock - Themenblock?
+ * @param {Function} onMouseEnter - Hover-Enter Handler
+ * @param {Function} onMouseLeave - Hover-Leave Handler
+ * @param {Array} allYearlyLessons - Alle Jahreslektions
+ * @param {string} densityMode - Dichte-Modus ('compact'|'standard'|'spacious')
+ */
 export default function YearLessonCell({ 
   lesson, 
   onClick, 
   activeTopicId, 
   defaultColor = '#3b82f6', 
-  isDoubleLesson = false, 
+  isDoubleLesson = false,
+  isTopicBlock = false,
   onMouseEnter = () => {}, 
   onMouseLeave = () => {}, 
   allYearlyLessons = [],
-  showCopyIndicator = false // ← HINZUFÜGEN
+  densityMode = 'standard'
 }) {
   const handleClick = () => {
     onClick(lesson, !lesson ? {
@@ -21,48 +39,132 @@ export default function YearLessonCell({
     } : null);
   };
 
+  // MODERNE DENSITY-KONFIGURATION
+  const densityConfig = {
+    compact: { 
+      padding: '0.25rem', 
+      fontSize: '0.625rem', 
+      iconSize: '3', 
+      lineHeight: '1',
+      maxTextLength: 8
+    },
+    standard: { 
+      padding: '0.5rem', 
+      fontSize: '0.75rem', 
+      iconSize: '4', 
+      lineHeight: '1.2',
+      maxTextLength: 12
+    },
+    spacious: { 
+      padding: '0.75rem', 
+      fontSize: '0.8125rem', 
+      iconSize: '5', 
+      lineHeight: '1.4',
+      maxTextLength: 16
+    }
+  };
+
+  const config = densityConfig[densityMode] || densityConfig.standard;
+  
+  // CLEAN: Color Utils verwenden
+  const bgColor = lesson?.color || defaultColor;
+  const isTopicActive = activeTopicId === lesson?.topic_id;
+  const hasContent = lesson?.steps?.length > 0 || (lesson?.notes && String(lesson?.notes).trim());
+  const textColor = getTextColor(bgColor); // ← Utils-Magie!
+
+  // Text-Truncation mit konfigurierbarer Länge
+  const truncateText = (text, maxLength) => {
+    if (!text || text.length <= maxLength) return text;
+    return text.substring(0, maxLength).trim() + '...';
+  };
+
+  /**
+   * Rendert den Anzeigetext basierend auf Lektionstyp
+   */
+  const getDisplayText = () => {
+    if (!lesson) return null;
+    
+    if (isTopicBlock) {
+      // Topic Block: Nur Thema anzeigen
+      return (
+        <div className="flex flex-col items-center">
+          <div 
+            className={`font-bold text-center ${config.fontSize}`}
+            style={{ lineHeight: config.lineHeight }}
+          >
+            {truncateText(lesson.name, config.maxTextLength)}
+          </div>
+        </div>
+      );
+    }
+
+    if (isDoubleLesson) {
+      // Double Lesson: Nur Haupttitel anzeigen
+      return (
+        <div className="flex flex-col items-center">
+          <div 
+            className={`font-medium ${config.fontSize}`}
+            style={{ lineHeight: config.lineHeight }}
+          >
+            {truncateText(lesson.name || 'Doppelstunde', config.maxTextLength)}
+          </div>
+        </div>
+      );
+    }
+
+    // Standard Lesson - Sauber und einfach
+    let lessonTitle = lesson.name !== 'Neue Lektion' ? lesson.name : 'Lektion';
+
+    if (lesson.is_copy) {
+      lessonTitle += ' (K)';
+    }
+
+    const displayTitle = truncateText(lessonTitle, config.maxTextLength);
+
+    return (
+      <div className="flex flex-col items-center">
+        <div 
+          className={`font-medium text-center ${config.fontSize}`}
+          style={{ lineHeight: config.lineHeight }}
+        >
+          {displayTitle}
+        </div>
+      </div>
+    );
+  };
+
+  /**
+   * Rendert leere Zelle mit Plus-Icon
+   */
+  const getEmptyCellContent = () => {
+    return (
+      <div className={`flex items-center justify-center h-full ${config.padding}`}>
+        <Plus 
+          className={`${config.iconSize} text-slate-400 group-hover:text-blue-500 transition-colors duration-200`} 
+        />
+      </div>
+    );
+  };
+
+  // LEERE ZELLE - Unverändert
   if (!lesson) {
     return (
-      <div
-        className="w-full h-full border border-dashed border-slate-400 dark:border-slate-500 rounded-md hover:border-blue-400 hover:bg-blue-900/20 transition-all duration-200 cursor-pointer flex items-center justify-center group"
+      <motion.div
+        className={`w-full h-full border-2 border-dashed border-slate-300 dark:border-slate-600 rounded-lg group hover:border-blue-400 hover:bg-blue-50/50 dark:hover:bg-blue-900/20 transition-all duration-200 cursor-pointer flex items-center justify-center overflow-hidden ${config.padding}`}
+        whileHover={{ scale: 1.05 }}
+        whileTap={{ scale: 0.98 }}
         onClick={handleClick}
-        onMouseEnter={typeof onMouseEnter === 'function' ? onMouseEnter : () => {}}
-        onMouseLeave={onMouseLeave}
       >
-        <Plus className="w-4 h-4 text-slate-500 group-hover:text-blue-400 transition-colors" />
-      </div>
+        {getEmptyCellContent()}
+      </motion.div>
     );
   }
 
-  const topic = lesson.topic;
-  const bgColor = topic?.color || lesson?.color || defaultColor || '#3b82f6';
-  const isTopicActive = activeTopicId === lesson.topic_id;
-  const hasContent = lesson.steps?.length > 0 || (lesson.notes && String(lesson.notes).trim());
-
-  // Bestimme den Anzeigetext für den Titel
-  let lessonTitle = lesson.name !== 'Neue Lektion' ? lesson.name : `Lektion ${lesson.lesson_number}`;
-  let lessonNumberDisplay = `Lektion ${lesson.lesson_number}`;
-
-  // Kopie-Markierung hinzufügen
-  if (lesson.is_copy) {
-    lessonTitle = `${lessonTitle} (Kopie)`;
-    lessonNumberDisplay = `${lessonNumberDisplay} (K)`;
-  }
-
-  if (isDoubleLesson && lesson.second_yearly_lesson_id) {
-    const secondLesson = allYearlyLessons.find(l => String(l.id) === String(lesson.second_yearly_lesson_id));
-    console.log('Debug: secondLesson data', { secondLesson, secondYearlyLessonId: lesson.second_yearly_lesson_id, allYearlyLessons });
-    if (secondLesson) {
-      const secondTitle = secondLesson.name !== 'Neue Lektion' ? secondLesson.name : `Lektion ${Number(lesson.lesson_number) + 1}`;
-      lessonTitle = `${lesson.name !== 'Neue Lektion' ? lesson.name : `Lektion ${lesson.lesson_number}`} + ${secondTitle}`;
-      lessonNumberDisplay = `Lektion ${lesson.lesson_number} & ${Number(lesson.lesson_number) + 1}`;
-    } else {
-      lessonTitle = lesson.name !== 'Neue Lektion' ? lesson.name : `Lektion ${lesson.lesson_number}`;
-      lessonNumberDisplay = `Lektion ${lesson.lesson_number} & ${Number(lesson.lesson_number) + 1}`;
-    }
-  }
-
-  console.log('Debug: YearLessonCell props', { lesson, topic, lessonTitle, lessonNumberDisplay, second_yearly_lesson_id: lesson.second_yearly_lesson_id });
+  // MODERNES ZELLEN-DESIGN - MIT UTILS
+  const baseClasses = `w-full h-full cursor-pointer transition-all duration-200 flex items-center justify-center overflow-hidden rounded-lg relative group ${config.padding}`;
+  const activeClasses = isTopicActive ? 'ring-2 ring-blue-300/30 shadow-lg' : 'shadow-sm';
+  const examClasses = lesson.is_exam ? 'ring-2 ring-red-400/50' : '';
+  const densityBorder = densityMode === 'compact' ? 'border border-white/20' : '';
 
   return (
     <motion.div
@@ -70,37 +172,37 @@ export default function YearLessonCell({
       animate={{ scale: 1, opacity: 1 }}
       whileHover={{ scale: 1.02 }}
       whileTap={{ scale: 0.98 }}
-      className={`w-full h-full cursor-pointer transition-all duration-200 flex flex-col justify-between text-white text-xs font-medium rounded-md p-1
-        ${isTopicActive ? 'shadow-md' : 'shadow-sm'}
-        ${lesson.is_exam ? 'ring-2 ring-red-400' : ''}`}
+      className={`${baseClasses} ${activeClasses} ${examClasses} ${densityBorder}`}
       style={{
-        background: `linear-gradient(135deg, ${bgColor} 0%, ${adjustColor(bgColor, -20)} 100%)`,
+        // ELEGANT: Utils für perfekten Gradient-Effekt
+        background: createGradient(bgColor, -20), // ← Automatischer Overlay-Stil!
+        border: `2px solid ${adjustColor(bgColor, -10)}`, // ← Konsistenter Border
+        color: textColor // ← Intelligente Textfarbe
       }}
       onClick={handleClick}
       onMouseEnter={hasContent && typeof onMouseEnter === 'function' ? onMouseEnter : undefined}
       onMouseLeave={hasContent && typeof onMouseLeave === 'function' ? onMouseLeave : undefined}
     >
-      <div className="flex flex-col items-center justify-center h-full">
-        {lesson.topic_id && topic ? (
-          // Für Lektionen mit Thema
-          <div className="text-center">
-            <div>{topic.name}</div>
-            <div className="text-[10px] opacity-75">{lessonNumberDisplay}</div>
-          </div>
-        ) : (
-          // Für Lektionen ohne Thema
-          <div className="text-center">
-            <div className={lesson.is_copy ? "text-yellow-200 font-bold" : ""}>
-              {lessonTitle}
-            </div>
-            {lessonTitle !== lessonNumberDisplay && (
-              <div className={`text-[10px] opacity-75 ${lesson.is_copy ? "text-yellow-100" : ""}`}>
-                {lessonNumberDisplay}
-              </div>
-            )}
-          </div>
-        )}
+      {/* Subtiles Hover-Overlay - verstärkt den Gradient */}
+      <div 
+        className="absolute inset-0 opacity-0 group-hover:opacity-10 transition-opacity rounded-lg"
+        style={{
+          background: createGradient(bgColor, -30) // ← Noch subtiler Hover-Effekt
+        }}
+      />
+      
+      {/* Content - Sauber und zentriert */}
+      <div className="relative z-10 text-center flex items-center justify-center h-full">
+        {getDisplayText()}
       </div>
+
+      {/* Hover-Details Indicator - nur bei Inhalt */}
+      {hasContent && (
+        <div className="absolute bottom-0 right-0 w-2 h-2 bg-white/20 rounded-tl-lg opacity-0 group-hover:opacity-100 transition-opacity" />
+      )}
     </motion.div>
   );
 }
+
+// Memoization für Performance
+YearLessonCell.displayName = 'YearLessonCell';

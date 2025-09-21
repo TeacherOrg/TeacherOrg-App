@@ -318,41 +318,52 @@ export default function Chores() {
 
     const handleUnassignment = async (studentId, sourceId) => {
         console.log('handleUnassignment - studentId:', studentId, 'sourceId:', sourceId);
+
+        // Bereinige studentId von Suffixen
+        const cleanStudentId = studentId.split('-weekly-')[0];
+        console.log('Cleaned studentId:', cleanStudentId);
+
         const sourceParts = sourceId.split('-');
         let assignmentsToDelete = [];
 
         if (sourceParts[1] === 'week') {
             const choreId = sourceParts[2];
             assignmentsToDelete = assignmentsForWeek.filter(a => 
-                a.student_id === studentId && a.chore_id === choreId
+            a.student_id === cleanStudentId && a.chore_id === choreId
+            );
+        } else if (sourceParts[1] === 'weekly') {
+            // Handle Wochenzuweisungen aus der ersten Zelle
+            const choreId = sourceParts[2];
+            assignmentsToDelete = assignmentsForWeek.filter(a => 
+            a.student_id === cleanStudentId && a.chore_id === choreId
             );
         } else {
             const choreId = sourceParts[1];
             const dayKey = sourceParts[2];
             const dayInfo = weekDates.find(d => d.dayKey === dayKey);
             if (!dayInfo) {
-                console.log('No day info found for dayKey:', dayKey);
-                return;
+            console.log('No day info found for dayKey:', dayKey);
+            return;
             }
 
             assignmentsToDelete = assignmentsForWeek.filter(a => 
-                a.student_id === studentId && 
-                a.chore_id === choreId && 
-                a.assignment_date === dayInfo.dateString
+            a.student_id === cleanStudentId && 
+            a.chore_id === choreId && 
+            a.assignment_date === dayInfo.dateString
             );
         }
         console.log('Assignments to delete:', assignmentsToDelete);
 
         if (assignmentsToDelete.length > 0) {
             try {
-                await Promise.all(assignmentsToDelete.map(a => ChoreAssignment.delete(a.id)));
-                console.log('Deleted assignments:', assignmentsToDelete);
-                await loadData(); // Reload data to ensure UI consistency
-                console.log('Reloaded data after unassignment');
-                toast.success("Zuweisung erfolgreich entfernt!");
+            await Promise.all(assignmentsToDelete.map(a => ChoreAssignment.delete(a.id)));
+            console.log('Deleted assignments:', assignmentsToDelete);
+            await loadData(); // Reload data to ensure UI consistency
+            console.log('Reloaded data after unassignment');
+            toast.success("Zuweisung erfolgreich entfernt!");
             } catch (error) {
-                console.error("Failed to delete assignment:", error);
-                toast.error("Fehler beim Entfernen der Zuweisung: " + error.message);
+            console.error("Failed to delete assignment:", error);
+            toast.error("Fehler beim Entfernen der Zuweisung: " + error.message);
             }
         }
     };
@@ -363,6 +374,7 @@ export default function Chores() {
         }
 
         try {
+            // Bestehende Zuweisungen für diese Woche und Klasse löschen
             const assignmentsToDeleteInClass = assignmentsForWeek.filter(a => a.class_id === activeClassId);
             if (assignmentsToDeleteInClass.length > 0) {
                 await Promise.all(assignmentsToDeleteInClass.map(a => ChoreAssignment.delete(a.id)));
@@ -375,49 +387,63 @@ export default function Chores() {
                 return;
             }
             
+            // Für jeden Tag der Woche
             for (const dayInfo of weekDates) {
+                // Alle verfügbaren Schüler für diesen Tag (kopieren, da wir sie entfernen)
                 const availableStudents = [...studentsInClass];
                 
+                // Aktive Ämtchen für diesen Tag filtern
                 const activeChores = choresInClass.filter(chore => {
                     return chore.frequency === 'daily' || 
-                           chore.frequency === 'on-demand' ||
-                           chore.frequency === 'bi-weekly' ||
-                           chore.frequency === 'monthly' ||
-                           (chore.frequency === 'weekly' && (!chore.days_of_week?.length || chore.days_of_week.includes(dayInfo.dayKey)));
+                        chore.frequency === 'on-demand' ||
+                        chore.frequency === 'bi-weekly' ||
+                        chore.frequency === 'monthly' ||
+                        (chore.frequency === 'weekly' && (!chore.days_of_week?.length || chore.days_of_week.includes(dayInfo.dayKey)));
                 });
 
+                console.log(`Tag ${dayInfo.dayName}: ${activeChores.length} aktive Ämtchen, ${availableStudents.length} verfügbare Schüler`);
+
+                // Für jedes aktive Ämtchen
                 for (const chore of activeChores) {
-                    const studentsNeeded = chore.required_students;
+                    const studentsNeeded = chore.required_students ?? 1; // Fallback to 1 if undefined
                     
+                    // So viele Schüler wie benötigt zuweisen
                     for (let i = 0; i < studentsNeeded && availableStudents.length > 0; i++) {
+                        // Zufälligen Schüler aus verfügbaren auswählen
                         const randomIndex = Math.floor(Math.random() * availableStudents.length);
                         const selectedStudent = availableStudents.splice(randomIndex, 1)[0];
                         
-                        newAssignments.push({
-                            student_id: selectedStudent.id,
-                            chore_id: chore.id,
-                            class_id: activeClassId,
-                            assignment_date: dayInfo.dateString,
-                            status: 'open',
-                            user_id: userId
-                        });
+                        if (selectedStudent) {
+                            newAssignments.push({
+                                student_id: selectedStudent.id,
+                                chore_id: chore.id,
+                                class_id: activeClassId,
+                                assignment_date: dayInfo.dateString,
+                                status: 'open',
+                                user_id: userId
+                            });
+                        }
                     }
+                    
+                    console.log(`Ämtchen "${chore.name}" zugewiesen: ${studentsNeeded} Schüler benötigt`);
                 }
+
+                console.log(`Tag ${dayInfo.dayName} abgeschlossen: ${newAssignments.filter(a => a.assignment_date === dayInfo.dateString).length} Zuweisungen erstellt`);
             }
 
             if (newAssignments.length > 0) {
+                console.log('Alle neuen Zuweisungen:', newAssignments.length);
                 const createdAssignments = await ChoreAssignment.bulkCreate(newAssignments);
-                await loadData(); // Reload data to ensure UI consistency
-                console.log('Reloaded data after random assignment');
-                toast.success("Ämtchen wurden erfolgreich zufällig zugewiesen!");
+                await loadData(); // Daten neu laden für UI-Konsistenz
+                toast.success(`Ämtchen erfolgreich zufällig zugewiesen! ${newAssignments.length} Zuweisungen erstellt.`);
             } else {
-                await loadData(); // Reload data to ensure UI consistency
-                console.log('Reloaded data after clearing assignments');
-                toast.success("Bestehende Zuweisungen wurden entfernt.");
+                await loadData(); // Daten neu laden nach Löschen
+                toast.success("Bestehende Zuweisungen wurden entfernt - keine neuen Zuweisungen möglich.");
             }
         } catch (error) {
-            console.error("Error with random assignment:", error);
+            console.error("Fehler bei der zufälligen Zuweisung:", error);
             toast.error("Fehler bei der zufälligen Zuweisung: " + error.message);
+            await loadData(); // Auch bei Fehler Daten neu laden
         }
     };
     
@@ -554,18 +580,6 @@ export default function Chores() {
 
     return (
         <div className="min-h-screen bg-gray-50 dark:bg-slate-900 p-6 flex flex-col transition-colors duration-300">
-            <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} className="flex justify-between items-center mb-8">
-                <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 bg-gradient-to-br from-gray-200 dark:from-teal-600 to-gray-50 dark:to-cyan-800 rounded-2xl flex items-center justify-center shadow-lg">
-                        <ClipboardList className="w-6 h-6 text-gray-800 dark:text-white" />
-                    </div>
-                    <div>
-                        <h1 className="text-3xl font-bold text-gray-800 dark:text-white tracking-tight">Ämtliplan</h1>
-                        <p className="text-gray-500 dark:text-slate-400 text-base font-medium">Ämtchen verwalten und Schülern zuweisen.</p>
-                    </div>
-                </div>
-            </motion.div>
-
             <div className="flex flex-wrap gap-4 items-center mb-6">
                 <Select value={activeClassId || ''} onValueChange={setActiveClassId} disabled={isLoading || classes.length === 0}>
                     <SelectTrigger className="bg-white dark:bg-slate-800 border-gray-300 dark:border-slate-700 rounded-xl text-gray-800 dark:text-white placeholder:text-gray-400 dark:placeholder:text-slate-400 w-48">
