@@ -13,6 +13,9 @@ import TeacherNotesPanel from "../components/daily/TeacherNotesPanel";
 import AnnouncementsTicker from "../components/daily/AnnouncementsTicker";
 import ChoresDisplay from "../components/daily/ChoresDisplay";
 import { createPageUrl } from "@/utils"; // Added createPageUrl
+import { getThemeGradient } from "@/utils/colorDailyUtils";
+import { CustomizationSettings } from "@/api/entities"; // Neue Entity aus entities.js
+import pb from "@/api/pb"; // Für authStore
 
 // Utility functions
 function getCurrentWeek() {
@@ -130,18 +133,15 @@ export default function DailyView({ currentDate, onDateChange }) {
   const [showChoresView, setShowChoresView] = useState(false);
   
   // Customization settings
-  const [customization, setCustomization] = useState(() => {
-    const saved = localStorage.getItem('dailyView_customization');
-    const defaults = {
-      fontSize: { title: 'text-2xl', content: 'text-lg', clock: 'text-4xl' },
-      background: { type: 'gradient', value: 'from-blue-50 to-indigo-100 dark:from-slate-900 dark:to-slate-800' },
-      autoFocusCurrentLesson: true,
-      showOverview: true,
-      showNotes: true,
-      showClock: true,
-      audio: { enabled: false, volume: 0.5 }
-    };
-    return saved ? { ...defaults, ...JSON.parse(saved) } : defaults;
+  const [customization, setCustomization] = useState({
+    fontSize: { title: 'text-2xl', content: 'text-lg', clock: 'text-4xl' },
+    background: { type: 'gradient', value: 'from-blue-50 to-indigo-100 dark:from-slate-900 dark:to-slate-800' },
+    theme: 'default',
+    autoFocusCurrentLesson: true,
+    showOverview: true,
+    showNotes: true,
+    showClock: true,
+    audio: { enabled: false, volume: 0.5 }
   });
 
   // Current time state
@@ -162,9 +162,50 @@ export default function DailyView({ currentDate, onDateChange }) {
     return dayNames[currentDate.getDay()];
   }, [currentDate]);
 
+  // Light/Dark Mode detection
+  const isDark = document.documentElement.classList.contains('dark');
+
   // Load all data
   useEffect(() => {
     loadAllData();
+  }, []);
+
+  useEffect(() => {
+    const loadCustomization = async () => {
+      try {
+        const userId = pb.authStore.model?.id;
+        if (!userId) return;
+
+        const settings = await CustomizationSettings.list({ filter: `user_id = "${userId}"` });
+        if (settings && settings.length > 0) {
+          const loaded = settings[0];
+          setCustomization({
+            theme: loaded.theme || 'default',
+            background: {
+              type: loaded.background_type,
+              value: loaded.background_value,
+            },
+            fontSize: {
+              title: loaded.font_size_title,
+              content: loaded.font_size_content,
+              clock: loaded.font_size_clock,
+            },
+            showOverview: loaded.show_overview,
+            showNotes: loaded.show_notes,
+            showClock: loaded.show_clock,
+            auto_focus_current_lesson: loaded.auto_focus_current_lesson,
+            compactMode: loaded.compact_mode,
+            audio: {
+              enabled: loaded.audio_enabled,
+              volume: loaded.audio_volume,
+            },
+          });
+        }
+      } catch (error) {
+        console.error("Error loading customization:", error);
+      }
+    };
+    loadCustomization();
   }, []);
 
   // Update current time every second
@@ -177,7 +218,39 @@ export default function DailyView({ currentDate, onDateChange }) {
 
   // Save customization settings to localStorage
   useEffect(() => {
-    localStorage.setItem('dailyView_customization', JSON.stringify(customization));
+    const saveCustomization = async () => {
+      try {
+        const userId = pb.authStore.model?.id;
+        if (!userId) return;
+
+        const settings = await CustomizationSettings.list({ filter: `user_id = "${userId}"` });
+        const data = {
+          user_id: userId,
+          theme: customization.theme,
+          background_type: customization.background.type,
+          background_value: customization.background.value,
+          font_size_title: customization.fontSize.title,
+          font_size_content: customization.fontSize.content,
+          font_size_clock: customization.fontSize.clock,
+          show_overview: customization.showOverview,
+          show_notes: customization.showNotes,
+          show_clock: customization.showClock,
+          auto_focus_current_lesson: customization.autoFocusCurrentLesson,
+          compact_mode: customization.compactMode,
+          audio_enabled: customization.audio.enabled,
+          audio_volume: customization.audio.volume,
+        };
+
+        if (settings && settings.length > 0) {
+          await CustomizationSettings.update(settings[0].id, data);
+        } else {
+          await CustomizationSettings.create(data);
+        }
+      } catch (error) {
+        console.error("Error saving customization:", error);
+      }
+    };
+    saveCustomization();
   }, [customization]);
 
   const loadAllData = async () => {
@@ -251,7 +324,8 @@ export default function DailyView({ currentDate, onDateChange }) {
         yearlyLessons.find(yl => yl.id === lesson.yearly_lesson_id) : null;
       const secondYearlyLesson = lesson.second_yearly_lesson_id ? 
         yearlyLessons.find(yl => yl.id === lesson.second_yearly_lesson_id) : null;
-      const subject = subjects.find(s => s.name === lesson.subject);
+      const subject = subjects.find(s => s.id === lesson.subject); // Fix: Match by ID instead of name
+
       const timeSlot = timeSlots.find(ts => ts.period === lesson.period_slot);
 
       let steps = [];
@@ -276,10 +350,11 @@ export default function DailyView({ currentDate, onDateChange }) {
         type: 'lesson',
         yearlyLesson,
         secondYearlyLesson,
-        subject: {
+        subject: subject ? {
           ...subject,
-          color: subject?.color || '#3b82f6'
-        },
+          name: subject.name || lesson.subject_name || 'Unbekannt', // Fallback to normalized subject_name
+          color: subject.color || '#3b82f6'
+        } : { name: lesson.subject_name || 'Unbekannt', color: '#3b82f6' },
         timeSlot,
         steps,
         description,
@@ -439,20 +514,23 @@ export default function DailyView({ currentDate, onDateChange }) {
   };
 
   const getBackgroundStyle = () => {
-    const { background } = customization;
+    const { background, theme } = customization;
+    const baseColor = background.value || '#ffffff';
+    const gradient = getThemeGradient(theme, baseColor, undefined, isDark);
     
     switch (background.type) {
       case 'solid':
-        return { backgroundColor: background.value };
+        return { backgroundColor: baseColor };
       case 'image':
         return {
           backgroundImage: `url(${background.value})`,
           backgroundSize: 'cover',
           backgroundPosition: 'center'
         };
-      case 'gradient': // Gradients are handled by className
+      case 'gradient':
+        return { background: gradient };
       default:
-        return {};
+        return { background: getThemeGradient('default', baseColor, undefined, isDark) }; // Fallback zu default Theme
     }
   };
 
@@ -475,12 +553,15 @@ export default function DailyView({ currentDate, onDateChange }) {
   }
 
   return (
-    <div 
-      className={`h-screen w-screen overflow-hidden relative text-slate-800 dark:text-slate-200 ${
+    <motion.div 
+      className={`h-screen w-screen overflow-hidden relative text-slate-800 dark:text-slate-200 font-[Poppins] ${
         customization.background.type === 'gradient' ? `bg-gradient-to-br ${customization.background.value}` :
         (customization.background.type === 'solid' || customization.background.type === 'image' ? '' : 'bg-slate-100 dark:bg-slate-900')
       }`}
       style={customization.background.type !== 'gradient' ? getBackgroundStyle() : {}}
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 1 }}
     >
       <audio ref={audioRef} src="/audio/end_of_lesson.ogg" preload="auto" />
       
@@ -515,7 +596,12 @@ export default function DailyView({ currentDate, onDateChange }) {
       >
         {/* Lesson Overview Panel */}
         {customization.showOverview && (
-          <div className="h-full overflow-hidden">
+          <motion.div 
+            className="h-full overflow-hidden"
+            drag // Verschiebbar via framer-motion
+            dragConstraints={{ left: -100, right: 100, top: -100, bottom: 100 }}
+            whileDrag={{ scale: 0.95 }}
+          >
             <LessonOverviewPanel
               items={lessonsForDate}
               selectedItem={selectedItem}
@@ -523,8 +609,10 @@ export default function DailyView({ currentDate, onDateChange }) {
               currentHoliday={currentHoliday}
               customization={customization}
               currentItem={currentItem}
+              theme={customization.theme}
+              isDark={isDark}
             />
-          </div>
+          </motion.div>
         )}
 
         {/* Main Central Panel */}
@@ -548,10 +636,10 @@ export default function DailyView({ currentDate, onDateChange }) {
              <div className="flex items-center justify-center h-full text-center bg-white/50 dark:bg-slate-800/50 rounded-2xl">
               <div>
                 <div className="text-6xl mb-4">👈</div>
-                <h2 className={`${customization.fontSize.title} font-bold text-slate-600 dark:text-slate-400 mb-2`}>
+                <h2 className={`${customization.fontSize.title} font-bold text-slate-600 dark:text-slate-400 mb-2 font-[Inter]`}>
                   Kein Element ausgewählt
                 </h2>
-                <p className={`${customization.fontSize.content} text-slate-500 dark:text-slate-500`}>
+                <p className={`${customization.fontSize.content} text-slate-500 dark:text-slate-500 font-[Poppins]`}>
                   Wählen Sie eine Lektion aus der Übersicht, um Details anzuzeigen.
                 </p>
               </div>
@@ -561,25 +649,41 @@ export default function DailyView({ currentDate, onDateChange }) {
         
         {/* Teacher Notes Panel - Conditionally rendered */}
         {customization.showNotes && (
-             <div className="h-full overflow-hidden">
+             <motion.div 
+               className="h-full overflow-hidden"
+               drag // Verschiebbar
+               dragConstraints={{ left: -100, right: 100, top: -100, bottom: 100 }}
+               whileDrag={{ scale: 0.95 }}
+             >
                 <TeacherNotesPanel selectedDate={currentDate} customization={customization} />
-            </div>
+            </motion.div>
         )}
       </div>
 
       {/* Clock Panel - Positioned top-right relative to root div */}
       {customization.showClock && (
-        <div className="absolute top-24 right-4 z-30 w-[220px] h-[120px]">
+        <motion.div 
+          className="absolute top-24 right-4 z-30 w-[220px] h-[120px]"
+          drag // Verschiebbar
+          dragConstraints={{ left: -100, right: 100, top: -100, bottom: 100 }}
+          whileDrag={{ scale: 0.95 }}
+        >
            <ClockPanel
               currentTime={currentTime}
               customization={customization}
             />
-        </div>
+        </motion.div>
       )}
 
       {/* Customization Panel */}
       {showCustomization && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100]">
+        <motion.div 
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100]"
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          exit={{ opacity: 0, scale: 0.95 }}
+          transition={{ duration: 0.3 }}
+        >
           <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-2xl max-h-[80vh] overflow-hidden">
             <CustomizationPanel
               customization={customization}
@@ -587,23 +691,28 @@ export default function DailyView({ currentDate, onDateChange }) {
               onClose={() => setShowCustomization(false)}
             />
           </div>
-        </div>
+        </motion.div>
       )}
 
       {/* Empty State */}
       {!currentHoliday && lessonsForDate.length === 0 && !isLoading && !showChoresView && (
-          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+          <motion.div 
+            className="absolute inset-0 flex items-center justify-center pointer-events-none"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.2 }}
+          >
             <div className="text-center">
               <div className="text-6xl mb-4">📚</div>
-              <h2 className={`${customization.fontSize.title} font-bold text-slate-600 dark:text-slate-400 mb-2`}>
+              <h2 className={`${customization.fontSize.title} font-bold text-slate-600 dark:text-slate-400 mb-2 font-[Inter]`}>
                 Keine Lektionen geplant
               </h2>
-              <p className={`${customization.fontSize.content} text-slate-500 dark:text-slate-500`}>
+              <p className={`${customization.fontSize.content} text-slate-500 dark:text-slate-500 font-[Poppins]`}>
                 Für {dayName}, {formatDate(currentDate)} sind keine Lektionen eingetragen.
               </p>
             </div>
-          </div>
+          </motion.div>
       )}
-    </div>
+    </motion.div>
   );
 }

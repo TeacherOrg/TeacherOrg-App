@@ -1,5 +1,5 @@
-// src/store.js (neu anlegen)
 import { create } from 'zustand';
+import { shallow } from 'zustand/shallow';
 
 export const useLessonStore = create((set) => ({
   yearlyLessons: [],
@@ -39,3 +39,7 @@ export const useLessonStore = create((set) => ({
     return { allLessons: newLessons };
   }),
 }));
+
+// Selektive Selektoren für stabile Props
+export const useYearlyLessons = () => useLessonStore((state) => state.yearlyLessons, shallow);
+export const useAllLessons = () => useLessonStore((state) => state.allLessons, shallow);

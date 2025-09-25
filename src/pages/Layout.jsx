@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { User } from "@/api/entities";
-import { createPageUrl } from "@/utils";
+import { createPageUrl } from '@/utils/index.js';
 import { Calendar, Users, Settings, GraduationCap, LogOut, ClipboardList } from "lucide-react";
 import {
   Sidebar,

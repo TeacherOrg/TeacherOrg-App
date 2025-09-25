@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Save, NotebookPen } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { debounce } from 'lodash';
+import { getThemeGradient } from "@/utils/colorDailyUtils";
 
 export default function TeacherNotesPanel({ selectedDate, customization }) {
     const [note, setNote] = useState(null);
@@ -16,10 +17,13 @@ export default function TeacherNotesPanel({ selectedDate, customization }) {
     useEffect(() => {
         const fetchUser = async () => {
             try {
-                const currentUser = await User.me();
+                const currentUser = User.current();
+                if (!currentUser) {
+                    throw new Error("No authenticated user found");
+                }
                 setUser(currentUser);
             } catch (error) {
-                console.error("User not found for notes panel");
+                console.error("User not found for notes panel:", error);
             }
         };
         fetchUser();
@@ -33,7 +37,7 @@ export default function TeacherNotesPanel({ selectedDate, customization }) {
         const fetchNote = async () => {
             const notes = await DailyNote.filter({ 
                 date: dateString,
-                created_by: user.email 
+                user_id: user.id  // Änderung: user_id statt created_by
             });
             if (notes.length > 0) {
                 setNote(notes[0]);
@@ -56,7 +60,7 @@ export default function TeacherNotesPanel({ selectedDate, customization }) {
                     const updatedNote = await DailyNote.update(note.id, { content: newContent });
                     setNote(updatedNote);
                 } else {
-                    const newNote = await DailyNote.create({ date: dateString, content: newContent });
+                    const newNote = await DailyNote.create({ date: dateString, content: newContent, user_id: user.id });
                     setNote(newNote);
                 }
             } catch(e) {
@@ -94,13 +98,16 @@ export default function TeacherNotesPanel({ selectedDate, customization }) {
                     {isSaving && <Save className="w-4 h-4 text-blue-500 animate-pulse" />}
                 </div>
             </div>
-            <div className="p-4 flex-1">
-                <Textarea
-                    placeholder="Schreiben Sie hier Ihre Notizen für den Tag..."
-                    value={content}
-                    onChange={handleContentChange}
-                    className="w-full h-full bg-transparent border-0 focus-visible:ring-0 resize-none text-base"
-                />
+            <div 
+                className="p-4 flex-1" 
+                style={{ background: getThemeGradient(customization.theme || 'default', '#ffffff') }}
+                >
+                    <Textarea
+                        placeholder="Schreiben Sie hier Ihre Notizen für den Tag..."
+                        value={content}
+                        onChange={handleContentChange}
+                        className="w-full h-full bg-transparent border-0 focus-visible:ring-0 resize-none text-base"
+                    />
             </div>
         </motion.div>
     );

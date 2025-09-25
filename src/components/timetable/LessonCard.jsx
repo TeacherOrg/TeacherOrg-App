@@ -1,5 +1,6 @@
 import React from 'react';
 import { adjustColor } from '@/utils/colorUtils';
+import { normalizeAllerleiData } from '@/components/timetable/allerlei/AllerleiUtils';
 
 const LessonCard = ({ lesson, isDragging, onEdit, onMouseEnter, onMouseLeave, onMouseMove, subjects = [] }) => {
   if (!lesson) return null;

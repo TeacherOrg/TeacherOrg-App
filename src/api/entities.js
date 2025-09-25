@@ -1,4 +1,6 @@
 import pb from '@/api/pb';
+import { prepareAllerleiForPersist, normalizeAllerleiData } from '@/components/timetable/allerlei/AllerleiUtils';
+import { safeProcessArray } from '@/utils/safeData'; // Neu: Import für Batch
 
 // Debugging-Flag basierend auf der Umgebung
 const isDebug = process.env.NODE_ENV === 'development' || false;
@@ -83,11 +85,36 @@ class PbEntity {
       }
     }
 
-    // Entferne jegliche denormalisierten Felder
+    // ✅ FIX: Spezielle Handhabung für relationale Felder (IDs)
+    const relationalFields = ['user_id', 'class_id', 'student_id', 'subject', 'competency_id', 'topic_id', 'yearly_lesson_id', 'second_yearly_lesson_id'];
+    
+    relationalFields.forEach(field => {
+      if (prepared[field] !== undefined && prepared[field] !== null) {
+        prepared[field] = String(prepared[field]).trim();
+        if (isDebug && prepared[field].length < 10) {
+          console.warn(`Suspicious ID length for ${field} in ${this.name}:`, prepared[field]);
+        }
+      }
+    });
+
+    // ✅ FIX: Für competencies (und andere Entities) immer user_id erzwingen, wenn möglich
+    if (['competencie', 'ueberfachliche_kompetenz', 'performance', 'classe'].includes(this.name)) {
+      const currentUser = pb.authStore.model;
+      console.log(`[PREPARE] Check for ${this.name} - currentUser:`, !!currentUser, 'id:', currentUser?.id, 'existing user_id:', prepared.user_id); // ← ERWEITERTER LOG
+      if (currentUser && currentUser.id) {
+        prepared.user_id = currentUser.id; // Immer setzen (überschreibt falls vorhanden)
+        console.log(`[PREPARE] Set user_id to ${currentUser.id} for ${this.name}`); // ← LOG
+      } else {
+        console.error(`[PREPARE] No valid user found for ${this.name} - cannot set user_id`); // ← ERROR-LOG
+        // Optional: Throw Error, um den Request zu stoppen
+        // throw new Error(`Cannot prepare ${this.name}: No authenticated user`);
+      }
+    }
+
+    // Entferne NUR denormalisierte Felder
     const denormFields = ['user_name', 'class_name', 'subject_name', 'topic_name', 'yearly_lesson_name', 'second_yearly_lesson_name', 'competency_name_display'];
     denormFields.forEach(field => delete prepared[field]);
 
-    // ✅ ENTFERNE $cancelKey aus den Daten (das ist ein Parameter, kein Feld!)
     delete prepared.$cancelKey;
 
     if (isDebug) console.log(`Debug: Final prepared payload for ${this.name}:`, JSON.stringify(prepared, null, 2));
@@ -156,7 +183,7 @@ class PbEntity {
     if (this.name === 'topic') {
       normalizedItem.subject_name = normalizedItem.subject || '';
     } else {
-      normalizedItem.subject_name = normalizedItem.expand?.subject?.name || '';
+      normalizedItem.subject_name = normalizedItem.expand?.subject?.name || 'Unbekannt';
     }
 
     normalizedItem.topic_name = normalizedItem.expand?.topic_id?.name || '';
@@ -206,9 +233,23 @@ class PbEntity {
       }
     }
 
+    if (this.name === 'subject') {
+      normalizedItem.emoji = item.emoji || '📚'; // Default-Emoji
+    }
+
     delete normalizedItem.expand;
 
     return normalizedItem;
+  }
+
+  // Vorschlag 2: Neue Batch-Normalisierungs-Methode mit safeProcessArray
+  batchNormalize(items) {
+    if (!Array.isArray(items)) {
+      if (isDebug) console.warn(`Invalid items in batchNormalize for ${this.name}:`, items);
+      return [];
+    }
+
+    return safeProcessArray(items, (item) => this.normalizeData(item)).filter(item => item !== null);
   }
 
   async list(query = {}) {
@@ -250,7 +291,7 @@ class PbEntity {
         })));
       }
       const validItems = items.filter(item => item && typeof item === 'object');
-      const normalizedItems = validItems.map(item => this.normalizeData(item)).filter(item => item !== null);
+      const normalizedItems = this.batchNormalize(validItems); // Vorschlag 2: Batch statt map(single)
       return normalizedItems;
     } catch (error) {
       // ✅ Bessere Autocancellation-Behandlung auch hier
@@ -303,13 +344,35 @@ class PbEntity {
     
     const preparedData = this.prepareForPersist(cleanData);
     
+    // ✅ FIX: Finale Validierung für required Felder wie user_id
+    if (['competencie', 'ueberfachliche_kompetenz', 'performance', 'classe'].includes(this.name)) {
+      const currentUser = pb.authStore.model;
+      if (!preparedData.user_id) {
+        if (currentUser && currentUser.id) {
+          preparedData.user_id = currentUser.id;
+          if (isDebug) console.log(`Debug: Force-added user_id ${currentUser.id} to ${this.name} payload`);
+        } else {
+          const error = new Error(`Missing required user_id for ${this.name}. No authenticated user found.`);
+          if (isDebug) console.error(`Error creating ${this.name}:`, error.message);
+          throw error;
+        }
+      }
+    }
+    
+    // ✅ FIX: Validierung vor dem Erstellen
+    if (!preparedData || Object.keys(preparedData).length === 0) {
+      const error = new Error(`No valid data to create ${this.name}`);
+      if (isDebug) console.error(`Error creating in ${this.name}:`, error.message);
+      throw error;
+    }
+    
     if (isDebug) {
       console.log(`Debug: Raw create payload for ${this.name}:`, JSON.stringify(cleanData, null, 2));
       console.log(`Debug: Prepared create for ${this.name}:`, JSON.stringify(preparedData, null, 2));
+      console.log(`Debug: Using collectionName:`, this.collectionName);
     }
     
     try {
-      console.log(`Debug: Using collectionName:`, this.collectionName);
       const response = await pb.collection(this.collectionName).create(preparedData, { $cancelKey: cancelKey });
       if (isDebug) console.log(`Debug: Create response for ${this.name}:`, JSON.stringify(response, null, 2));
       return response;
@@ -317,6 +380,7 @@ class PbEntity {
       if (isDebug) {
         console.error(`Error creating in ${this.name}:`, {
           message: error.message,
+          status: error.status,
           data: error.data ? JSON.stringify(error.data, null, 2) : error,
           requestData: JSON.stringify(preparedData, null, 2),
           stack: error.stack
@@ -329,40 +393,45 @@ class PbEntity {
         throw error; // Weiterwerfen, damit Retry-Logik im aufrufenden Code greifen kann
       }
       
-      // Fallback für Validierungsfehler (nur für lesson-spezifische Felder)
-      if (this.name === 'lesson' && error.data?.data) {
+      // Spezifische Behandlung für Validierungsfehler
+      if (error.status === 400 && error.data?.data) {
         const validationErrors = error.data.data;
-        const fallbackData = { ...preparedData };
         
-        // Entferne is_hidden, wenn es einen Validierungsfehler verursacht
-        if (validationErrors.is_hidden?.code === 'validation_required') {
-          console.warn('Retrying without is_hidden due to validation error');
-          delete fallbackData.is_hidden;
+        // Für competencies: Prüfe auf fehlende required Felder
+        if (this.name === 'competencie') {
+          const currentUser = pb.authStore.model;
+          if (!preparedData.user_id && currentUser && currentUser.id) {
+            // Retry mit auto-added user_id
+            if (isDebug) console.log(`Retrying competencie create with auto-added user_id:`, currentUser.id);
+            const retryData = { ...preparedData, user_id: currentUser.id };
+            try {
+              const retryResponse = await pb.collection(this.collectionName).create(retryData, { 
+                $cancelKey: `retry-create-${this.name}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}` 
+              });
+              if (isDebug) console.log(`Debug: Retry create response for ${this.name}:`, JSON.stringify(retryResponse, null, 2));
+              return retryResponse;
+            } catch (retryError) {
+              if (isDebug) console.error(`Retry failed for ${this.name}:`, retryError);
+              // Original error weiterwerfen
+            }
+          }
         }
         
-        // Entferne relationale Felder, wenn sie ungültig sind
-        const relationFields = ['yearly_lesson_id', 'second_yearly_lesson_id', 'topic_id'];
-        relationFields.forEach(field => {
-          if (validationErrors[field]?.code === 'validation_invalid_id') {
-            console.warn(`Removing invalid ${field} due to validation error`);
-            delete fallbackData[field];
+        // Fallback für lesson-spezifische Felder
+        if (this.name === 'lesson' && validationErrors.is_hidden?.code === 'validation_required') {
+          console.warn('Retrying without is_hidden due to validation error');
+          const fallbackData = { ...preparedData };
+          delete fallbackData.is_hidden;
+          
+          try {
+            const fallbackResponse = await pb.collection(this.collectionName).create(fallbackData, { 
+              $cancelKey: cancelKey 
+            });
+            if (isDebug) console.log(`Debug: Fallback create response for ${this.name}:`, JSON.stringify(fallbackResponse, null, 2));
+            return fallbackResponse;
+          } catch (fallbackError) {
+            if (isDebug) console.error(`Error in fallback create for ${this.name}:`, fallbackError);
           }
-        });
-        
-        try {
-          const fallbackResponse = await pb.collection(this.collectionName).create(fallbackData, { $cancelKey: cancelKey });
-          if (isDebug) console.log(`Debug: Fallback create response for ${this.name}:`, JSON.stringify(fallbackResponse, null, 2));
-          return fallbackResponse;
-        } catch (fallbackError) {
-          if (isDebug) console.error(`Error in fallback create for ${this.name}:`, {
-            message: fallbackError.message,
-            data: fallbackError.data ? JSON.stringify(fallbackError.data, null, 2) : fallbackError,
-            stack: fallbackError.stack
-          });
-          import('react-hot-toast').then(({ toast }) => {
-            toast.error(`Fehler beim Erstellen von ${this.name}. Bitte versuchen Sie es erneut.`);
-          });
-          throw fallbackError;
         }
       }
       
@@ -408,8 +477,8 @@ class PbEntity {
         if (isDebug) {
           console.warn(`Debug: Update request for ${this.name} ${id} was autocancelled - likely due to parallel request`);
         }
-        // ✅ Retry-Logik nur für user_preference (KORRIGIERT)
-        if (this.name === 'user_preference') {
+        // ✅ Retry-Logik für user_preference und customization_setting
+        if (['user_preference', 'customization_setting'].includes(this.name)) {
           return new Promise((resolve, reject) => {
             setTimeout(async () => {
               try {
@@ -545,6 +614,7 @@ export const Chore = new PbEntity('Chore');
 export const ChoreAssignment = new PbEntity('Chore_assignment');
 export const Group = new PbEntity('Group');
 export const UserPreferences = new PbEntity('User_preference');
+export const CustomizationSettings = new PbEntity('Customization_setting');
 
 export const User = {
   current: () => pb.authStore.model || null,

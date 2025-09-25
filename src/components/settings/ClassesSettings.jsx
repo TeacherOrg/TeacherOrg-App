@@ -282,7 +282,7 @@ export default function ClassesSettings({ classes, refreshData, setActiveClassId
             <div key={cls.id} className="bg-slate-50 dark:bg-slate-800 rounded-lg p-4 border border-slate-200 dark:border-slate-700">
                 <div className="flex justify-between items-center">
                 <div className="flex items-center gap-3">
-                    <span className="font-semibold text-lg">{cls.name || 'Unbenannte Klasse'}</span>
+                    <span className="font-semibold text-lg">{cls.name || 'Unbekannte Klasse'}</span>
                     <Collapsible>
                     <CollapsibleTrigger asChild>
                         <Button 

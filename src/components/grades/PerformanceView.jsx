@@ -1,5 +1,6 @@
-import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
-import { ResponsiveContainer, RadarChart, PolarGrid, PolarAngleAxis, Radar, LineChart, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Line, BarChart, Bar } from 'recharts';
+// src/components/grades/PerformanceView.jsx
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import { ResponsiveContainer, RadarChart, PolarGrid, PolarAngleAxis, Radar, LineChart, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Line, BarChart, Bar, ReferenceArea } from 'recharts';
 import { motion } from 'framer-motion';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -8,30 +9,20 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Performance, UeberfachlichKompetenz, Subject, Competency, Fachbereich, UserPreferences, User } from '@/api/entities';
-import { Plus, Filter, BarChart3, ChevronDown, ChevronUp, Star, Activity, FileText } from 'lucide-react';
+import { Performance, UeberfachlichKompetenz, Subject, Competency, Fachbereich, User } from '@/api/entities';
+import { Filter, BarChart3, ChevronDown, ChevronUp, Star, Activity, FileText, Plus } from 'lucide-react';
 import LeistungenTable from './LeistungenTable';
 import UeberfachlichTable from './UeberfachlichTable';
 import PerformanceModal from './PerformanceModal';
 import UeberfachlichModal from './UeberfachlichModal';
 import CalendarLoader from '../ui/CalendarLoader';
-import pb from '@/api/pb'; // Import PocketBase für Realtime-Subscriptions
-import { debounce } from '../../utils/utils';
 import { format } from "date-fns";
-
-// Enhanced color palette with more vibrant colors for students
-const STUDENT_COLORS = [
-  '#FF6B6B', '#4ECDC4', '#45B7D1', '#FFA07A', '#98D8C8', '#F7DC6F',
-  '#BB8FCE', '#85C1E9', '#F8C471', '#82E0AA', '#F1998A', '#85CDFD',
-  '#FFB84D', '#A8E6CF', '#FFD93D', '#6C5CE7', '#FD79A8', '#00B894',
-  '#E17055', '#81ECEC', '#FDCB6E', '#6C5CE7', '#FF7675', '#74B9FF'
-];
-
-const getStudentColor = (index) => STUDENT_COLORS[index % STUDENT_COLORS.length];
+import { usePreferences } from './hooks/usePreferences';
+import { useChartData } from './hooks/useChartData';
+import { CONFIG } from './utils/constants';
 
 const PerformanceView = ({ students = [], performances = [], activeClassId, classes = [], onDataChange }) => {
   const { toast } = useToast();
-  const [tab, setTab] = useState('loading'); // Initial loading, wird dann auf diagramme gesetzt
   const [selectedStudents, setSelectedStudents] = useState([]);
   const [selectedSubject, setSelectedSubject] = useState('Alle');
   const [selectedCompetencyForProgression, setSelectedCompetencyForProgression] = useState(null);
@@ -45,89 +36,71 @@ const PerformanceView = ({ students = [], performances = [], activeClassId, clas
   const [studentDropdownOpen, setStudentDropdownOpen] = useState(false);
   const [diagramView, setDiagramView] = useState('leistung');
   const [isLoading, setIsLoading] = useState(true);
-  const [expandedLeistungenRows, setExpandedLeistungenRows] = useState(new Set());
-  const [expandedUeberfachlichHistories, setExpandedUeberfachlichHistories] = useState(new Set());
-  const [expandedUeberfachlichCompetencies, setExpandedUeberfachlichCompetencies] = useState(new Set());
   const [ueberfachlich, setUeberfachlich] = useState([]);
-  const prevClassIdRef = useRef(activeClassId);
-  const prevTabRef = useRef(tab);
-  const loadRef = useRef(false);
-  const preferenceLoadRef = useRef(false); // Neu: Für loadPreferences
 
-  // ✅ SIMPLIFIED savePreferences (KEINE Queue - entities.js handhabt das)
-  const savePreferences = useCallback(
-    debounce(async (customData = null) => {
-      if (!activeClassId) return;
-      const user = User.current();
-      if (!user) return;
-      
-      try {
-        const currentPreferences = {
-          expandedLeistungenRows: Array.from(expandedLeistungenRows),
-          expandedUeberfachlichHistories: Array.from(expandedUeberfachlichHistories),
-          expandedUeberfachlichCompetencies: Array.from(expandedUeberfachlichCompetencies),
-          performanceTab: tab
-        };
-        
-        const preferencesToSave = customData || currentPreferences;
-        
-        if (process.env.NODE_ENV === 'development') {
-          console.log('savePreferences - Saving:', preferencesToSave);
-        }
-        
-        const preference = await UserPreferences.findOne({
-          user_id: user.id,
-          class_id: activeClassId
-        });
-        
-        if (preference) {
-          await UserPreferences.update(preference.id, {
-            preferences: preferencesToSave
-          });
-        } else {
-          await UserPreferences.create({
-            user_id: user.id,
-            class_id: activeClassId,
-            preferences: preferencesToSave
-          });
-        }
-        
-        if (process.env.NODE_ENV === 'development') {
-          console.log('savePreferences - Success');
-        }
-      } catch (error) {
-        // ✅ Nur echte Fehler loggen, Autocancellation ignorieren
-        if (!error.message?.includes('autocancelled')) {
-          console.error('savePreferences - Error:', error);
-        }
-      }
-    }, 500),
-    [activeClassId, expandedLeistungenRows, expandedUeberfachlichHistories, expandedUeberfachlichCompetencies, tab]
-  );
+  // Phase 1: Integration von usePreferences
+  const {
+    tab,
+    setTab,
+    expandedLeistungenRows,
+    setExpandedLeistungenRows,
+    expandedUeberfachlichHistories,
+    setExpandedUeberfachlichHistories,
+    expandedUeberfachlichCompetencies,
+    setExpandedUeberfachlichCompetencies,
+    savePreferences,
+    isLoading: preferencesLoading
+  } = usePreferences(activeClassId);
 
-  // NEUE Version - mit Debug und Validierung
+  // Phase 1: Integration von useChartData
+  const {
+    lineData,
+    fachbereichData,
+    ueberfachlichData,
+    ueberfachlichProgressionData,
+    getStudentColor
+  } = useChartData({
+    performances,
+    ueberfachlich,
+    students,
+    selectedSubject,
+    selectedCompetencyForProgression,
+    selectedStudents,
+    showClassAverage,
+    diagramView
+  });
+
+  // handleTabChange mit Collapse
   const handleTabChange = useCallback((newTab) => {
-    console.log('handleTabChange called with:', newTab, 'Current tab:', tab);
-    
+    console.log('handleTabChange called with:', newTab, 'Current tab:', tab, 'Preferences loading:', preferencesLoading);
+
+    // Fix: Verhindere Tab-Wechsel während Preferences Loading
+    if (preferencesLoading) {
+      console.log('Tab change blocked - preferences still loading');
+      return;
+    }
+
     const validTabs = ['diagramme', 'leistungen', 'ueberfachlich'];
     if (!validTabs.includes(newTab)) {
       console.warn('Invalid tab:', newTab);
       return;
     }
-    
+
     // Collapse alle Expansion-States beim Tab-Wechsel
     setExpandedLeistungenRows(new Set());
     setExpandedUeberfachlichHistories(new Set());
     setExpandedUeberfachlichCompetencies(new Set());
-    
+
     setTab(newTab);
     console.log('Tab changed to:', newTab);
-    
-    savePreferences();
-  }, [tab, savePreferences]);
 
-  
-  // 5. handleDataChange
+    // Fix: Delay savePreferences leicht, um Race-Conditions zu vermeiden
+    setTimeout(() => {
+      savePreferences();
+    }, 100);
+  }, [tab, savePreferences, preferencesLoading]);
+
+  // handleDataChange
   const handleDataChange = async (updatedUeberfachlich, preservedExpansionStates = null) => {
     try {
       if (updatedUeberfachlich) {
@@ -153,50 +126,19 @@ const PerformanceView = ({ students = [], performances = [], activeClassId, clas
         setUeberfachlich(ueberfachlichData || []);
         if (onDataChange) onDataChange(performancesData);
       }
-      
+
       if (preservedExpansionStates) {
         console.log('handleDataChange - Restoring preserved expansion states:', preservedExpansionStates);
-        
+
         setExpandedLeistungenRows(new Set(preservedExpansionStates.expandedLeistungenRows || []));
         setExpandedUeberfachlichHistories(new Set(preservedExpansionStates.expandedUeberfachlichHistories || []));
         setExpandedUeberfachlichCompetencies(new Set(preservedExpansionStates.expandedUeberfachlichCompetencies || []));
-        
+
         savePreferences(preservedExpansionStates);
         return;
       }
-      
-      // Normale Präferenz-Ladung
-      const user = User.current();
-      if (user && activeClassId) {
-        try {
-          const preference = await UserPreferences.findOne({
-            user_id: user.id,
-            class_id: activeClassId
-          });
-          
-          if (preference?.preferences) {
-            setExpandedLeistungenRows(new Set(
-              Array.isArray(preference.preferences.expandedLeistungenRows) 
-                ? preference.preferences.expandedLeistungenRows 
-                : []
-            ));
-            setExpandedUeberfachlichHistories(new Set(
-              Array.isArray(preference.preferences.expandedUeberfachlichHistories) 
-                ? preference.preferences.expandedUeberfachlichHistories 
-                : []
-            ));
-            setExpandedUeberfachlichCompetencies(new Set(
-              Array.isArray(preference.preferences.expandedUeberfachlichCompetencies) 
-                ? preference.preferences.expandedUeberfachlichCompetencies 
-                : []
-            ));
-          }
-        } catch (error) {
-          if (!error.message?.includes('autocancelled')) {
-            console.error('Error in handleDataChange preferences reload:', error);
-          }
-        }
-      }
+
+      // Normale Präferenz-Ladung (nicht mehr nötig, da usePreferences das handhabt)
     } catch (error) {
       if (!error.message?.includes('autocancelled')) {
         console.error('Error in handleDataChange:', error);
@@ -209,16 +151,14 @@ const PerformanceView = ({ students = [], performances = [], activeClassId, clas
     }
   };
 
-  // NEW: Add handleDeletePerformance function
+  // handleDeletePerformance
   const handleDeletePerformance = async (performanceId) => {
     const group = performances.filter(p => {
       const target = performances.find(p => p.id === performanceId);
       const key = `${target.assessment_name}-${target.subject}-${target.date}`;
       return `${p.assessment_name}-${p.subject}-${p.date}` === key;
     });
-
     if (!window.confirm(`Möchten Sie ${group.length} Leistungsbeurteilungen für "${group[0].assessment_name}" wirklich löschen?`)) return;
-
     try {
       const deletePromises = group.map(p => Performance.delete(p.id));
       const results = await Promise.all(deletePromises);
@@ -241,221 +181,9 @@ const PerformanceView = ({ students = [], performances = [], activeClassId, clas
     return data.every(item => item && typeof item === 'object' && item.name);
   };
 
-  // DEBUG: Initial State Logging - HIER einfügen (nach den useState Deklarationen)
-  useEffect(() => {
-    console.log('=== PERFORMANCE VIEW INITIAL STATE DEBUG ===');
-    console.log('Initial tab state:', tab);
-    console.log('Initial diagramView state:', diagramView);
-    console.log('=== END DEBUG ===');
-  }, []); // Läuft nur einmal beim Mount
-
-  // Debugging: Log activeClassId changes
-  useEffect(() => {
-    console.log('activeClassId changed:', activeClassId);
-  }, [activeClassId]);
-
-  // Load preferences from PocketBase
-  // Load preferences from PocketBase - vereinfacht
-  useEffect(() => {
-    if (preferenceLoadRef.current) return; // Vermeide doppelte Aufrufe
-    preferenceLoadRef.current = true;
-    
-    const loadPreferences = async () => {
-      console.log('=== LOAD PREFERENCES START ===');
-      console.log('Current tab before loading:', tab);
-      
-      try {
-        const user = User.current();
-        if (user && activeClassId) {
-          console.log('Loading preferences for user:', user.id, 'class:', activeClassId);
-          
-          const preference = await UserPreferences.findOne({
-            user_id: user.id,
-            class_id: activeClassId
-          });
-          
-          console.log('Found preference:', !!preference, 'Data:', preference?.preferences);
-          
-          if (preference?.preferences) {
-            setExpandedLeistungenRows(new Set(
-              Array.isArray(preference.preferences.expandedLeistungenRows) 
-                ? preference.preferences.expandedLeistungenRows 
-                : []
-            ));
-            setExpandedUeberfachlichHistories(new Set(
-              Array.isArray(preference.preferences.expandedUeberfachlichHistories) 
-                ? preference.preferences.expandedUeberfachlichHistories 
-                : []
-            ));
-            setExpandedUeberfachlichCompetencies(new Set(
-              Array.isArray(preference.preferences.expandedUeberfachlichCompetencies) 
-                ? preference.preferences.expandedUeberfachlichCompetencies 
-                : []
-            ));
-            
-            if (!tab || tab === 'loading') {
-              console.log('HARDE REGEL: Setting initial tab to diagramme');
-              setTab('diagramme');
-            }
-            
-            // Speichere mit diagramme Tab
-            const forcedPreferences = {
-              expandedLeistungenRows: preference.preferences.expandedLeistungenRows || [],
-              expandedUeberfachlichHistories: preference.preferences.expandedUeberfachlichHistories || [],
-              expandedUeberfachlichCompetencies: preference.preferences.expandedUeberfachlichCompetencies || [],
-              performanceTab: 'diagramme'
-            };
-            
-            try {
-              await UserPreferences.update(preference.id, {
-                preferences: forcedPreferences
-              });
-              console.log('Initial preferences saved with diagramme tab');
-            } catch (saveError) {
-              if (!saveError.message?.includes('autocancelled')) {
-                console.error('Error saving initial preferences:', saveError);
-              }
-            }
-          } else {
-            console.log('No preference found - creating with defaults');
-            const defaultPreferences = {
-              expandedLeistungenRows: [],
-              expandedUeberfachlichHistories: [],
-              expandedUeberfachlichCompetencies: [],
-              performanceTab: 'diagramme'
-            };
-            
-            try {
-              await UserPreferences.create({
-                user_id: user.id,
-                class_id: activeClassId,
-                preferences: defaultPreferences
-              });
-              console.log('Default preferences created successfully');
-            } catch (createError) {
-              if (!createError.message?.includes('autocancelled')) {
-                console.error('Error creating default preferences:', createError);
-              }
-            }
-            
-            setTab('diagramme');
-            setExpandedLeistungenRows(new Set());
-            setExpandedUeberfachlichHistories(new Set());
-            setExpandedUeberfachlichCompetencies(new Set());
-          }
-        } else {
-          console.log('No user or class - setting initial tab to diagramme');
-          setTab('diagramme');
-        }
-      } catch (error) {
-        if (!error.message?.includes('autocancelled')) {
-          console.error('Error loading preferences:', error);
-          setTab('diagramme');
-          setExpandedLeistungenRows(new Set());
-          setExpandedUeberfachlichHistories(new Set());
-          setExpandedUeberfachlichCompetencies(new Set());
-        }
-      } finally {
-        console.log('=== LOAD PREFERENCES END ===');
-      }
-    };
-    
-    const shouldLoad = activeClassId && tab === 'loading' && !preferenceLoadRef.current;
-    if (shouldLoad) {
-      loadPreferences();
-    }
-    
-    // Cleanup bei Unmount
-    return () => {
-      preferenceLoadRef.current = false;
-    };
-  }, [activeClassId, tab]);
-
-  // 8. Realtime Subscription (vereinfacht)
-  useEffect(() => {
-    if (!activeClassId) return;
-    const user = User.current();
-    if (!user) return;
-    
-    let lastProcessedRecordId = null;
-    let isUnsubscribed = false;
-    
-    const subscription = pb.collection('user_preferences').subscribe('*', async (e) => {
-      if (isUnsubscribed) return;
-      
-      if (
-        e.record.user_id === user.id &&
-        e.record.class_id === activeClassId &&
-        e.record.id !== lastProcessedRecordId &&
-        e.action !== 'delete'
-      ) {
-        try {
-          lastProcessedRecordId = e.record.id;
-          const updated = await UserPreferences.findOne({
-            user_id: user.id,
-            class_id: activeClassId
-          });
-          
-          console.log('Realtime Subscription - Raw preferences:', updated?.preferences);
-          
-          if (updated?.preferences) {
-            const forcedRealtimePreferences = {
-              expandedLeistungenRows: updated.preferences.expandedLeistungenRows || [],
-              expandedUeberfachlichHistories: updated.preferences.expandedUeberfachlichHistories || [],
-              expandedUeberfachlichCompetencies: updated.preferences.expandedUeberfachlichCompetencies || [],
-              performanceTab: 'diagramme'
-            };
-            
-            console.log('Realtime Subscription - Forcing diagramme tab:', forcedRealtimePreferences);
-            
-            setExpandedLeistungenRows(new Set(
-              Array.isArray(forcedRealtimePreferences.expandedLeistungenRows) 
-                ? forcedRealtimePreferences.expandedLeistungenRows 
-                : []
-            ));
-            setExpandedUeberfachlichHistories(new Set(
-              Array.isArray(forcedRealtimePreferences.expandedUeberfachlichHistories) 
-                ? forcedRealtimePreferences.expandedUeberfachlichHistories 
-                : []
-            ));
-            setExpandedUeberfachlichCompetencies(new Set(
-              Array.isArray(forcedRealtimePreferences.expandedUeberfachlichCompetencies) 
-                ? forcedRealtimePreferences.expandedUeberfachlichCompetencies 
-                : []
-            ));
-            
-            try {
-              await UserPreferences.update(updated.id, {
-                preferences: forcedRealtimePreferences
-              });
-            } catch (updateError) {
-              if (!updateError.message?.includes('autocancelled')) {
-                console.error('Realtime Subscription - Error updating preferences:', updateError);
-              }
-            }
-          } else {
-            setExpandedLeistungenRows(new Set());
-            setExpandedUeberfachlichHistories(new Set());
-            setExpandedUeberfachlichCompetencies(new Set());
-          }
-        } catch (error) {
-          if (!error.message?.includes('autocancelled')) {
-            console.error('Realtime Subscription - Error:', error);
-          }
-        }
-      }
-    });
-    
-    return () => {
-      isUnsubscribed = true;
-      pb.collection('user_preferences').unsubscribe('*');
-    };
-  }, [activeClassId]);
-
+  // useEffect für Class-Specific Data
   useEffect(() => {
     const loadClassSpecificData = async () => {
-      if (loadRef.current) return;
-      loadRef.current = true;
       try {
         if (activeClassId) {
           setIsLoading(true);
@@ -502,39 +230,11 @@ const PerformanceView = ({ students = [], performances = [], activeClassId, clas
         setUeberfachlich([]);
       } finally {
         setIsLoading(false);
-        loadRef.current = false;
       }
     };
+
     loadClassSpecificData();
-
-    const handleOpenUeberfachlichModal = () => {
-      setIsUeberfachlichModalOpen(true);
-    };
-
-    const handleOpenPerformanceModalForEdit = (event) => {
-      const performanceToEdit = (performances || []).find(p => p.id === event.detail.id);
-      setEditingPerformance(performanceToEdit);
-      setIsPerformanceModalOpen(true);
-    };
-
-    window.addEventListener('openUeberfachlichModal', handleOpenUeberfachlichModal);
-    window.addEventListener('openPerformanceModalForEdit', handleOpenPerformanceModalForEdit);
-
-    return () => {
-      window.removeEventListener('openUeberfachlichModal', handleOpenUeberfachlichModal);
-      window.removeEventListener('openPerformanceModalForEdit', handleOpenPerformanceModalForEdit);
-    };
-  }, [activeClassId, performances]);
-
-  // Collapse on tab change only if tab actually changes
-  useEffect(() => {
-    if (prevTabRef.current !== tab) {
-      setExpandedLeistungenRows(new Set());
-      setExpandedUeberfachlichHistories(new Set());
-      setExpandedUeberfachlichCompetencies(new Set());
-      prevTabRef.current = tab; // Update previous tab
-    }
-  }, [tab]);
+  }, [activeClassId]);
 
   const studentOptions = useMemo(() => {
     if (!Array.isArray(students)) return [];
@@ -545,15 +245,15 @@ const PerformanceView = ({ students = [], performances = [], activeClassId, clas
   }, [students]);
 
   const subjectOptions = useMemo(() => {
-    const performanceSubjects = Array.isArray(performances)
-      ? Array.from(new Set((performances || []).map(p => p.subject).filter(Boolean)))
-      : [];
-    const subjectNames = Array.isArray(subjects)
-      ? (subjects || []).map(s => s.name).filter(Boolean)
-      : [];
-    const allSubjects = Array.from(new Set([...subjectNames, ...performanceSubjects]));
-    return ['Alle', ...allSubjects];
-  }, [performances, subjects]);
+    if (!Array.isArray(subjects)) return [{ value: 'all', label: 'Alle' }];
+    const options = subjects
+      .filter(s => s && s.id && s.name && s.class_id === activeClassId)
+      .map(s => ({
+        value: s.id,
+        label: s.name
+      }));
+    return [{ value: 'all', label: 'Alle' }, ...options];
+  }, [subjects, activeClassId]);
 
   const competencyOptions = useMemo(() => {
     if (!Array.isArray(allCompetencies)) return [];
@@ -571,7 +271,6 @@ const PerformanceView = ({ students = [], performances = [], activeClassId, clas
     try {
       const user = User.current();
       if (!user) throw new Error('Kein Benutzer eingeloggt');
-
       if (performanceIdToUpdate) {
         await Performance.update(performanceIdToUpdate, {
           ...data[0],
@@ -597,7 +296,6 @@ const PerformanceView = ({ students = [], performances = [], activeClassId, clas
       if (onDataChange) onDataChange();
       setIsPerformanceModalOpen(false);
       setEditingPerformance(null);
-
       // Speichere aktuelle Präferenzen
       savePreferences();
     } catch (error) {
@@ -609,26 +307,22 @@ const PerformanceView = ({ students = [], performances = [], activeClassId, clas
   const handleSaveUeberfachlichBatch = async (batchData) => {
     if (!batchData) return;
     const { competencyId, date, ratings, notes } = batchData;
-
     // NEU: Speichere aktuelle Expansion-States VOR dem Speichern
     const currentExpandedCompetencies = new Set(expandedUeberfachlichCompetencies);
     const currentExpandedHistories = new Set(expandedUeberfachlichHistories);
-    
+   
     // Erweitere die betroffene Kompetenz
     currentExpandedCompetencies.add(competencyId);
-    
+   
     // Erweitere Histories für alle betroffenen Schüler
     Object.keys(ratings).forEach(studentId => {
       const historyKey = `${studentId}-${competencyId}`;
       currentExpandedHistories.add(historyKey);
     });
-
     setIsUeberfachlichModalOpen(false);
-
     try {
       const user = User.current();
       if (!user || !user.id) throw new Error('Kein Benutzer eingeloggt');
-
       const competencies = await Competency.filter({
         filter: `class_id = '${activeClassId}'`,
         perPage: 500,
@@ -636,7 +330,6 @@ const PerformanceView = ({ students = [], performances = [], activeClassId, clas
         $cancelKey: `list-competencie-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
       });
       setAllCompetencies(competencies || []);
-
       let existingEntries = [];
       try {
         const filterParams = {
@@ -650,21 +343,18 @@ const PerformanceView = ({ students = [], performances = [], activeClassId, clas
         console.error('Fehler beim Filtern von ueberfachliche_kompetenzen:', error);
         existingEntries = [];
       }
-
       const promises = Object.entries(ratings).map(async ([studentId, score], index) => {
         const studentExistingEntry = existingEntries.find(e =>
           e.student_id === studentId && e.competency_id === competencyId
         );
-
-        const newAssessment = { 
-          date, 
-          score: Number(score), 
+        const newAssessment = {
+          date,
+          score: Number(score),
           notes: notes[studentId] || ''
         };
-
         if (studentExistingEntry) {
           const updatedAssessments = [...(studentExistingEntry.assessments || []), newAssessment];
-          const updated = await UeberfachlichKompetenz.update(studentExistingEntry.id, { 
+          const updated = await UeberfachlichKompetenz.update(studentExistingEntry.id, {
             assessments: updatedAssessments,
             user_id: user.id,
             $cancelKey: `update-ueberfachliche_kompetenz-${studentId}-${Date.now()}-${index}-${Math.random().toString(36).substr(2, 9)}`
@@ -683,11 +373,8 @@ const PerformanceView = ({ students = [], performances = [], activeClassId, clas
           return created;
         }
       });
-
       const results = await Promise.all(promises);
-
       await new Promise(resolve => setTimeout(resolve, 500));
-
       // NEU: Speichere Expansion-States VOR dem Datenreload
       const expansionStatesToSave = {
         expandedLeistungenRows: Array.from(expandedLeistungenRows),
@@ -695,7 +382,6 @@ const PerformanceView = ({ students = [], performances = [], activeClassId, clas
         expandedUeberfachlichCompetencies: Array.from(currentExpandedCompetencies),
         performanceTab: 'ueberfachlich' // Bleibt auf ueberfachlich
       };
-
       const updatedUeberfachlich = await UeberfachlichKompetenz.list({
         filter: `class_id = '${activeClassId}'`,
         perPage: 500,
@@ -703,34 +389,27 @@ const PerformanceView = ({ students = [], performances = [], activeClassId, clas
         $cancelKey: `list-ueberfachliche_kompetenz-postsave-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
       });
       setUeberfachlich(updatedUeberfachlich || []);
-
       // NEU: Stelle Expansion-States explizit wieder her NACH dem Datenreload
       setExpandedUeberfachlichCompetencies(currentExpandedCompetencies);
       setExpandedUeberfachlichHistories(currentExpandedHistories);
-
       // Tab bleibt auf ueberfachlich
       setTab('ueberfachlich');
-
       // Speichere Expansion-States
       savePreferences(expansionStatesToSave);
-
       toast({
         title: "Erfolg",
         description: "Kompetenz und Bewertungen gespeichert",
         variant: "success",
       });
-
       if (onDataChange) {
         // NEU: Übergib die gespeicherten Expansion-States
         onDataChange(updatedUeberfachlich, expansionStatesToSave);
       }
-
       console.log('Saved ueberfachlich with preserved expansion states:', {
         competencyId,
         expandedCompetencies: Array.from(currentExpandedCompetencies),
         expandedHistories: Array.from(currentExpandedHistories)
       });
-
     } catch (error) {
       console.error("Fehler beim Speichern der überfachlichen Kompetenzen:", error);
       toast({
@@ -742,15 +421,14 @@ const PerformanceView = ({ students = [], performances = [], activeClassId, clas
   };
 
   useEffect(() => {
-    console.log('Auto-select useEffect triggered:', { 
-      diagramView, 
-      selectedCompetencyForProgression, 
-      competencyOptionsLength: competencyOptions.length 
+    console.log('Auto-select useEffect triggered:', {
+      diagramView,
+      selectedCompetencyForProgression,
+      competencyOptionsLength: competencyOptions.length
     });
-    
+
     if (diagramView === 'kompetenzen') {
-      // Wenn keine Kompetenz ausgewählt oder Kompetenzen-Liste sich geändert hat
-      if (!selectedCompetencyForProgression || 
+      if (!selectedCompetencyForProgression ||
           !competencyOptions.includes(selectedCompetencyForProgression)) {
         if (competencyOptions.length > 0) {
           console.log('Auto-selecting first competency:', competencyOptions[0]);
@@ -758,11 +436,9 @@ const PerformanceView = ({ students = [], performances = [], activeClassId, clas
         }
       }
     } else if (diagramView === 'leistung') {
-      // Reset Kompetenz-Auswahl wenn zu Leistung gewechselt wird
       if (selectedCompetencyForProgression) {
         setSelectedCompetencyForProgression(null);
       }
-      // Setze Standardfach
       if (!selectedSubject || selectedSubject === 'Alle') {
         setSelectedSubject('Alle');
       }
@@ -770,16 +446,14 @@ const PerformanceView = ({ students = [], performances = [], activeClassId, clas
   }, [diagramView, competencyOptions]);
 
   const handleStudentSelection = (studentId, checked) => {
-    // Validierung für studentId
     if (!studentId || typeof studentId !== 'string') {
       console.warn('Invalid studentId in handleStudentSelection:', studentId);
       return;
     }
-    
+
     setSelectedStudents(prev => {
       const currentSelection = Array.isArray(prev) ? prev : [];
       if (checked) {
-        // Vermeide Duplikate
         if (!currentSelection.includes(studentId)) {
           return [...currentSelection, studentId];
         }
@@ -795,292 +469,15 @@ const PerformanceView = ({ students = [], performances = [], activeClassId, clas
       console.warn('studentOptions is not an array:', studentOptions);
       return;
     }
-    
+
     const allStudentIds = studentOptions.map(s => s.value).filter(id => id && typeof id === 'string');
-    
+
     if (checked) {
       setSelectedStudents(allStudentIds);
     } else {
       setSelectedStudents([]);
     }
   };
-
-  // Fachbereich data for radar chart
-  const fachbereichData = useMemo(() => {
-    if (!Array.isArray(performances) || !Array.isArray(students)) return [];
-
-    const fachbereichMap = {};
-    const filteredPerfs = (performances || []).filter(p =>
-      p && typeof p.subject === 'string' && (selectedSubject === 'Alle' || p.subject === selectedSubject)
-    );
-
-    if (filteredPerfs.length === 0) return [];
-
-    filteredPerfs.forEach(perf => {
-      if (Array.isArray(perf.fachbereiche)) {
-        perf.fachbereiche.forEach(fachbereich => {
-          if (!fachbereich || typeof fachbereich !== 'string') return;
-
-          if (!fachbereichMap[fachbereich]) {
-            fachbereichMap[fachbereich] = { name: fachbereich };
-          }
-
-          if (showClassAverage) {
-            const allGrades = filteredPerfs
-              .filter(p => Array.isArray(p.fachbereiche) && p.fachbereiche.includes(fachbereich))
-              .map(p => p.grade)
-              .filter(g => typeof g === 'number' && g > 0);
-
-            if (allGrades.length > 0) {
-              const avgGrade = allGrades.reduce((sum, grade) => sum + grade, 0) / allGrades.length;
-              fachbereichMap[fachbereich]['Klassenschnitt'] = parseFloat(avgGrade.toFixed(2));
-            } else {
-              fachbereichMap[fachbereich]['Klassenschnitt'] = null;
-            }
-          }
-
-          selectedStudents.forEach((studentId) => {
-            const student = students.find(s => s && s.id === studentId);
-            if (student) {
-              const studentPerfsForFachbereich = filteredPerfs.filter(p =>
-                p.student_id === studentId && Array.isArray(p.fachbereiche) && p.fachbereiche.includes(fachbereich)
-              );
-
-              if (studentPerfsForFachbereich.length > 0) {
-                const grades = studentPerfsForFachbereich
-                  .map(p => p.grade)
-                  .filter(g => typeof g === 'number' && g > 0);
-
-                if (grades.length > 0) {
-                  const avgGrade = grades.reduce((sum, grade) => sum + grade, 0) / grades.length;
-                  fachbereichMap[fachbereich][student.name || 'Unnamed'] = parseFloat(avgGrade.toFixed(2));
-                } else {
-                  fachbereichMap[fachbereich][student.name || 'Unnamed'] = null;
-                }
-              } else {
-                fachbereichMap[fachbereich][student.name || 'Unnamed'] = null;
-              }
-            }
-          });
-        });
-      }
-    });
-
-    return Object.values(fachbereichMap);
-  }, [performances, selectedSubject, selectedStudents, students, showClassAverage]);
-
-  // Überfachliche Kompetenzen data for RADAR/BAR Chart
-  const ueberfachlichData = useMemo(() => {
-    if (!Array.isArray(ueberfachlich) || !Array.isArray(students)) return [];
-
-    console.log('ueberfachlich data for chart:', ueberfachlich); // Debug log
-
-    // Sammle alle eindeutigen Kompetenzen aus den ueberfachlichen Daten
-    const competencyNames = [...new Set(
-      ueberfachlich
-        .filter(comp => comp && comp.competency_name_display)
-        .map(comp => comp.competency_name_display)
-    )];
-
-    console.log('Found competency names:', competencyNames); // Debug log
-
-    if (competencyNames.length === 0) return [];
-
-    // Erstelle Datenstruktur für jede Kompetenz
-    const competencyMap = {};
-    
-    competencyNames.forEach(competencyName => {
-      if (!competencyMap[competencyName]) {
-        competencyMap[competencyName] = { name: competencyName };
-      }
-
-      // Klassenschnitt berechnen
-      if (showClassAverage) {
-        let allScores = [];
-        
-        // Sammle alle Scores für diese Kompetenz aus allen Schülern
-        ueberfachlich.forEach(comp => {
-          if (comp.competency_name_display === competencyName && 
-              Array.isArray(comp.assessments) && 
-              comp.assessments.length > 0) {
-            
-            // Verwende die neueste Bewertung für jeden Schüler
-            const latestAssessment = comp.assessments
-              .filter(a => a && typeof a.score === 'number' && a.score >= 1 && a.score <= 5)
-              .sort((a, b) => new Date(b.date) - new Date(a.date))[0];
-            
-            if (latestAssessment) {
-              allScores.push(latestAssessment.score);
-            }
-          }
-        });
-        
-        if (allScores.length > 0) {
-          const avgScore = allScores.reduce((sum, score) => sum + score, 0) / allScores.length;
-          competencyMap[competencyName]['Klassenschnitt'] = parseFloat(avgScore.toFixed(2));
-        } else {
-          competencyMap[competencyName]['Klassenschnitt'] = null;
-        }
-      }
-
-      // Individuelle Schülerbewertungen
-      (selectedStudents || []).forEach(studentId => {
-        const student = (students || []).find(s => s && s.id === studentId);
-        if (!student) return;
-
-        const studentComp = ueberfachlich.find(u =>
-          u.student_id === studentId && u.competency_name_display === competencyName
-        );
-
-        let studentScore = null;
-        if (studentComp && Array.isArray(studentComp.assessments) && studentComp.assessments.length > 0) {
-          // Verwende die neueste Bewertung
-          const validAssessments = studentComp.assessments
-            .filter(a => a && typeof a.date === 'string' && typeof a.score === 'number' && a.score >= 1 && a.score <= 5);
-          
-          if (validAssessments.length > 0) {
-            const latestAssessment = validAssessments.reduce((latest, assessment) => {
-              return !latest || new Date(assessment.date) > new Date(latest.date) ? assessment : latest;
-            }, null);
-            studentScore = latestAssessment?.score || null;
-          }
-        }
-        
-        competencyMap[competencyName][student.name || 'Unnamed'] = studentScore;
-      });
-    });
-
-    const result = Object.values(competencyMap);
-    console.log('Final ueberfachlichData for chart:', result); // Debug log
-    return result;
-  }, [ueberfachlich, selectedStudents, students, showClassAverage]);
-
- // Überfachliche Kompetenzen Progression data (Line Chart)
-  const ueberfachlichProgressionData = useMemo(() => {
-    if (!selectedCompetencyForProgression || !Array.isArray(ueberfachlich) || ueberfachlich.length === 0) {
-      return [];
-    }
-    
-    console.log('Progression data for competency:', selectedCompetencyForProgression); // Debug log
-    
-    // Filtere ueberfachlich nach der ausgewählten Kompetenz
-    const filteredUeberfachlich = ueberfachlich.filter(u => 
-      u.competency_name_display === selectedCompetencyForProgression
-    );
-    
-    console.log('Filtered ueberfachlich for progression:', filteredUeberfachlich); // Debug log
-    
-    // Sammle alle eindeutigen Daten aus allen Assessments
-    const allAssessments = filteredUeberfachlich
-      .flatMap(u => (u.assessments || []))
-      .filter(a => a && a.date && typeof a.date === 'string')
-      .map(a => ({ ...a, competency_name: selectedCompetencyForProgression }));
-      
-    const uniqueDates = [...new Set(allAssessments.map(a => a.date))]
-      .sort((a, b) => new Date(a) - new Date(b));
-      
-    console.log('Unique dates for progression:', uniqueDates); // Debug log
-
-    if (uniqueDates.length === 0) return [];
-
-    return uniqueDates.map(date => {
-      const point = {
-        name: new Date(date).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: '2-digit' }),
-        date: date,
-      };
-
-      // Klassenschnitt für dieses Datum
-      if (showClassAverage) {
-        const scoresForDate = allAssessments
-          .filter(a => a.date === date && typeof a.score === 'number' && a.score >= 1 && a.score <= 5)
-          .map(a => a.score);
-        
-        if (scoresForDate.length > 0) {
-          const avgScore = scoresForDate.reduce((sum, score) => sum + score, 0) / scoresForDate.length;
-          point['Klassenschnitt'] = parseFloat(avgScore.toFixed(2));
-        } else {
-          point['Klassenschnitt'] = null;
-        }
-      }
-
-      // Individuelle Schülerbewertungen für dieses Datum
-      (selectedStudents || []).forEach(studentId => {
-        const student = (students || []).find(s => s && s.id === studentId);
-        if (!student) return;
-
-        // Finde die Bewertung dieses Schülers für dieses Datum
-        const studentEntry = filteredUeberfachlich.find(u => u.student_id === studentId);
-        const assessmentForDate = (studentEntry?.assessments || [])
-          .find(a => a.date === date && typeof a.score === 'number');
-        
-        point[student.name || 'Unnamed'] = (assessmentForDate && typeof assessmentForDate.score === 'number') 
-          ? assessmentForDate.score 
-          : null;
-      });
-
-      return point;
-    });
-  }, [ueberfachlich, selectedStudents, students, showClassAverage, selectedCompetencyForProgression]);
-
-  const lineData = useMemo(() => {
-    if (!Array.isArray(performances) || !Array.isArray(students)) return [];
-
-    const validPerformances = (performances || []).filter(p =>
-      p && typeof p.date === 'string' && typeof p.assessment_name === 'string' && typeof p.grade === 'number'
-    );
-
-    const sortedPerformances = validPerformances
-      .filter(p => selectedSubject === 'Alle' || p.subject === selectedSubject)
-      .sort((a, b) => new Date(a.date) - new Date(b.date));
-
-    if (sortedPerformances.length === 0) return [];
-
-    const uniqueAssessments = [...new Map(
-      sortedPerformances.map(item => [
-        `${item.assessment_name || 'Unknown'}-${item.date || ''}-${item.subject || ''}`,
-        item
-      ])
-    ).values()];
-
-    return uniqueAssessments.map((p, index) => {
-      const point = {
-        name: p.assessment_name || 'Unknown Assessment',
-        date: p.date ? new Date(p.date).toLocaleDateString('de-DE') : '',
-        key: `assessment-${index}`
-      };
-
-      if (showClassAverage) {
-        const sameAssessments = sortedPerformances.filter(perf =>
-          perf.assessment_name === p.assessment_name && perf.date === p.date && perf.subject === p.subject
-        );
-        const validGrades = sameAssessments
-          .map(perf => perf.grade)
-          .filter(g => typeof g === 'number' && g > 0);
-
-        if (validGrades.length > 0) {
-          const avgGrade = validGrades.reduce((sum, perf) => sum + perf, 0) / validGrades.length;
-          point['Klassenschnitt'] = parseFloat(avgGrade.toFixed(2));
-        } else {
-          point['Klassenschnitt'] = null;
-        }
-      }
-
-      selectedStudents.forEach(studentId => {
-        const student = students.find(s => s && s.id === studentId);
-        if (student) {
-          const studentPerf = sortedPerformances.find(perf =>
-            perf.student_id === studentId &&
-            perf.assessment_name === p.assessment_name &&
-            perf.date === p.date &&
-            perf.subject === p.subject
-          );
-          point[student.name || 'Unnamed'] = studentPerf && typeof studentPerf.grade === 'number' ? studentPerf.grade : null;
-        }
-      });
-
-      return point;
-    });
-  }, [performances, selectedSubject, selectedStudents, students, showClassAverage]);
 
   const shouldUseBarChart = fachbereichData.length < 3 && fachbereichData.length > 0;
   const shouldUseUeberfachlichBarChart = ueberfachlichData.length < 3 && ueberfachlichData.length > 0;
@@ -1106,7 +503,6 @@ const PerformanceView = ({ students = [], performances = [], activeClassId, clas
       stroke: "hsl(var(--muted-foreground))",
       tick: { fontSize: 12 },
     };
-
     if (chartType === 'line' && showReverse) {
       yAxisProps.ticks = [1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5, 5.5, 6];
       yAxisProps.reversed = false;
@@ -1150,7 +546,6 @@ const PerformanceView = ({ students = [], performances = [], activeClassId, clas
             {selectedStudents.map((studentId, index) => {
               const student = students.find(s => s && s.id === studentId);
               if (!student || !student.name) return null;
-
               return (
                 <Bar
                   key={`bar-student-${student.id}`}
@@ -1182,7 +577,6 @@ const PerformanceView = ({ students = [], performances = [], activeClassId, clas
             {selectedStudents.map((studentId, index) => {
               const student = students.find(s => s && s.id === studentId);
               if (!student || !student.name) return null;
-
               return (
                 <Radar
                   key={`radar-student-${student.id}`}
@@ -1210,6 +604,14 @@ const PerformanceView = ({ students = [], performances = [], activeClassId, clas
         ) : (
           <LineChart data={data} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+            {/* Hintergrundbereiche für Leistungsverlauf */}
+            {enlargedChart === 'verlauf' || diagramView === 'leistung' ? (
+              <>
+                <ReferenceArea y1={1} y2={4.5} fill="rgba(255, 99, 71, 0.1)" fillOpacity={0.3} />
+                <ReferenceArea y1={4.5} y2={5} fill="rgba(255, 255, 0, 0.1)" fillOpacity={0.3} />
+                <ReferenceArea y1={5} y2={6} fill="rgba(0, 128, 0, 0.1)" fillOpacity={0.3} />
+              </>
+            ) : null}
             <XAxis
               dataKey="name"
               stroke="hsl(var(--muted-foreground))"
@@ -1240,7 +642,6 @@ const PerformanceView = ({ students = [], performances = [], activeClassId, clas
             {selectedStudents.map((studentId, index) => {
               const student = students.find(s => s && s.id === studentId);
               if (!student || !student.name) return null;
-
               return (
                 <Line
                   key={`student-${student.id}`}
@@ -1259,27 +660,20 @@ const PerformanceView = ({ students = [], performances = [], activeClassId, clas
   };
 
   const renderStudentNotes = () => {
-    // Sicherstellen, dass FileText importiert ist
-    if (typeof FileText === 'undefined') {
-      console.warn('FileText icon not imported - skipping notes rendering');
-      return null;
-    }
-    
     if (selectedStudents.length !== 1) return null;
-    
+
     const studentId = selectedStudents[0];
     if (!studentId || typeof studentId !== 'string') {
       console.warn('Invalid studentId for notes:', studentId);
       return null;
     }
-    
+
     const student = students.find(s => s && s.id === studentId);
     if (!student || !student.name) {
       console.warn('Student not found for notes:', studentId);
       return null;
     }
 
-    // Alle Bewertungen für diesen Schüler sammeln
     const studentAssessments = [];
     (ueberfachlich || []).forEach(comp => {
       if (comp && comp.student_id === studentId && Array.isArray(comp.assessments)) {
@@ -1296,7 +690,6 @@ const PerformanceView = ({ students = [], performances = [], activeClassId, clas
       }
     });
 
-    // Chronologisch sortieren (neueste zuerst)
     studentAssessments.sort((a, b) => new Date(b.date) - new Date(a.date));
 
     if (studentAssessments.length === 0) return null;
@@ -1323,8 +716,8 @@ const PerformanceView = ({ students = [], performances = [], activeClassId, clas
                         <Star
                           key={star}
                           className={`w-3 h-3 ${
-                            star <= assessment.score 
-                              ? 'text-yellow-400 fill-yellow-400' 
+                            star <= assessment.score
+                              ? 'text-yellow-400 fill-yellow-400'
                               : 'text-slate-500'
                           }`}
                         />
@@ -1344,58 +737,40 @@ const PerformanceView = ({ students = [], performances = [], activeClassId, clas
     );
   };
 
-  if (isLoading) {
+  if (isLoading || preferencesLoading) {
     return <CalendarLoader />;
   }
 
-  {process.env.NODE_ENV === 'development' && (
-    <div className="p-4 bg-yellow-100 border border-yellow-300 rounded mb-4">
-      <h3 className="font-bold mb-2">Debug Info:</h3>
-      <div className="text-sm space-y-1">
-        <p><strong>Tab:</strong> {tab}</p>
-        <p><strong>DiagramView:</strong> {diagramView}</p>
-        <p><strong>Selected Subject:</strong> {selectedSubject}</p>
-        <p><strong>Selected Competency:</strong> {selectedCompetencyForProgression || 'none'}</p>
-        <p><strong>Ueberfachlich length:</strong> {ueberfachlich?.length || 0}</p>
-        <p><strong>Selected Students:</strong> {selectedStudents.length}</p>
-        <p><strong>Show Class Average:</strong> {showClassAverage.toString()}</p>
-        <p><strong>ueberfachlichData length:</strong> {ueberfachlichData?.length || 0}</p>
-        <p><strong>ueberfachlichProgressionData length:</strong> {ueberfachlichProgressionData?.length || 0}</p>
+  if (!activeClassId) {
+    return (
+      <div className="flex items-center justify-center h-64 text-slate-400 dark:text-slate-400">
+        Bitte wählen Sie eine Klasse aus
       </div>
-    </div>
-  )}
+    );
+  }
+
+  if (tab === 'loading') {  // Fix: Expliziter Check für 'loading' - zeige Loader, statt else zu fallen
+    return <CalendarLoader />;
+  }
 
   return (
     <div className="p-4 sm:p-6 bg-white/0 dark:bg-slate-900/0">
-      {/* Tab Navigation */}
       <div className="flex justify-between items-center">
         <div className="flex gap-2 bg-white/60 dark:bg-slate-800/60 backdrop-blur-md rounded-xl p-2 shadow-lg border border-slate-200/50 dark:border-slate-700/50">
           <Button
-            onClick={() => {
-              console.log('Button click: switching to diagramme');
-              handleTabChange('diagramme');
-            }}
+            onClick={() => handleTabChange('diagramme')}
             variant={tab === 'diagramme' ? 'default' : 'ghost'}
-            className={`${
-              tab === 'diagramme' 
-                ? 'bg-green-600 text-white shadow-md' 
-                : 'text-slate-300 hover:bg-slate-700/50 hover:text-white'
-            } transition-all duration-200`}
+            disabled={preferencesLoading}  // Fix: Deaktiviere während Loading
+            className={`${tab === 'diagramme' ? 'bg-green-600 text-white shadow-md' : 'text-slate-300 hover:bg-slate-700/50 hover:text-white'} transition-all duration-200 ${preferencesLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
           >
             <BarChart3 className="w-4 h-4 mr-2" />
             Diagramme
           </Button>
           <Button
-            onClick={() => {
-              console.log('Button click: switching to leistungen');
-              handleTabChange('leistungen');
-            }}
+            onClick={() => handleTabChange('leistungen')}
             variant={tab === 'leistungen' ? 'default' : 'ghost'}
-            className={`${
-              tab === 'leistungen' 
-                ? 'bg-green-600 text-white shadow-md' 
-                : 'text-slate-300 hover:bg-slate-700/50 hover:text-white'
-            } transition-all duration-200`}
+            disabled={preferencesLoading}  // Fix: Deaktiviere während Loading
+            className={`${tab === 'leistungen' ? 'bg-green-600 text-white shadow-md' : 'text-slate-300 hover:bg-slate-700/50 hover:text-white'} transition-all duration-200 ${preferencesLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
           >
             Leistungen
           </Button>
@@ -1405,16 +780,22 @@ const PerformanceView = ({ students = [], performances = [], activeClassId, clas
               handleTabChange('ueberfachlich');
             }}
             variant={tab === 'ueberfachlich' ? 'default' : 'ghost'}
+            disabled={preferencesLoading}  // Fix: Deaktiviere während Loading
             className={`${
-              tab === 'ueberfachlich' 
-                ? 'bg-green-600 text-white shadow-md' 
+              tab === 'ueberfachlich'
+                ? 'bg-green-600 text-white shadow-md'
                 : 'text-slate-300 hover:bg-slate-700/50 hover:text-white'
-            } transition-all duration-200`}
+            } transition-all duration-200 ${preferencesLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
           >
             Überfachlich
           </Button>
         </div>
-
+        {preferencesLoading && (
+          <div className="flex items-center gap-2 text-sm text-slate-400 mt-2">
+            <div className="w-4 h-4 border-2 border-slate-400 border-t-transparent rounded-full animate-spin"></div>
+            <span>Lade Präferenzen...</span>
+          </div>
+        )}
         <div className="flex gap-2">
           {tab === 'leistungen' && (
             <Button onClick={handleCreatePerformance} className="bg-blue-600 hover:bg-blue-700">
@@ -1430,8 +811,6 @@ const PerformanceView = ({ students = [], performances = [], activeClassId, clas
           )}
         </div>
       </div>
-
-      {/* Conditional Content */}
       {!activeClassId ? (
         <div className="flex items-center justify-center h-64 text-slate-400 dark:text-slate-400">
           Bitte wählen Sie eine Klasse aus
@@ -1440,7 +819,6 @@ const PerformanceView = ({ students = [], performances = [], activeClassId, clas
         <CalendarLoader />
       ) : tab === 'diagramme' ? (
         <div className="space-y-6">
-          {/* Main Diagram View Toggle */}
           <div className="flex justify-start gap-3 p-2 bg-white/50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700 max-w-sm">
             <Button
               variant={diagramView === 'leistung' ? 'default' : 'ghost'}
@@ -1459,8 +837,6 @@ const PerformanceView = ({ students = [], performances = [], activeClassId, clas
               Kompetenzen
             </Button>
           </div>
-
-          {/* Filters */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 p-4 bg-white/50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700">
             <div className="space-y-2 min-h-[100px] flex flex-col justify-start">
               <Label className="text-slate-300 flex items-center gap-2">
@@ -1474,7 +850,7 @@ const PerformanceView = ({ students = [], performances = [], activeClassId, clas
                   </SelectTrigger>
                   <SelectContent>
                     {subjectOptions.map(s => (
-                      <SelectItem key={s} value={s}>{s}</SelectItem>
+                      <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -1499,7 +875,6 @@ const PerformanceView = ({ students = [], performances = [], activeClassId, clas
                 </Select>
               )}
             </div>
-
             <div className="space-y-2 min-h-[100px] flex flex-col justify-start">
               <Label className="text-slate-300">Schüler und Optionen</Label>
               <div className="relative">
@@ -1514,7 +889,6 @@ const PerformanceView = ({ students = [], performances = [], activeClassId, clas
                   }
                   {studentDropdownOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                 </Button>
-
                 {studentDropdownOpen && (
                   <div className="absolute z-10 w-full mt-2 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-lg shadow-lg max-h-64 overflow-y-auto">
                     <div className="p-3 space-y-2">
@@ -1531,7 +905,6 @@ const PerformanceView = ({ students = [], performances = [], activeClassId, clas
                           Klassenschnitt anzeigen
                         </Label>
                       </div>
-
                       <div className="flex items-center space-x-2 p-2 bg-slate-100 dark:bg-slate-600 rounded">
                         <Checkbox
                           id="selectAll"
@@ -1545,9 +918,7 @@ const PerformanceView = ({ students = [], performances = [], activeClassId, clas
                           Alle auswählen
                         </Label>
                       </div>
-
                       <div className="h-px bg-slate-600 my-2"></div>
-
                       {studentOptions.map(student => (
                         <div key={student.value} className="flex items-center space-x-2 p-1 bg-white dark:bg-slate-700">
                           <Checkbox
@@ -1569,11 +940,8 @@ const PerformanceView = ({ students = [], performances = [], activeClassId, clas
               </div>
             </div>
           </div>
-
-          {/* Charts */}
           {diagramView === 'leistung' ? (
             <div className="grid md:grid-cols-2 gap-6">
-              {/* Leistungsverlauf Chart */}
               <Card className="bg-white dark:bg-slate-800 text-black dark:text-white border-slate-200 dark:border-slate-700">
                 <CardHeader>
                   <CardTitle className="flex items-center justify-between">
@@ -1594,8 +962,6 @@ const PerformanceView = ({ students = [], performances = [], activeClassId, clas
                   </div>
                 </CardContent>
               </Card>
-
-              {/* Fachbereiche Chart */}
               <Card className="bg-white dark:bg-slate-800 text-black dark:text-white border-slate-200 dark:border-slate-700">
                 <CardHeader>
                   <CardTitle className="flex items-center justify-between">
@@ -1619,7 +985,6 @@ const PerformanceView = ({ students = [], performances = [], activeClassId, clas
             </div>
           ) : (
             <div className="grid md:grid-cols-2 gap-6">
-              {/* Kompetenzverlauf */}
               <Card className="bg-white dark:bg-slate-800 text-black dark:text-white border-slate-200 dark:border-slate-700">
                 <CardHeader>
                   <CardTitle className="flex items-center justify-between">
@@ -1640,8 +1005,6 @@ const PerformanceView = ({ students = [], performances = [], activeClassId, clas
                   </div>
                 </CardContent>
               </Card>
-
-              {/* Kompetenzübersicht Chart */}
               <Card className="bg-white dark:bg-slate-800 text-black dark:text-white border-slate-200 dark:border-slate-700">
                 <CardHeader>
                   <CardTitle className="flex items-center justify-between">
@@ -1664,7 +1027,6 @@ const PerformanceView = ({ students = [], performances = [], activeClassId, clas
               </Card>
             </div>
           )}
-          {/* NEU: Notizen-Bereich für einzelnen Schüler */}
           {renderStudentNotes()}
         </div>
       ) : tab === 'leistungen' ? (
@@ -1682,7 +1044,7 @@ const PerformanceView = ({ students = [], performances = [], activeClassId, clas
             setIsPerformanceModalOpen(true);
           }}
         />
-      ) : (
+      ) : tab === 'ueberfachlich' ? (  // Fix: Expliziter Check für 'ueberfachlich'
         <UeberfachlichTable
           students={Array.isArray(students) ? students.filter(s => s && s.id && s.name) : []}
           ueberfachlich={Array.isArray(ueberfachlich) ? ueberfachlich.filter(u => u && u.competency_id && u.student_id) : []}
@@ -1696,9 +1058,9 @@ const PerformanceView = ({ students = [], performances = [], activeClassId, clas
           setExpandedCompetencies={setExpandedUeberfachlichCompetencies}
           allCompetencies={allCompetencies}
         />
+      ) : (
+        <CalendarLoader />  // Fallback für invalid tabs
       )}
-
-      {/* Modals */}
       <PerformanceModal
         isOpen={isPerformanceModalOpen}
         onClose={() => {
@@ -1711,7 +1073,6 @@ const PerformanceView = ({ students = [], performances = [], activeClassId, clas
         activeClassId={activeClassId}
         editingPerformance={editingPerformance}
       />
-
       <UeberfachlichModal
         isOpen={isUeberfachlichModalOpen}
         onClose={() => setIsUeberfachlichModalOpen(false)}
@@ -1721,8 +1082,6 @@ const PerformanceView = ({ students = [], performances = [], activeClassId, clas
         allCompetencies={allCompetencies}
         onDataChange={onDataChange}
       />
-
-      {/* Enlarged Chart Modal */}
       {enlargedChart && (
         <div className="fixed inset-0 bg-black/90 flex items-center justify-center z-50 p-4">
           <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 w-full h-full max-w-[95vw] max-h-[95vh] flex flex-col">

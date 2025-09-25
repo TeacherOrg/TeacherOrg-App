@@ -1,0 +1,16 @@
+export const CONFIG = {
+  GRADES: { MIN: 1, MAX: 6, STEP: 0.25 },
+  CHARTS: { HEIGHT: 300, ENLARGE_MAX_WIDTH: '95vw' },
+  PAGINATION: { ITEMS_PER_PAGE: 10 },
+  DEBOUNCE: { SAVE_DELAY: 500, SEARCH_DELAY: 300 },
+  COMPETENCIES: { MIN_SCORE: 1, MAX_SCORE: 5 }
+};
+
+export const STUDENT_COLORS = [
+  '#FF6B6B', '#4ECDC4', '#45B7D1', '#FFA07A', '#98D8C8', '#F7DC6F',
+  '#BB8FCE', '#85C1E9', '#F8C471', '#82E0AA', '#F1998A', '#85CDFD',
+  '#FFB84D', '#A8E6CF', '#FFD93D', '#6C5CE7', '#FD79A8', '#00B894',
+  '#E17055', '#81ECEC', '#FDCB6E', '#6C5CE7', '#FF7675', '#74B9FF'
+];
+
+export const getStudentColor = (index) => STUDENT_COLORS[index % STUDENT_COLORS.length];

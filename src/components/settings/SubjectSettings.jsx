@@ -12,7 +12,7 @@ const PRESET_COLORS = [
 ];
 
 const SubjectSettings = ({ subjects, classes, activeClassId, setActiveClassId, refreshData }) => {
-    const [newSubject, setNewSubject] = useState({ name: '', color: '#3b82f6', lessons_per_week: 4 });
+    const [newSubject, setNewSubject] = useState({ name: '', color: '#3b82f6', lessons_per_week: 4, emoji: '' });
     const [editingSubjectId, setEditingSubjectId] = useState(null);
     const [showColorPicker, setShowColorPicker] = useState(false);
     const [editingShowColorPicker, setEditingShowColorPicker] = useState(false);
@@ -20,8 +20,8 @@ const SubjectSettings = ({ subjects, classes, activeClassId, setActiveClassId, r
     const handleAddSubject = async () => {
         if (newSubject.name.trim() && activeClassId) {
             await Subject.create({ ...newSubject, class_id: activeClassId });
-            setNewSubject({ name: '', color: '#3b82f6', lessons_per_week: 4 });
-            setShowColorPicker(false); // Reset color picker visibility
+            setNewSubject({ name: '', color: '#3b82f6', lessons_per_week: 4, emoji: '' });
+            setShowColorPicker(false);
             refreshData();
         }
     };
@@ -113,6 +113,15 @@ const SubjectSettings = ({ subjects, classes, activeClassId, setActiveClassId, r
                             )}
                         </div>
                     </div>
+                    <div className="space-y-2">
+                        <Label className="text-slate-300">Emoji (optional)</Label>
+                        <Input
+                            value={newSubject.emoji}
+                            onChange={(e) => setNewSubject({ ...newSubject, emoji: e.target.value })}
+                            placeholder="z.B. 🧮"
+                            className="bg-slate-700 border-slate-600 text-white"
+                        />
+                    </div>
                      <Button onClick={handleAddSubject} disabled={!activeClassId || !newSubject.name.trim()} className="w-full bg-blue-600 hover:bg-blue-700">
                         <Plus className="w-4 h-4 mr-2"/>
                         Hinzufügen
@@ -170,6 +179,15 @@ const SubjectSettings = ({ subjects, classes, activeClassId, setActiveClassId, r
                                                 />
                                             )}
                                         </div>
+                                        <div className="space-y-2">
+                                            <Label className="text-slate-300">Emoji (optional)</Label>
+                                            <Input
+                                                value={subject.emoji || ''}
+                                                onChange={(e) => handleUpdateSubject(subject.id, 'emoji', e.target.value)}
+                                                placeholder="z.B. 🧮"
+                                                className="bg-slate-700 border-slate-600 text-white"
+                                            />
+                                        </div>
                                         <div className="flex justify-end gap-2">
                                             <Button size="sm" onClick={() => {setEditingSubjectId(null); setEditingShowColorPicker(false);}} className="bg-green-600 hover:bg-green-700">
                                                 <Check className="w-4 h-4" />
@@ -182,6 +200,7 @@ const SubjectSettings = ({ subjects, classes, activeClassId, setActiveClassId, r
                                             <div className="w-4 h-4 rounded-full" style={{ backgroundColor: subject.color }}></div>
                                             <span className="font-medium">{subject.name}</span>
                                             <span className="text-sm text-slate-400">({subject.lessons_per_week} L/W)</span>
+                                            <span className="text-xl mr-2">{subject.emoji || '📚'}</span>
                                         </div>
                                         <div className="flex items-center gap-2">
                                             <Button variant="ghost" size="icon" className="w-8 h-8 hover:bg-slate-700" onClick={() => {setEditingSubjectId(subject.id); setEditingShowColorPicker(false);}}>

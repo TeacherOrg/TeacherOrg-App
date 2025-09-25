@@ -99,27 +99,110 @@ export default function UeberfachlichModal({
   }, [isOpen]);
 
   const handleAddCompetency = async () => {
-      if (!newCompetencyName.trim()) return;
-      const existing = currentCompetencies.find(c => c.name.toLowerCase() === newCompetencyName.trim().toLowerCase());
-      if (existing) {
-          setSelectedCompetency(existing.name);
-          setNewCompetencyName('');
-          return;
+    if (!newCompetencyName.trim()) return;
+    
+    // Prüfe auf doppelte Namen (case-insensitive)
+    const existing = currentCompetencies.find(c => 
+      c.name.toLowerCase() === newCompetencyName.trim().toLowerCase()
+    );
+    
+    if (existing) {
+      toast({
+        title: "Hinweis",
+        description: "Diese Kompetenz existiert bereits.",
+      });
+      setSelectedCompetency(existing.name);
+      setNewCompetencyName('');
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const user = User.current();
+      if (!user || !user.id) {
+        toast({
+          title: "Fehler",
+          description: "Kein Benutzer eingeloggt.",
+          variant: "destructive",
+        });
+        console.error('No user or user.id missing'); // ← NEUER LOG
+        return;
       }
-      try {
-          const newComp = await Competency.create({ name: newCompetencyName.trim(), class_id: activeClassId });
-          setCurrentCompetencies([...currentCompetencies, newComp]);
-          setSelectedCompetency(newComp.name);
-          setNewCompetencyName('');
-          if (onDataChange) onDataChange();
-      } catch (error) {
-          console.error("Fehler beim Erstellen der Kompetenz:", error);
-          toast({
-            title: "Fehler",
-            description: "Fehler beim Erstellen der Kompetenz.",
-            variant: "destructive",
-          });
+
+      if (!activeClassId) {
+        toast({
+          title: "Fehler",
+          description: "Keine Klasse ausgewählt.",
+          variant: "destructive",
+        });
+        return;
       }
+
+      const createData = {
+        name: newCompetencyName.trim(),
+        class_id: activeClassId,
+        user_id: user.id
+      };
+      console.log('Creating competency with data:', createData); // ← NEUER LOG (sollte user_id zeigen)
+
+      const newComp = await Competency.create(createData, {
+        $cancelKey: `create-competency-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+      });
+
+      if (newComp && newComp.id) {
+        const updatedCompetencies = [...currentCompetencies, {
+          ...newComp,
+          name: newComp.name || newCompetencyName.trim()
+        }];
+        setCurrentCompetencies(updatedCompetencies);
+        
+        setSelectedCompetency(newComp.name || newCompetencyName.trim());
+        setNewCompetencyName('');
+        
+        toast({
+          title: "Erfolg",
+          description: "Kompetenz erfolgreich erstellt.",
+        });
+
+        if (onDataChange) {
+          onDataChange();
+        }
+
+        console.log('Competency created successfully:', newComp);
+      } else {
+        throw new Error('Ungültige Antwort vom Server');
+      }
+    } catch (error) {
+      console.error("Fehler beim Erstellen der Kompetenz:", error);
+      
+      let errorMessage = "Fehler beim Erstellen der Kompetenz.";
+      
+      if (error.status === 400 && error.data?.data) {
+        const validationErrors = error.data.data;
+        console.log('Validation errors:', validationErrors); // ← NEUER LOG für full error data
+        if (validationErrors.user_id) {
+          errorMessage = `Fehler mit user_id: ${validationErrors.user_id.code} - ${validationErrors.user_id.message}`;
+        } else if (validationErrors.class_id) {
+          errorMessage = `Fehler mit class_id: ${validationErrors.class_id.code}`;
+        } else if (validationErrors.name) {
+          errorMessage = `Fehler mit name: ${validationErrors.name.code}`;
+        } else {
+          errorMessage = `Validierungsfehler: ${JSON.stringify(validationErrors)}`;
+        }
+      } else if (error.message?.includes('autocancelled')) {
+        errorMessage = "Anfrage wurde abgebrochen. Bitte erneut versuchen.";
+      } else if (error.message?.includes('network')) {
+        errorMessage = "Netzwerkfehler. Bitte Internetverbindung prüfen.";
+      }
+
+      toast({
+        title: "Fehler",
+        description: errorMessage,
+        variant: "destructive",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleRatingChange = (studentId, rating) => {
@@ -184,10 +267,12 @@ export default function UeberfachlichModal({
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent 
-        className="max-w-6xl w-full mx-4 my-4 bg-slate-900 border-slate-700 text-white"
+        className="max-w-6xl w-full mx-4 my-4 bg-slate-900 border-slate-700 text-white overflow-hidden"  // Fix: overflow-hidden hier, um internes Scrolling zu kontrollieren
         style={{
           maxHeight: '95vh',
-          height: 'auto'
+          height: '95vh',  // Fix: Fixes Height, damit Modal nicht wächst
+          display: 'flex',
+          flexDirection: 'column'
         }}
       >
         <DialogHeader className="flex-shrink-0 pb-4 border-b border-slate-700">
@@ -197,47 +282,47 @@ export default function UeberfachlichModal({
           </DialogDescription>
         </DialogHeader>
         
-        <div className="flex-1 flex flex-col overflow-hidden">
-          <form onSubmit={handleSubmit} className="flex flex-col h-full">
-            <div className="p-6 flex-shrink-0 space-y-4">
+        <div className="flex-1 overflow-y-auto p-6">  
+          <form onSubmit={handleSubmit} className="space-y-6">
+            <div className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                      <Label className="text-base font-semibold mb-2 block">Kompetenz</Label>
-                      <div className="flex gap-2 items-center">
-                          <Select value={selectedCompetency} onValueChange={setSelectedCompetency}>
-                              <SelectTrigger className="flex-1 bg-slate-800 border-slate-600">
-                                  <SelectValue placeholder="Bestehende Kompetenz auswählen..." />
-                              </SelectTrigger>
-                              <SelectContent>
-                                  {currentCompetencies.map(c => (
-                                      <SelectItem key={c.id} value={c.name}>{c.name}</SelectItem>
-                                  ))}
-                              </SelectContent>
-                          </Select>
-                          <Input 
-                              value={newCompetencyName}
-                              onChange={e => setNewCompetencyName(e.target.value)}
-                              placeholder="Oder neue erstellen"
-                              className="flex-1 bg-slate-800 border-slate-600"
-                              onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), handleAddCompetency())}
-                          />
-                          <Button type="button" size="icon" onClick={handleAddCompetency} className="bg-blue-600 hover:bg-blue-700">
-                              <Plus className="w-4 h-4" />
-                          </Button>
-                      </div>
+                <div>
+                  <Label className="text-base font-semibold mb-2 block">Kompetenz</Label>
+                  <div className="flex gap-2 items-center">
+                    <Select value={selectedCompetency} onValueChange={setSelectedCompetency}>
+                      <SelectTrigger className="flex-1 bg-slate-800 border-slate-600">
+                        <SelectValue placeholder="Bestehende Kompetenz auswählen..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {currentCompetencies.map(c => (
+                          <SelectItem key={c.id} value={c.name}>{c.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Input 
+                      value={newCompetencyName}
+                      onChange={e => setNewCompetencyName(e.target.value)}
+                      placeholder="Oder neue erstellen"
+                      className="flex-1 bg-slate-800 border-slate-600"
+                      onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), handleAddCompetency())}
+                    />
+                    <Button type="button" size="icon" onClick={handleAddCompetency} className="bg-blue-600 hover:bg-blue-700">
+                      <Plus className="w-4 h-4" />
+                    </Button>
                   </div>
-                  <div>
-                      <Label htmlFor="date" className="text-base font-semibold mb-2 block">Datum</Label>
-                      <Input id="date" type="date" value={date} onChange={e => setDate(e.target.value)} required className="w-full bg-slate-800 border-slate-600" />
-                  </div>
+                </div>
+                <div>
+                  <Label htmlFor="date" className="text-base font-semibold mb-2 block">Datum</Label>
+                  <Input id="date" type="date" value={date} onChange={e => setDate(e.target.value)} required className="w-full bg-slate-800 border-slate-600" />
+                </div>
               </div>
             </div>
 
-            <div className="flex-1 p-6 overflow-y-auto">
-              <Label className="text-base font-semibold mb-4 block">
+            <div className="space-y-4">
+              <Label className="text-base font-semibold block">
                 Bewertungen (1 = Niedrig, 5 = Hoch)
               </Label>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 max-h-[60vh] overflow-y-auto">
                 {columns.map((col, colIndex) => (
                   <div key={colIndex} className="space-y-3">
                     {col.map(student => (
@@ -254,16 +339,16 @@ export default function UeberfachlichModal({
                 ))}
               </div>
             </div>
-
-            <div className="p-6 flex-shrink-0 flex justify-end gap-3 border-t border-slate-700">
-              <Button type="button" variant="outline" onClick={onClose} className="bg-slate-700 hover:bg-slate-600">
-                <X className="w-4 h-4 mr-2" /> Abbrechen
-              </Button>
-              <Button type="submit" disabled={isSubmitting} className="bg-blue-600 hover:bg-blue-700">
-                <Save className="w-4 h-4 mr-2" /> {isSubmitting ? 'Speichern...' : 'Speichern'}
-              </Button>
-            </div>
           </form>
+        </div>
+
+        <div className="flex-shrink-0 p-6 flex justify-end gap-3 border-t border-slate-700 bg-slate-900 sticky bottom-0 z-10"> 
+          <Button type="button" variant="outline" onClick={onClose} className="bg-slate-700 hover:bg-slate-600">
+            <X className="w-4 h-4 mr-2" /> Abbrechen
+          </Button>
+          <Button type="submit" disabled={isSubmitting} className="bg-blue-600 hover:bg-blue-700">
+            <Save className="w-4 h-4 mr-2" /> {isSubmitting ? 'Speichern...' : 'Speichern'}
+          </Button>
         </div>
       </DialogContent>
     </Dialog>

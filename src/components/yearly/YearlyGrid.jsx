@@ -209,7 +209,6 @@ const YearlyGrid = React.memo(({
           minWidth: `${weekColumnWidth}px`, 
           maxWidth: `${weekColumnWidth}px`,
           height: `${rowHeight}px`,
-          position: 'sticky',
           left: 0,
           zIndex: 30
         }}
@@ -476,7 +475,6 @@ const YearlyGrid = React.memo(({
             width: `${weekColumnWidth}px`, 
             minWidth: `${weekColumnWidth}px`, 
             maxWidth: `${weekColumnWidth}px`,
-            position: 'sticky',
             left: 0,
             zIndex: 40
           }}
@@ -493,13 +491,12 @@ const YearlyGrid = React.memo(({
           return (
             <th 
               key={subject}
-              className="p-3 font-bold border-b-2 border-l border-slate-200 dark:border-slate-600 text-center text-slate-800 dark:text-slate-100 bg-gradient-to-r from-slate-50 to-slate-100 dark:from-slate-700 dark:to-slate-800 sticky top-0 z-10 relative"
+              className="p-3 font-bold border-b-2 border-l border-slate-200 dark:border-slate-600 text-center text-slate-800 dark:text-slate-100 bg-gradient-to-r from-slate-50 to-slate-100 dark:from-slate-700 dark:to-slate-800 sticky top-0 z-10"
               colSpan={lessonSlots}
               style={{
                 width: `${blockWidth}px`,
                 minWidth: `${blockWidth}px`,
                 maxWidth: `${blockWidth}px`,
-                position: 'sticky',
                 top: 0,
                 zIndex: 10,
                 borderLeftColor: index === 0 ? 'transparent' : 'var(--border-color)',
@@ -525,7 +522,6 @@ const YearlyGrid = React.memo(({
             width: `${weekColumnWidth}px`, 
             minWidth: `${weekColumnWidth}px`, 
             maxWidth: `${weekColumnWidth}px`,
-            position: 'sticky',
             left: 0,
             zIndex: 50
           }}

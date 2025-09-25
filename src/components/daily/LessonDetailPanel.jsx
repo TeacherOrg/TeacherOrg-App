@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { motion } from "framer-motion";
 import { Clock, User, Users, Users2, Building, ChevronLeft, ChevronRight, Play, CheckCircle2, Circle, Coffee, ChevronsRight } from "lucide-react";

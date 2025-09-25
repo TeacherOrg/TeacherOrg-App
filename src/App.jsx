@@ -8,16 +8,17 @@ import { User } from '@/api/entities';
 import CalendarLoader from "@/components/ui/CalendarLoader";
 import AuthGuard from '@/components/auth/AuthGuard';
 import ErrorBoundary from '@/components/ErrorBoundary';
+import debounce from 'lodash/debounce'; // Add lodash/debounce
 
 function App() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const checkAuth = async () => {
+    const checkAuth = debounce(async () => {
       try {
         if (pb.authStore.isValid) {
-          await pb.collection('users').authRefresh();
+          await pb.collection('users').authRefresh({ signal: AbortSignal.timeout(5000) }); // Add timeout
           setUser(pb.authStore.model || null);
         } else {
           setUser(null);
@@ -28,7 +29,7 @@ function App() {
       } finally {
         setLoading(false);
       }
-    };
+    }, 100); // Debounce for 100ms to prevent rapid calls
 
     checkAuth();
 
@@ -37,7 +38,10 @@ function App() {
       setUser(model || null);
     });
 
-    return () => unsubscribe();
+    return () => {
+      unsubscribe();
+      checkAuth.cancel(); // Cancel debounced calls on cleanup
+    };
   }, []);
 
   if (loading) {

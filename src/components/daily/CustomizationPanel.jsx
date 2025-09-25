@@ -1,4 +1,3 @@
-
 import React, { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -7,6 +6,7 @@ import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { X, Palette, Type, Monitor, Zap, Speaker, LayoutDashboard } from "lucide-react";
+import { DAILY_THEMES } from "@/utils/colorDailyUtils"; // Import themes
 
 export default function CustomizationPanel({ customization, onCustomizationChange, onClose }) {
   const [activeTab, setActiveTab] = useState("appearance");
@@ -45,6 +45,13 @@ export default function CustomizationPanel({ customization, onCustomizationChang
       });
   };
 
+  const handleThemeChange = (theme) => {
+    onCustomizationChange({
+      ...customization,
+      theme
+    });
+  };
+
   const fontSizeOptions = [
     { value: 'text-sm', label: 'Klein' },
     { value: 'text-base', label: 'Normal' },
@@ -78,7 +85,7 @@ export default function CustomizationPanel({ customization, onCustomizationChang
     { value: 'https://images.unsplash.com/photo-1441974231531-c6227db76b6e?w=1920&h=1080&fit=crop', label: 'Wald' }
   ];
 
-  return (
+    return (
     <div className="h-full flex flex-col">
       {/* Header */}
       <div className="flex justify-between items-center p-6 border-b border-slate-200 dark:border-slate-700">
@@ -129,6 +136,26 @@ export default function CustomizationPanel({ customization, onCustomizationChang
           <TabsContent value="appearance" className="space-y-6 mt-6">
             <div className="space-y-4">
               <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-200">
+                Thema auswählen
+              </h3>
+              <Select
+                value={customization.theme || 'default'}
+                onValueChange={handleThemeChange}
+              >
+                <SelectTrigger className="w-full mt-2">
+                  <SelectValue placeholder="Thema wählen" />
+                </SelectTrigger>
+                <SelectContent className="z-[200]">
+                  <SelectItem value="default">Standard</SelectItem>
+                  <SelectItem value="spring">Frühling</SelectItem>
+                  <SelectItem value="energy">Energie</SelectItem>
+                  <SelectItem value="minimal">Minimal</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-4">
+              <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-200">
                 Hintergrund
               </h3>
               
@@ -144,7 +171,7 @@ export default function CustomizationPanel({ customization, onCustomizationChang
                     <SelectTrigger className="w-full mt-2">
                       <SelectValue />
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent className="z-[200]">
                       <SelectItem value="gradient">Verlauf</SelectItem>
                       <SelectItem value="solid">Einfarbig</SelectItem>
                       <SelectItem value="image">Bild</SelectItem>
@@ -270,7 +297,7 @@ export default function CustomizationPanel({ customization, onCustomizationChang
                     <SelectTrigger className="w-full mt-2">
                       <SelectValue />
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent className="z-[200]">
                       {fontSizeOptions.map((option) => (
                         <SelectItem key={option.value} value={option.value}>
                           {option.label}
@@ -291,7 +318,7 @@ export default function CustomizationPanel({ customization, onCustomizationChang
                     <SelectTrigger className="w-full mt-2">
                       <SelectValue />
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent className="z-[200]">
                       {fontSizeOptions.map((option) => (
                         <SelectItem key={option.value} value={option.value}>
                           {option.label}
@@ -312,7 +339,7 @@ export default function CustomizationPanel({ customization, onCustomizationChang
                     <SelectTrigger className="w-full mt-2">
                       <SelectValue />
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent className="z-[200]">
                       {fontSizeOptions.map((option) => (
                         <SelectItem key={option.value} value={option.value}>
                           {option.label}
