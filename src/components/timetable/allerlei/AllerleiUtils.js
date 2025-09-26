@@ -54,9 +54,8 @@ export const normalizeAllerleiData = (item, subjects) => {
 export const validateAllerlei = (data) => {
   if (!data.is_allerlei) return true;
   
-  // Verbesserte Validierung mit klarer Fehlermeldung
-  if (!data.allerlei_subjects || data.allerlei_subjects.filter(Boolean).length < 2) {
-    throw new Error('Bitte wählen Sie mindestens zwei Fächer für eine Allerleilektion aus.');
+  if (!data.allerlei_subjects || data.allerlei_subjects.filter(Boolean).length < 1) {  // Geändert: <1 statt <2
+    throw new Error('Bitte wählen Sie mindestens ein Fach für eine Allerleilektion aus.');
   }
   
   if (!data.allerlei_yearly_lesson_ids || 

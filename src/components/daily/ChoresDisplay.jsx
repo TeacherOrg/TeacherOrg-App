@@ -1,21 +1,22 @@
 import React from "react";
 import { motion } from "framer-motion";
-import { CheckCircle2 } from "lucide-react";
-import { getThemeGradient, getThemeTextColor } from "@/utils/colorDailyUtils";
+import { CheckCircle2, User } from "lucide-react";
+import { getThemeGradient, getGlowColor, getThemeTextColor } from "@/utils/colorDailyUtils";
 
 export default function ChoresDisplay({ assignments, chores, students, customization, theme, isDark }) {
   // Verknüpfe Assignments mit Chores und Students
   const enrichedAssignments = assignments.map((assignment) => {
-    const chore = chores.find((c) => c.id === assignment.chore_id);
-    const student = students.find((s) => s.id === assignment.student_id);
+    const chore = chores.find((c) => c.id === assignment.chore_id) || {};
+    const student = students.find((s) => s.id === assignment.student_id) || {};
     return {
       ...assignment,
-      choreName: chore?.name || chore?.description || "Unbekannte Aufgabe",
-      studentName: student?.name || "Kein Schüler zugewiesen",
+      choreName: chore.name || chore.description || "Unbekannte Aufgabe",
+      studentName: student.name || "Kein Schüler zugewiesen",
+      choreColor: chore.color || "#3b82f6", // Fallback auf Standardfarbe
     };
   });
 
-  // Animation variants
+  // Animation variants (an LessonOverviewPanel angepasst)
   const cardVariants = {
     hidden: { opacity: 0, y: 20 },
     visible: (index) => ({
@@ -24,6 +25,7 @@ export default function ChoresDisplay({ assignments, chores, students, customiza
       transition: { delay: index * 0.1, duration: 0.5, ease: "easeOut" },
     }),
     hover: { scale: 1.03, boxShadow: "0px 4px 12px rgba(0,0,0,0.1)" },
+    tap: { scale: 0.97 },
   };
 
   return (
@@ -33,7 +35,7 @@ export default function ChoresDisplay({ assignments, chores, students, customiza
       animate={{ opacity: 1 }}
       transition={{ duration: 0.5 }}
     >
-      <div className="bg-slate-100 dark:bg-slate-700 p-3 border-b border-slate-200 dark:border-slate-600">
+      <div className="bg-slate-100 dark:bg-slate-700 p-2 md:p-3 border-b border-slate-200 dark:border-slate-600">
         <h3 className={`${customization.fontSize.title} font-bold text-slate-800 dark:text-slate-200 font-[Inter]`}>
           Ämtchen am Ende des Tages
         </h3>
@@ -49,22 +51,26 @@ export default function ChoresDisplay({ assignments, chores, students, customiza
                 initial="hidden"
                 animate="visible"
                 whileHover="hover"
-                className="p-2 md:p-3 rounded-xl border border-slate-200 dark:border-slate-600"
+                whileTap="tap"
+                className="p-2 md:p-3 rounded-xl border-2 border-transparent hover:border-slate-300 dark:hover:border-slate-600 transition-all duration-200"
                 style={{
-                  background: getThemeGradient(theme, "#3b82f6", -10, isDark), // Standardfarbe, anpassen nach Bedarf
-                  color: getThemeTextColor(theme, "#3b82f6", isDark),
+                  background: getThemeGradient(theme, assignment.choreColor, -10, isDark),
+                  backgroundColor: assignment.choreColor + "20", // Gefüllt mit 20% Opacity wie in LessonOverviewPanel
+                  color: getThemeTextColor(theme, assignment.choreColor, isDark),
+                  boxShadow: getGlowColor(theme, assignment.choreColor, undefined, isDark),
                 }}
               >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <CheckCircle2 className="w-4 h-4 text-green-500" />
                     <div>
-                      <p className={`${customization.fontSize.content} font-medium font-[Poppins]`}>
+                      <p className={`${customization.fontSize.content} font-semibold font-[Poppins] line-clamp-1`}>
                         {assignment.choreName}
                       </p>
-                      <p className="text-xs md:text-sm text-slate-600 dark:text-slate-400">
-                        Zugewiesen: {assignment.studentName}
-                      </p>
+                      <div className="flex items-center gap-1 text-xs md:text-sm text-slate-600 dark:text-slate-400">
+                        <User className="w-3 md:w-4 h-3 md:h-4" />
+                        <span className="font-medium">{assignment.studentName}</span>
+                      </div>
                     </div>
                   </div>
                 </div>

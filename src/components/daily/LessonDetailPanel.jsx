@@ -2,8 +2,8 @@ import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { motion } from "framer-motion";
 import { Clock, User, Users, Users2, Building, ChevronLeft, ChevronRight, Play, CheckCircle2, Circle, Coffee, ChevronsRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
-// ENTFERNT: Countdown-Bibliothek, da sie nicht verfügbar ist.
-// import Countdown from "react-countdown";
+import { getThemeGradient, getGlowColor, getThemeTextColor } from "@/utils/colorDailyUtils";
+import { createGradient } from "@/utils/colorUtils"; // Korrigierter Import
 
 const WORK_FORM_ICONS = {
   'Single': User,
@@ -12,13 +12,17 @@ const WORK_FORM_ICONS = {
   'Plenum': Building
 };
 
-// ENTFERNT: Countdown-Renderer, da er nicht mehr benötigt wird.
-
+const WORK_FORMS = {
+  'Single': '👤 Single',
+  'Partner': '👥 Partner', 
+  'Group': '👨‍👩‍👧‍👦 Group',
+  'Plenum': '🏛️ Plenum'
+};
 
 export default function LessonDetailPanel({
-  lesson, // Represents the actively selected lesson by the user
-  currentItem, // Represents the item currently happening based on time
-  nextLesson, // Represents the lesson coming after a current break
+  lesson,
+  currentItem,
+  nextLesson,
   customization,
   currentTime,
   selectedDate,
@@ -29,69 +33,84 @@ export default function LessonDetailPanel({
 }) {
   const [currentStepIndex, setCurrentStepIndex] = useState(-1);
   const [manualStepControl, setManualStepControl] = useState(false);
-  const [timeLeftInPause, setTimeLeftInPause] = useState(""); // NEU: State für den Countdown
+  const [timeLeftInPause, setTimeLeftInPause] = useState("");
 
   // Determine what to display
   const displayLesson = lesson || (currentItem?.type === 'lesson' ? currentItem : null);
   const isPause = currentItem?.type === 'break';
 
+  // Anpassung für Allerlei: Nutze lesson.color und isGradient
+  const getLessonDisplay = (lesson) => {
+    if (lesson.is_allerlei) {
+      return {
+        name: "Allerlei",
+        emoji: "🌈",
+        color: lesson.color || "#a855f7", // Fallback auf Purple-500
+        isGradient: lesson.isGradient || false,
+      };
+    }
+    return {
+      name: lesson.subject?.name || lesson.subject || "Unbekanntes Fach",
+      emoji: lesson.subject?.emoji || "📚",
+      color: lesson.subject?.color || "#3b82f6",
+      isGradient: lesson.isGradient || false,
+    };
+  };
+
   // NEU: Effekt für den Pausen-Countdown
   useEffect(() => {
     if (!isPause) {
-        setTimeLeftInPause("");
-        return;
+      setTimeLeftInPause("");
+      return;
     }
 
     const breakEndTime = new Date(`${new Date().toDateString()} ${currentItem.timeSlot.end}`);
     
     const timer = setInterval(() => {
-        const now = new Date();
-        const distance = breakEndTime.getTime() - now.getTime();
+      const now = new Date();
+      const distance = breakEndTime.getTime() - now.getTime();
 
-        if (distance < 0) {
-            clearInterval(timer);
-            setTimeLeftInPause("Die Pause ist vorbei!");
-            return;
-        }
+      if (distance < 0) {
+        clearInterval(timer);
+        setTimeLeftInPause("Die Pause ist vorbei!");
+        return;
+      }
 
-        const minutes = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
-        const seconds = Math.floor((distance % (1000 * 60)) / 1000);
-        
-        setTimeLeftInPause(`${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`);
+      const minutes = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
+      const seconds = Math.floor((distance % (1000 * 60)) / 1000);
+      
+      setTimeLeftInPause(`${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`);
     }, 1000);
 
-    return () => clearInterval(timer); // Aufräumen bei Komponenten-Demontage
+    return () => clearInterval(timer);
   }, [isPause, currentItem]);
-
 
   // Sync with parent component's manual control state
   useEffect(() => {
     if (manualStepIndex !== null) {
-        setCurrentStepIndex(manualStepIndex);
-        setManualStepControl(true);
+      setCurrentStepIndex(manualStepIndex);
+      setManualStepControl(true);
     } else {
-        setManualStepControl(false);
+      setManualStepControl(false);
     }
   }, [manualStepIndex]);
 
   // Calculate current step based on time (only for today)
   useEffect(() => {
-    // Don't auto-update if manually controlled or if no lesson to display
     if (manualStepControl || !displayLesson) return;
     
     const today = new Date().toDateString();
     const selectedDay = selectedDate.toDateString();
     
-    // Only calculate for today or if displayLesson is available and has steps
     if (today !== selectedDay || !displayLesson.timeSlot || !displayLesson.steps) {
       setCurrentStepIndex(-1);
       return;
     }
 
     const lessonStart = new Date(`${today} ${displayLesson.timeSlot.start}`);
-    let elapsed = (currentTime - lessonStart) / 60000; // in minutes
+    let elapsed = (currentTime - lessonStart) / 60000;
     
-    if (elapsed < 0) { // If current time is before the lesson start
+    if (elapsed < 0) {
       setCurrentStepIndex(-1);
       return;
     }
@@ -99,9 +118,9 @@ export default function LessonDetailPanel({
     let stepIndex = 0;
     for (const step of displayLesson.steps) {
       const stepTime = parseInt(step.time) || 0;
-      if (elapsed <= 0) break; // If no time left, we've passed all steps for which we had time
+      if (elapsed <= 0) break;
       elapsed -= stepTime;
-      if (elapsed >= 0) stepIndex++; // Only increment if there's still time left or exactly 0 after subtracting current step's time
+      if (elapsed >= 0) stepIndex++;
     }
     
     setCurrentStepIndex(Math.min(stepIndex, displayLesson.steps.length - 1));
@@ -122,7 +141,7 @@ export default function LessonDetailPanel({
   };
   
   const handleStepToggle = useCallback((stepId) => {
-      onStepCompleteChange(stepId);
+    onStepCompleteChange(stepId);
   }, [onStepCompleteChange]);
 
   const totalTime = useMemo(() => {
@@ -137,56 +156,57 @@ export default function LessonDetailPanel({
   // Pause View
   if (isPause) {
     return (
-        <div className="rounded-2xl shadow-2xl border-2 border-slate-300/40 bg-slate-100/50 dark:bg-slate-800/50 overflow-hidden h-full flex flex-col items-center justify-center text-center p-6">
-             <Coffee className="w-20 h-20 text-slate-500 mb-6" />
-             <h2 className={`${customization.fontSize.title} font-bold text-slate-800 dark:text-slate-200`}>
-                {currentItem.name}
-            </h2>
-            {/* ERSETZT: Countdown-Komponente durch den neuen State */}
-            <span className={`font-bold tracking-tighter ${timeLeftInPause === "Die Pause ist vorbei!" ? "text-2xl" : "text-4xl"}`}>
-                {timeLeftInPause}
-            </span>
-            
-            {nextLesson && (
-                <div className="mt-8 w-full max-w-md">
-                    <p className="text-slate-600 dark:text-slate-400 mb-2 font-semibold">Nächste Lektion:</p>
-                    <div className="p-4 rounded-xl border-2 transition-all duration-200" style={{ backgroundColor: nextLesson.subject.color + '20', borderColor: nextLesson.subject.color + '50' }}>
-                        <div className="flex items-center justify-between">
-                            <div>
-                                <h4 className={`${customization.fontSize.content} font-bold text-slate-800 dark:text-slate-200`}>
-                                    {nextLesson.subject.name}
-                                </h4>
-                                <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">
-                                    {nextLesson.description}
-                                </p>
-                            </div>
-                            <ChevronsRight className="w-8 h-8 text-slate-400" style={{ color: nextLesson.subject.color }} />
-                        </div>
-                    </div>
+      <div className="rounded-2xl shadow-2xl border-2 border-slate-300/40 bg-slate-100/50 dark:bg-slate-800/50 overflow-hidden h-full flex flex-col items-center justify-center text-center p-6">
+        <Coffee className="w-20 h-20 text-slate-500 mb-6" />
+        <h2 className={`${customization.fontSize.title} font-bold text-slate-800 dark:text-slate-200`}>
+          {currentItem.name}
+        </h2>
+        <span className={`font-bold tracking-tighter ${timeLeftInPause === "Die Pause ist vorbei!" ? "text-2xl" : "text-4xl"}`}>
+          {timeLeftInPause}
+        </span>
+        
+        {nextLesson && (
+          <div className="mt-8 w-full max-w-md">
+            <p className="text-slate-600 dark:text-slate-400 mb-2 font-semibold">Nächste Lektion:</p>
+            <div className="p-4 rounded-xl border-2 transition-all duration-200" style={{ backgroundColor: nextLesson.subject.color + '20', borderColor: nextLesson.subject.color + '50' }}>
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className={`${customization.fontSize.content} font-bold text-slate-800 dark:text-slate-200`}>
+                    {nextLesson.subject.name}
+                  </h4>
+                  <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">
+                    {nextLesson.description}
+                  </p>
                 </div>
-            )}
-        </div>
+                <ChevronsRight className="w-8 h-8 text-slate-400" style={{ color: nextLesson.subject.color }} />
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
     );
   }
 
   // Lesson Detail View
   if (displayLesson) {
+    const { name, emoji, color, isGradient } = getLessonDisplay(displayLesson);
+
     return (
       <div 
         className="rounded-2xl shadow-2xl border-2 overflow-hidden h-full flex flex-col"
         style={{ 
-          backgroundColor: displayLesson.subject.color + '10',
-          borderColor: displayLesson.subject.color + '40'
+          backgroundColor: isGradient ? undefined : color + '10',
+          borderColor: color + '40'
         }}
       >
-        {/* Handle for dragging - ENTFERNT: detail-handle Klasse */}
+        {/* Header */}
         <div 
           className="p-4 cursor-default border-b flex justify-between items-center"
-          style={{ backgroundColor: displayLesson.subject.color + '90' }}
+          style={{ background: isGradient ? color : color + '90' }}
         >
           <div>
             <h2 className={`${customization.fontSize.title} font-bold text-white`}>
-              {displayLesson.subject.name || displayLesson.subject}
+              {emoji} {name}
             </h2>
             <p className={`${customization.fontSize.content} text-white/90`}>
               {displayLesson.description}
@@ -227,7 +247,7 @@ export default function LessonDetailPanel({
                     className="h-3 rounded-full transition-all duration-300"
                     style={{ 
                       width: `${totalTime > 0 ? (completedTime / totalTime) * 100 : 0}%`,
-                      backgroundColor: displayLesson.subject.color 
+                      backgroundColor: color
                     }}
                   />
                 </div>
@@ -274,23 +294,23 @@ export default function LessonDetailPanel({
                 </div>
               </div>
 
-              {/* Steps table */}
+              {/* Steps table with Emojis */}
               <div className="overflow-x-auto">
                 <table className="w-full">
                   <thead>
                     <tr className="border-b-2 border-slate-200 dark:border-slate-600">
                       <th className="p-3 w-12"></th>
                       <th className={`${customization.fontSize.content} text-left p-3 text-slate-700 dark:text-slate-300 font-semibold`}>
-                        Zeit
+                        <span className="mr-1">⏱️</span>Zeit
                       </th>
                       <th className={`${customization.fontSize.content} text-left p-3 text-slate-700 dark:text-slate-300 font-semibold`}>
-                        Arbeitsform
+                        <span className="mr-1">👥</span>Form
                       </th>
                       <th className={`${customization.fontSize.content} text-left p-3 text-slate-700 dark:text-slate-300 font-semibold`}>
-                        Ablauf
+                        <span className="mr-1">✏️</span>Ablauf
                       </th>
                       <th className={`${customization.fontSize.content} text-left p-3 text-slate-700 dark:text-slate-300 font-semibold`}>
-                        Material
+                        <span className="mr-1">📦</span>Material
                       </th>
                     </tr>
                   </thead>
@@ -317,10 +337,10 @@ export default function LessonDetailPanel({
                                   : 'hover:bg-slate-50 dark:hover:bg-slate-800/30'
                           }`}
                         >
-                           <td className="p-3 text-center">
-                              <button onClick={() => handleStepToggle(step.id)} className="cursor-pointer">
-                                  {isCompleted ? <CheckCircle2 className="w-5 h-5 text-green-500" /> : <Circle className="w-5 h-5 text-slate-400" />}
-                              </button>
+                          <td className="p-3 text-center">
+                            <button onClick={() => handleStepToggle(step.id)} className="cursor-pointer">
+                              {isCompleted ? <CheckCircle2 className="w-5 h-5 text-green-500" /> : <Circle className="w-5 h-5 text-slate-400" />}
+                            </button>
                           </td>
                           <td className="p-3">
                             <div className="flex items-center gap-2">
@@ -336,7 +356,7 @@ export default function LessonDetailPanel({
                             <div className="flex items-center gap-2">
                               <WorkFormIcon className="w-4 h-4 text-slate-500" />
                               <span className={`${customization.fontSize.content} ${isCurrent ? 'font-bold' : ''}`}>
-                                {step.workForm || '-'}
+                                {WORK_FORMS[step.workForm] || step.workForm || '-'}
                               </span>
                             </div>
                           </td>
@@ -358,7 +378,7 @@ export default function LessonDetailPanel({
               </div>
 
               {/* Additional lesson info */}
-              {(displayLesson.is_exam || displayLesson.is_allerlei || displayLesson.is_half_class || displayLesson.is_double_lesson) && (
+              {(displayLesson.is_exam || displayLesson.is_half_class || displayLesson.is_double_lesson) && (
                 <div className="mt-6 p-4 bg-slate-50 dark:bg-slate-700 rounded-xl">
                   <h4 className={`${customization.fontSize.content} font-semibold text-slate-700 dark:text-slate-300 mb-2`}>
                     Lektionsdetails
@@ -374,13 +394,8 @@ export default function LessonDetailPanel({
                         Prüfung
                       </span>
                     )}
-                    {displayLesson.is_allerlei && (
-                      <span className="px-3 py-1 bg-purple-100 dark:bg-purple-900 text-purple-700 dark:text-purple-300 text-sm rounded-full">
-                        Allerlei-Lektion
-                      </span>
-                    )}
                     {displayLesson.is_half_class && (
-                      <span className="px-3 py-1 bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300 text-sm rounded-full">
+                      <span className="px-3 py-1 bg-green-100 dark:bg-green-900 text-green-700 dark:text-blue-300 text-sm rounded-full">
                         Halbklasse
                       </span>
                     )}

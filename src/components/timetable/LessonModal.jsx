@@ -76,9 +76,9 @@ export default function LessonModal({
   const [selectedSecondLesson, setSelectedSecondLesson] = useState("");
   const [selectedSubject, setSelectedSubject] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [validationError, setValidationError] = useState(null);
   const [integratedOriginalData, setIntegratedOriginalData] = useState({});
-  const [validationError, setValidationError] = useState(null); // Neu: State für Validierungsfehler
-  
+
   const isEditing = !!lesson;
   const isNew = !lesson;
 
@@ -107,7 +107,7 @@ export default function LessonModal({
         isHidden: l.is_hidden
       }));
   }, [selectedSubject, allLessons, currentWeek]);
-  
+
   const subjectOptions = useMemo(() => {
     if (!subjects || !activeClassId) return [];
     
@@ -121,7 +121,7 @@ export default function LessonModal({
       }, [])
       .sort((a,b) => a.name.localeCompare(b.name));
   }, [subjects, activeClassId]);
-  
+
   const subjectTopics = useMemo(() => {
     const validSubjectIds = subjectOptions.map(s => s.id);
     return topics?.filter(topic => validSubjectIds.includes(topic.subject)) || [];
@@ -170,6 +170,27 @@ export default function LessonModal({
     return nextLesson ? [nextLesson] : [];
   }, [formData.is_double_lesson, selectedSubject, allYearlyLessons, currentWeek, lesson, slotInfo, scheduledLessonIds]);
 
+  // Memoisiere Callbacks, um Referenzänderungen zu verhindern
+  const onToggleChange = useCallback((checked) => {
+    setFormData(prev => ({ ...prev, is_allerlei: checked }));
+  }, []);
+
+  const onSubjectsChange = useCallback((subjects) => {
+    setFormData(prev => ({ ...prev, allerlei_subjects: subjects }));
+  }, []);
+
+  const onLessonsChange = useCallback((lessons) => {
+    setFormData(prev => ({ ...prev, allerlei_yearly_lesson_ids: Object.values(lessons) }));
+  }, []);
+
+  const onStepsChange = useCallback((steps) => {
+    setFormData(prev => ({ ...prev, steps: Object.values(steps).flat() }));
+  }, []);
+
+  const onIntegratedDataChange = useCallback((data) => {
+    setIntegratedOriginalData(data);
+  }, []);
+
   const { 
     isAllerlei, 
     handleToggle: handleAllerleiToggleHook, 
@@ -185,25 +206,25 @@ export default function LessonModal({
     addStep: addAllerleiStep, 
     removeStep: removeAllerleiStep, 
     getAllerleiYearlyLessonIds, 
-    validate: validateAllerleiSelection,
-    setIntegratedOriginalData: onIntegratedDataChange
+    validate: validateAllerleiSelection
+    // setIntegratedOriginalData wird nicht destrukturiert
   } = useAllerleiLogic({
-    initialData: formData || {},
+    initialData: formData,
     yearlyLessons: allYearlyLessons,
     allLessons,
     timeSlots,
     currentWeek,
     currentPosition: getCurrentLessonPosition(),
     subjectOptions,
-    onToggleChange: (checked) => setFormData(prev => ({ ...prev, is_allerlei: checked })),
-    onSubjectsChange: (subjects) => setFormData(prev => ({ ...prev, allerlei_subjects: subjects })),
-    onLessonsChange: (lessons) => setFormData(prev => ({ ...prev, allerlei_yearly_lesson_ids: Object.values(lessons) })),
-    onStepsChange: (steps) => setFormData(prev => ({ ...prev, steps: Object.values(steps).flat() })),
-    onIntegratedDataChange: setIntegratedOriginalData
+    onToggleChange,
+    onSubjectsChange,
+    onLessonsChange,
+    onStepsChange,
+    onIntegratedDataChange
   });
 
   const handleAllerleiToggle = async (checked) => {
-    setValidationError(null); // Reset Fehler bei Toggle
+    setValidationError(null);
     await handleAllerleiToggleHook(checked);
     if (!checked) {
       const primaryId = Object.values(selectedLessons)[0];
@@ -222,6 +243,8 @@ export default function LessonModal({
       let loadedName = '';
       let loadedSecondName = '';
       let loadedPrimarySteps = [];
+      let loadedAllerleiSubjects = lessonToLoad.allerlei_subjects || []; // Neu: Allerlei-Fächer laden
+      let loadedAllerleiYearlyLessonIds = lessonToLoad.allerlei_yearly_lesson_ids || []; // Neu: Allerlei-Lektionen laden
 
       if (lessonToLoad.is_allerlei) {
         loadedName = lessonToLoad.name || 'Allerlei';
@@ -258,7 +281,9 @@ export default function LessonModal({
         is_half_class: lessonToLoad.is_half_class || false,
         original_topic_id: lesson?.topic_id || "no_topic",
         name: loadedName,
-        second_name: loadedSecondName
+        second_name: loadedSecondName,
+        allerlei_subjects: loadedAllerleiSubjects, // Neu: Hinzufügen
+        allerlei_yearly_lesson_ids: loadedAllerleiYearlyLessonIds // Neu: Hinzufügen
       });
       setSelectedSubject(lessonToLoad.subject || initialSubject || "");
       setAddSecondLesson(lessonToLoad.is_double_lesson && !!lessonToLoad.second_yearly_lesson_id);
@@ -272,7 +297,7 @@ export default function LessonModal({
         setSecondSteps(lessonToLoad.steps?.filter(step => step.id?.startsWith('second-')).map(s => ({ ...s, id: `second-${s.id || generateId()}` })) || []);
       }
     }
-  }, [isOpen, lesson, copiedLesson, initialSubject, allYearlyLessons, generateId]);
+  }, [isOpen, lesson, copiedLesson, initialSubject, allYearlyLessons]);
 
   useEffect(() => {
     if (!isOpen || isEditing || copiedLesson) return;
@@ -315,7 +340,7 @@ export default function LessonModal({
       setAddSecondLesson(false);
       setSelectedSecondLesson("");
     }
-  }, [selectedSubject, isOpen, isEditing, copiedLesson, currentWeek, allYearlyLessons, scheduledLessonIds, generateId]);
+  }, [isOpen, isEditing, copiedLesson, selectedSubject, currentWeek, allYearlyLessons, scheduledLessonIds]);
 
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -415,7 +440,7 @@ export default function LessonModal({
 
   const isFormValid = useMemo(() => {
     if (!isAllerlei) return !!selectedSubject || isEditing;
-    return allerleiSubjects.filter(Boolean).length >= 2 && 
+    return allerleiSubjects.filter(Boolean).length >= 1 && 
            getAllerleiYearlyLessonIds().every(id => id) &&
            (selectedSubject || isEditing);
   }, [isAllerlei, allerleiSubjects, selectedSubject, isEditing, getAllerleiYearlyLessonIds]);
@@ -424,7 +449,7 @@ export default function LessonModal({
     e.preventDefault();
     if (isSubmitting || !isFormValid) return;
     setIsSubmitting(true);
-    setValidationError(null); // Reset Fehler vor Submit
+    setValidationError(null);
     try {
       // Validate Allerlei
       validateAllerleiSelection();
@@ -471,7 +496,7 @@ export default function LessonModal({
           getCurrentLessonPosition(),
           allYearlyLessons,
           onIntegratedDataChange,
-          lesson?.id  // Pass current lesson ID to skip hiding it
+          lesson?.id
         );
       }
 
@@ -588,12 +613,12 @@ export default function LessonModal({
         }
       }
 
-      console.log('Final lesson data:', lessonData);
+      console.log('onSave called with lessonData:', lessonData, 'toDeleteIds:', toDeleteIds);
       await onSave(lessonData, toDeleteIds);
       onClose();
     } catch (error) {
       console.error('Error in handleSubmit:', error);
-      setValidationError(error.message); // Zeige Fehler in der UI
+      setValidationError(error.message);
       throw error;
     } finally {
       setIsSubmitting(false);
@@ -775,7 +800,7 @@ export default function LessonModal({
             <div className="space-y-4 p-4 rounded-lg bg-slate-100/50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700">
               <Label className="font-semibold text-slate-900 dark:text-white">Allerlei-Fächer</Label>
               <p className="text-sm text-slate-500 dark:text-slate-400">
-                Wählen Sie mindestens zwei Fächer für eine Allerleilektion aus.
+                Wählen Sie mindestens ein Fach für eine Allerleilektion aus.
               </p>
               <div className="space-y-3">
                 {allerleiSubjects.map((fach, index) => (
@@ -856,6 +881,7 @@ export default function LessonModal({
                 className="text-white hover:opacity-90" 
                 style={{ background: displayModalColor }} 
                 disabled={isSubmitting || !isFormValid}
+                title={!isFormValid ? 'Bitte wählen Sie mindestens ein Fach und eine Lektion aus.' : ''}
               >
                 <Save className="w-4 h-4 mr-2" />
                 {isEditing ? "Änderungen speichern" : "Lektion planen"}

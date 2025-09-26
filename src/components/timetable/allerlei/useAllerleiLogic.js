@@ -123,7 +123,13 @@ export const useAllerleiLogic = ({
       }
     });
     
-    setAllerleiSteps(newSteps);
+    // Vermeide unnötige Updates, indem wir prüfen, ob newSteps sich geändert hat
+    setAllerleiSteps(prev => {
+      if (JSON.stringify(prev) === JSON.stringify(newSteps)) {
+        return prev;
+      }
+      return newSteps;
+    });
     onStepsChange?.(newSteps);
   }, [isAllerlei, selectedLessons, yearlyLessons, generateId, onStepsChange]);
 
@@ -144,7 +150,7 @@ export const useAllerleiLogic = ({
       setAllerleiSteps({});
       setIntegratedOriginalData({});
     }
-  }, [isAllerlei, selectedLessons, allLessons, timeSlots, currentWeek, integratedOriginalData, onToggleChange]);
+  }, [allLessons, timeSlots, currentWeek, integratedOriginalData, onToggleChange]);
 
   const addSubject = useCallback(() => {
     const newIndex = allerleiSubjects.length;

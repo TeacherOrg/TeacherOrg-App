@@ -2,6 +2,7 @@ import React from "react";
 import { motion } from "framer-motion";
 import { Clock, BookOpen } from "lucide-react";
 import { getThemeGradient, getGlowColor, getThemeTextColor } from "@/utils/colorDailyUtils";
+import { createGradient } from "@/utils/colorUtils"; // Korrigierter Import
 
 export default function LessonOverviewPanel({
   items,
@@ -33,7 +34,6 @@ export default function LessonOverviewPanel({
     }
   };
 
-  // Neue Funktion: Konvertiere Tailwind-Klasse zu Hex
   const getHolidayHexColor = (holiday) => {
     if (!holiday) return '#64748b'; // Default Slate-500
     
@@ -52,6 +52,24 @@ export default function LessonOverviewPanel({
       default:
         return '#64748b'; // Slate-500
     }
+  };
+
+  // Anpassung für Allerlei: Nutze lesson.color und isGradient
+  const getLessonDisplay = (lesson) => {
+    if (lesson.is_allerlei) {
+      return {
+        name: "Allerlei",
+        emoji: "🌈",
+        color: lesson.color || "#a855f7", // Fallback auf Purple-500
+        isGradient: lesson.isGradient || false,
+      };
+    }
+    return {
+      name: lesson.subject?.name || "Unbekanntes Fach",
+      emoji: lesson.subject?.emoji || "📚",
+      color: lesson.subject?.color || "#3b82f6",
+      isGradient: lesson.isGradient || false,
+    };
   };
 
   // Variants for animations
@@ -89,10 +107,10 @@ export default function LessonOverviewPanel({
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            className="text-white p-4 md:p-6 rounded-xl text-center" // Responsives Padding
+            className="text-white p-4 md:p-6 rounded-xl text-center"
             style={{ background: getThemeGradient(theme, getHolidayHexColor(currentHoliday), -10, isDark) }}
           >
-            <div className="text-4xl md:text-6xl mb-2 md:mb-4">{getHolidayEmoji(currentHoliday)}</div> {/* Kleinere Emoji auf Mobile */}
+            <div className="text-4xl md:text-6xl mb-2 md:mb-4">{getHolidayEmoji(currentHoliday)}</div>
             <h3 className={`${customization.fontSize.title} font-bold mb-1 md:mb-2 font-[Inter]`}>
               {currentHoliday.name}
             </h3>
@@ -119,12 +137,13 @@ export default function LessonOverviewPanel({
               const isSelected = selectedItem?.id === lesson.id;
               const isCurrent = currentItem?.type === 'lesson' && currentItem.id === lesson.id;
               const isPast = lesson.progress >= 100;
+              const { name, emoji, color, isGradient } = getLessonDisplay(lesson);
               const cardStyle = {
-                background: getThemeGradient(theme, lesson.subject.color, undefined, isDark),
-                borderColor: isSelected ? lesson.subject.color : undefined,
-                color: getThemeTextColor(theme, lesson.subject.color, isDark),
+                background: isGradient ? color : getThemeGradient(theme, color, undefined, isDark),
+                borderColor: isSelected ? color : undefined,
+                color: getThemeTextColor(theme, color, isDark),
               };
-              const glowStyle = isCurrent ? { boxShadow: getGlowColor(theme, lesson.subject.color, undefined, isDark) } : {};
+              const glowStyle = isCurrent ? { boxShadow: getGlowColor(theme, color, undefined, isDark) } : {};
               
               return (
                 <motion.div
@@ -147,14 +166,14 @@ export default function LessonOverviewPanel({
                   style={{ 
                     ...cardStyle, 
                     ...glowStyle,
-                    backgroundColor: lesson.subject.color + '20',
+                    backgroundColor: isGradient ? undefined : color + '20',
                   }}
                   onClick={() => onItemSelect(lesson)}
                 >
                   <div className="flex items-start justify-between mb-1 md:mb-2">
                     <div>
                       <h4 className={`${customization.fontSize.content} font-bold font-[Inter]`}>
-                        {lesson.subject?.emoji || '📚'} {lesson.subject?.name || 'Unbekanntes Fach'}
+                        {emoji} {name}
                         {isCurrent && (
                           <span className="ml-2 px-1 md:px-2 py-0.5 md:py-1 bg-green-500 text-white text-xs rounded-full">
                             Aktuell
@@ -197,7 +216,7 @@ export default function LessonOverviewPanel({
                           animate={{ width: `${lesson.progress}%` }}
                           transition={{ duration: 0.3, ease: "easeInOut" }}
                           style={{ 
-                            backgroundColor: lesson.subject.color 
+                            backgroundColor: color 
                           }}
                         />
                       </motion.div>
@@ -216,14 +235,6 @@ export default function LessonOverviewPanel({
                         whileHover={{ scale: 1.1 }}
                       >
                         Prüfung
-                      </motion.span>
-                    )}
-                    {lesson.is_allerlei && (
-                      <motion.span 
-                        className="px-1 md:px-2 py-0.5 md:py-1 bg-purple-100 dark:bg-purple-900 text-purple-700 dark:text-purple-300 text-xs rounded-full"
-                        whileHover={{ scale: 1.1 }}
-                      >
-                        Allerlei
                       </motion.span>
                     )}
                     {lesson.is_half_class && (
