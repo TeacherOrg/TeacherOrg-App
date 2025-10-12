@@ -1,9 +1,9 @@
 import pb from '@/api/pb';
-import { prepareAllerleiForPersist, normalizeAllerleiData } from '@/components/timetable/allerlei/AllerleiUtils';
+import { prepareAllerleiForPersist } from '@/components/timetable/allerlei/AllerleiUtils';
 import { safeProcessArray } from '@/utils/safeData'; // Neu: Import für Batch
 
 // Debugging-Flag basierend auf der Umgebung
-const isDebug = process.env.NODE_ENV === 'development' || false;
+const isDebug = false;
 
 class PbEntity {
   constructor(name) {
@@ -15,7 +15,8 @@ class PbEntity {
     const expandMap = {
       lesson: 'subject,user_id,yearly_lesson_id,second_yearly_lesson_id,topic_id',
       yearly_lesson: 'subject,user_id,class_id,topic_id,second_yearly_lesson_id',
-      topic: 'class_id',
+      allerlei_lesson: 'primary_yearly_lesson_id.expand.subject,added_yearly_lesson_ids.expand.subject,user_id,class_id,topic_id',
+      topic: 'class_id,subject',
       subject: 'class_id',
       setting: 'user_id',
       classe: 'user_id',
@@ -51,6 +52,12 @@ class PbEntity {
 
     const prepared = { ...data };
 
+    // Entferne id für Create-Anfragen bei yearly_lesson
+    if (this.name === 'yearly_lesson') {
+      delete prepared.id;
+      if (isDebug) console.log(`Debug: Removed id from ${this.name} payload for create`);
+    }
+
     // Numerische Felder konvertieren
     ['lesson_number', 'week_number', 'school_year'].forEach(field => {
       if (prepared[field] !== undefined && prepared[field] !== null) {
@@ -66,7 +73,18 @@ class PbEntity {
       }
     }
 
-    // NEU: Für chore_assignment: assignment_date als ISO-Datum formatieren
+    // Konvertiere topic_id zu null, wenn leer oder 'no_topic' für yearly_lesson
+    if (this.name === 'yearly_lesson' && (prepared.topic_id === '' || prepared.topic_id === 'no_topic')) {
+      prepared.topic_id = null;
+      if (isDebug) console.log(`Debug: Converted topic_id to null for ${this.name}`);
+    }
+
+    // Setze is_draft für topic
+    if (this.name === 'topic') {
+      prepared.is_draft = typeof prepared.is_draft === 'boolean' ? prepared.is_draft : false;
+    }
+
+    // Für chore_assignment: assignment_date als ISO-Datum formatieren
     if (this.name === 'chore_assignment' && prepared.assignment_date) {
       const date = new Date(prepared.assignment_date);
       prepared.assignment_date = date.toISOString().split('T')[0];
@@ -85,33 +103,38 @@ class PbEntity {
       }
     }
 
-    // ✅ FIX: Spezielle Handhabung für relationale Felder (IDs)
+    // Handhabung für relationale Felder (IDs)
     const relationalFields = ['user_id', 'class_id', 'student_id', 'subject', 'competency_id', 'topic_id', 'yearly_lesson_id', 'second_yearly_lesson_id'];
-    
     relationalFields.forEach(field => {
       if (prepared[field] !== undefined && prepared[field] !== null) {
+        if (field === 'topic_id' && prepared[field] === 'no_topic') return;
         prepared[field] = String(prepared[field]).trim();
-        if (isDebug && prepared[field].length < 10) {
+        if (isDebug && prepared[field].length > 0 && prepared[field].length < 10) {
           console.warn(`Suspicious ID length for ${field} in ${this.name}:`, prepared[field]);
         }
       }
     });
 
-    // ✅ FIX: Für competencies (und andere Entities) immer user_id erzwingen, wenn möglich
+    // Für bestimmte Entitäten user_id erzwingen
     if (['competencie', 'ueberfachliche_kompetenz', 'performance', 'classe'].includes(this.name)) {
       const currentUser = pb.authStore.model;
-      console.log(`[PREPARE] Check for ${this.name} - currentUser:`, !!currentUser, 'id:', currentUser?.id, 'existing user_id:', prepared.user_id); // ← ERWEITERTER LOG
+      console.log(`[PREPARE] Check for ${this.name} - currentUser:`, !!currentUser, 'id:', currentUser?.id, 'existing user_id:', prepared.user_id);
       if (currentUser && currentUser.id) {
         prepared.user_id = currentUser.id; // Immer setzen (überschreibt falls vorhanden)
-        console.log(`[PREPARE] Set user_id to ${currentUser.id} for ${this.name}`); // ← LOG
+        console.log(`[PREPARE] Set user_id to ${currentUser.id} for ${this.name}`);
       } else {
-        console.error(`[PREPARE] No valid user found for ${this.name} - cannot set user_id`); // ← ERROR-LOG
-        // Optional: Throw Error, um den Request zu stoppen
-        // throw new Error(`Cannot prepare ${this.name}: No authenticated user`);
+        console.error(`[PREPARE] No valid user found for ${this.name} - cannot set user_id`);
       }
     }
 
-    // Entferne NUR denormalisierte Felder
+    if (['lesson', 'allerlei_lesson'].includes(this.name)) {
+      const currentUser = pb.authStore.model;
+      if (currentUser && currentUser.id) {
+        prepared.user_id = currentUser.id;
+      }
+    }
+
+    // Entferne denormalisierte Felder
     const denormFields = ['user_name', 'class_name', 'subject_name', 'topic_name', 'yearly_lesson_name', 'second_yearly_lesson_name', 'competency_name_display'];
     denormFields.forEach(field => delete prepared[field]);
 
@@ -148,13 +171,13 @@ class PbEntity {
       normalizedItem.student_name = normalizedItem.expand?.student_id?.name || 'Unknown Student';
       normalizedItem.chore_name = normalizedItem.expand?.chore_id?.name || normalizedItem.expand?.chore_id?.description || 'Unknown Chore';
       normalizedItem.class_name = normalizedItem.expand?.class_id?.name || 'Unknown Class';
-      
+     
       // NEU: assignment_date auf ISO-Datum normalisieren
       if (normalizedItem.assignment_date) {
         const date = new Date(normalizedItem.assignment_date);
         normalizedItem.assignment_date = date.toISOString().split('T')[0];
       }
-      
+     
       if (isDebug) {
         console.log('Debug: Normalizing chore_assignment', {
           id: normalizedItem.id,
@@ -180,12 +203,15 @@ class PbEntity {
     normalizedItem.user_name = normalizedItem.expand.user_id?.name || '';
     normalizedItem.class_name = normalizedItem.expand.class_id?.name || '';
 
-    if (this.name === 'topic') {
-      normalizedItem.subject_name = normalizedItem.subject || '';
-    } else {
-      normalizedItem.subject_name = normalizedItem.expand?.subject?.name || 'Unbekannt';
+    normalizedItem.subject_name = normalizedItem.expand?.subject?.name || normalizedItem.subject_name || 'Unbekannt';
+    if (this.name === 'allerlei_lesson') {
+      normalizedItem.subject_name = 'Allerlei'; // Kein single subject für Allerlei
+      normalizedItem.subject = null;
+      // Setze subjectNames aus allerlei_subjects, wenn verfügbar
+      normalizedItem.allerlei_subjects = normalizedItem.allerlei_subjects || [];
+    } else if (this.name === 'yearly_lesson') {
+      normalizedItem.subject_name = normalizedItem.expand?.subject?.name || normalizedItem.subject_name || 'Unbekannt';
     }
-
     normalizedItem.topic_name = normalizedItem.expand?.topic_id?.name || '';
     normalizedItem.yearly_lesson_name = normalizedItem.expand?.yearly_lesson_id?.name || '';
     normalizedItem.second_yearly_lesson_name = normalizedItem.expand?.second_yearly_lesson_id?.name || '';
@@ -268,12 +294,34 @@ class PbEntity {
         console.log(`Debug: Loading ${this.name}s for user:`, currentUser?.id || 'No user');
         console.log(`Debug: Query params:`, params);
       }
-      const response = await this.collection.getList(1, params.perPage, params);
+      let response;
+      try {
+        response = await this.collection.getList(1, params.perPage, params);
+        console.log(`Debug ${this.name} full response:`, {
+          expandUsed: params.expand,
+          items: response.items.map(i => ({
+            id: i.id,
+            expand: i.expand ? Object.keys(i.expand) : null,
+            primary_yearly_lesson_id: i.primary_yearly_lesson_id,
+            added_yearly_lesson_ids: i.added_yearly_lesson_ids,
+            allerlei_subjects: i.allerlei_subjects
+          }))
+        }); // Erweiterter Log für expand keys und relevante Felder
+      } catch (error) {
+        console.error(`Error fetching ${this.name}:`, error);
+        return [];
+      }
       const items = response?.items || [];
       if (!Array.isArray(items)) {
         console.error(`Invalid API response for ${this.name}: items is not an array`, response);
         return [];
       }
+      
+      // Neu: Für allerlei_lesson warn only, no retry to avoid loop
+      if (items.length === 0 && this.name === 'allerlei_lesson') {
+        console.warn(`No ${this.name} found. This may be normal if none exist.`); // Neu: Warn only, no retry
+      }
+
       if (this.name === 'ueberfachliche_kompetenz') {
         console.log(`Debug: Raw ueberfachliche_kompetenz data from API`, items.map(item => ({
           id: item.id,
@@ -336,16 +384,76 @@ class PbEntity {
     }
   }
 
+  // In entities.js PbEntity.create: Replace the entire create method with this
   async create(data, options = {}) {
-    // ✅ $cancelKey aus data entfernen und separat handhaben
     const cancelKey = options.$cancelKey || `create-${this.name}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    const params = { $cancelKey: cancelKey };
+
+    if (data instanceof FormData) {
+      if (isDebug) console.log(`Debug: Creating ${this.name} with FormData`, data);
+      try {
+        const response = await pb.collection(this.collectionName).create(data, params);
+        if (isDebug) console.log(`Debug: Create response for ${this.name}:`, JSON.stringify(response, null, 2));
+        return response;
+      } catch (error) {
+        if (isDebug) {
+          console.error(`Error creating ${this.name} with FormData:`, error);
+        }
+        throw error;
+      }
+    }
+
     const cleanData = { ...data };
-    delete cleanData.$cancelKey; // Falls jemand es in data gesteckt hat
+    delete cleanData.$cancelKey;
     
     const preparedData = this.prepareForPersist(cleanData);
     
-    // ✅ FIX: Finale Validierung für required Felder wie user_id
-    if (['competencie', 'ueberfachliche_kompetenz', 'performance', 'classe'].includes(this.name)) {
+    // Neu: Validation for 'yearly_lesson' required fields
+    if (this.name === 'yearly_lesson') {
+      if (!preparedData.class_id) {
+        throw new Error('Missing required field: class_id for yearly_lesson');
+      }
+      if (!preparedData.subject) {
+        throw new Error('Missing required field: subject for yearly_lesson');
+      }
+      if (!preparedData.user_id) {
+        throw new Error('Missing required field: user_id for yearly_lesson');
+      }
+      // Konvertiere leeres topic_id zu null
+      if (preparedData.topic_id === '' || preparedData.topic_id === 'no_topic') {
+        preparedData.topic_id = null;
+        if (isDebug) console.log(`Debug: Converted topic_id to null for ${this.name}`);
+      }
+    }
+
+    // Bestehende Validierung für 'allerlei_lesson' relational IDs
+    if (this.name === 'allerlei_lesson') {
+      const primaryId = preparedData.primary_yearly_lesson_id;
+      const addedIds = preparedData.added_yearly_lesson_ids || [];
+      if (primaryId) {
+        try {
+          await pb.collection('yearly_lessons').getOne(primaryId);
+        } catch (err) {
+          if (err.status === 404) {
+            throw new Error(`Primary yearly lesson ID ${primaryId} does not exist.`);
+          }
+        }
+      } else {
+        throw new Error('Primary yearly lesson ID required for allerlei_lesson.');
+      }
+      for (const addedId of addedIds) {
+        try {
+          await pb.collection('yearly_lessons').getOne(addedId);
+        } catch (err) {
+          if (err.status === 404) {
+            throw new Error(`Added yearly lesson ID ${addedId} does not exist.`);
+          }
+        }
+      }
+    }
+    
+    // Bestehende Validierung für required Felder wie user_id
+    if (['competencie', 'ueberfachliche_kompetenz', 'performance', 'classe', 'allerlei_lesson', 'topic'].includes(this.name)) {
       const currentUser = pb.authStore.model;
       if (!preparedData.user_id) {
         if (currentUser && currentUser.id) {
@@ -359,7 +467,7 @@ class PbEntity {
       }
     }
     
-    // ✅ FIX: Validierung vor dem Erstellen
+    // Validierung vor dem Erstellen
     if (!preparedData || Object.keys(preparedData).length === 0) {
       const error = new Error(`No valid data to create ${this.name}`);
       if (isDebug) console.error(`Error creating in ${this.name}:`, error.message);
@@ -373,7 +481,7 @@ class PbEntity {
     }
     
     try {
-      const response = await pb.collection(this.collectionName).create(preparedData, { $cancelKey: cancelKey });
+      const response = await pb.collection(this.collectionName).create(preparedData, params);
       if (isDebug) console.log(`Debug: Create response for ${this.name}:`, JSON.stringify(response, null, 2));
       return response;
     } catch (error) {
@@ -387,7 +495,7 @@ class PbEntity {
         });
       }
       
-      // ✅ Bessere Fehlerbehandlung: Unterscheide zwischen Autocancellation und Validierungsfehlern
+      // Bessere Fehlerbehandlung: Unterscheide zwischen Autocancellation und Validierungsfehlern
       if (error.message?.includes('autocancelled')) {
         if (isDebug) console.warn(`Create request for ${this.name} was autocancelled`);
         throw error; // Weiterwerfen, damit Retry-Logik im aufrufenden Code greifen kann
@@ -395,44 +503,9 @@ class PbEntity {
       
       // Spezifische Behandlung für Validierungsfehler
       if (error.status === 400 && error.data?.data) {
-        const validationErrors = error.data.data;
-        
-        // Für competencies: Prüfe auf fehlende required Felder
-        if (this.name === 'competencie') {
-          const currentUser = pb.authStore.model;
-          if (!preparedData.user_id && currentUser && currentUser.id) {
-            // Retry mit auto-added user_id
-            if (isDebug) console.log(`Retrying competencie create with auto-added user_id:`, currentUser.id);
-            const retryData = { ...preparedData, user_id: currentUser.id };
-            try {
-              const retryResponse = await pb.collection(this.collectionName).create(retryData, { 
-                $cancelKey: `retry-create-${this.name}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}` 
-              });
-              if (isDebug) console.log(`Debug: Retry create response for ${this.name}:`, JSON.stringify(retryResponse, null, 2));
-              return retryResponse;
-            } catch (retryError) {
-              if (isDebug) console.error(`Retry failed for ${this.name}:`, retryError);
-              // Original error weiterwerfen
-            }
-          }
-        }
-        
-        // Fallback für lesson-spezifische Felder
-        if (this.name === 'lesson' && validationErrors.is_hidden?.code === 'validation_required') {
-          console.warn('Retrying without is_hidden due to validation error');
-          const fallbackData = { ...preparedData };
-          delete fallbackData.is_hidden;
-          
-          try {
-            const fallbackResponse = await pb.collection(this.collectionName).create(fallbackData, { 
-              $cancelKey: cancelKey 
-            });
-            if (isDebug) console.log(`Debug: Fallback create response for ${this.name}:`, JSON.stringify(fallbackResponse, null, 2));
-            return fallbackResponse;
-          } catch (fallbackError) {
-            if (isDebug) console.error(`Error in fallback create for ${this.name}:`, fallbackError);
-          }
-        }
+        console.error('Validation errors:', JSON.stringify(error.data.data, null, 2));
+        // Kein Retry für yearly_lesson, da es wahrscheinlich ein Validierungsproblem ist
+        throw error;
       }
       
       // Allgemeine Fehlerbehandlung
@@ -515,20 +588,16 @@ class PbEntity {
   }
 
   async delete(id, options = {}) {
-    const cancelKey = options.$cancelKey || `delete-${this.name}-${id}-${Date.now()}`;
-    const params = { $cancelKey: cancelKey };
-    try {
-      await this.collection.delete(id, params);
-      return true;
-    } catch (error) {
-      if (isDebug) {
-        console.error(`Error deleting ${this.name} with id ${id}:`, error.message, error.data, error.stack);
+      const cancelKey = options.$cancelKey || `delete-${this.name}-${id}-${Date.now()}`;
+      const params = { $cancelKey: cancelKey };
+      try {
+          await this.collection.delete(id, params);
+          return true;
+      } catch (error) {
+          console.error(`Error deleting ${this.name} with id ${id}:`, error.message, error.data, error.stack);
+          // Entferne toast.error, wenn nicht immer verfügbar
+          throw error;  // ← Geändert: Throw statt return false, um Promise.all zu rejecten
       }
-      import('react-hot-toast').then(({ toast }) => {
-        toast.error(`Fehler beim Löschen von ${this.name}. Bitte versuchen Sie es erneut.`);
-      });
-      return false;
-    }
   }
 
   async batchCreate(items) {
@@ -606,8 +675,9 @@ export const Subject = new PbEntity('Subject');
 export const Holiday = new PbEntity('Holiday');
 export const Performance = new PbEntity('Performance');
 export const UeberfachlichKompetenz = new PbEntity('Ueberfachliche_kompetenz');
-export const Competency = new PbEntity('Competencie');
+export const Competency = new PbEntity('Competicie');
 export const Fachbereich = new PbEntity('Fachbereich');
+Fachbereich.collectionName = 'fachbereichs';
 export const DailyNote = new PbEntity('Daily_note');
 export const Announcement = new PbEntity('Announcement');
 export const Chore = new PbEntity('Chore');
@@ -615,6 +685,7 @@ export const ChoreAssignment = new PbEntity('Chore_assignment');
 export const Group = new PbEntity('Group');
 export const UserPreferences = new PbEntity('User_preference');
 export const CustomizationSettings = new PbEntity('Customization_setting');
+export const AllerleiLesson = new PbEntity('Allerlei_lesson');  // Neu: Entity für neue Collection
 
 export const User = {
   current: () => pb.authStore.model || null,

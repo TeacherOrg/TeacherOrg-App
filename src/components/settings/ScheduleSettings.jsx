@@ -1,12 +1,18 @@
 import React from 'react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
+import FixedScheduleTemplateEditor from './FixedScheduleTemplateEditor';
 
-export default function ScheduleSettings({ settings, setSettings }) {
+export default function ScheduleSettings({ settings, setSettings, classes, subjects }) {
     if (!settings) return <div className="text-slate-900 dark:text-white">Laden...</div>;
 
     const handleSettingChange = (key, value) => {
         setSettings(prev => ({ ...prev, [key]: value }));
+    };
+
+    const handleTemplateSave = (newTemplate) => {
+        handleSettingChange('fixedScheduleTemplate', newTemplate);
     };
 
     return (
@@ -15,6 +21,34 @@ export default function ScheduleSettings({ settings, setSettings }) {
                 <h3 className="text-lg font-semibold">Stundenplan-Einstellungen</h3>
                 <p className="text-sm text-slate-600 dark:text-slate-400">Passen Sie die Struktur Ihres Stundenplans an.</p>
             </div>
+
+            <div className="flex items-center space-x-4 rounded-lg border border-slate-300 dark:border-slate-600 p-4">
+                <Label htmlFor="schedule-type" className="flex-1">
+                    <span className="font-semibold">Stundenplan-Modus</span>
+                    <p className="text-sm text-slate-600 dark:text-slate-400">
+                        Aktuell: <span className="font-bold text-blue-400">{settings.scheduleType === 'flexible' ? 'Flexibler Plan' : 'Fixer Plan'}</span>
+                    </p>
+                </Label>
+                <Switch
+                    id="schedule-type"
+                    checked={settings.scheduleType === 'fixed'}
+                    onCheckedChange={(isChecked) => handleSettingChange('scheduleType', isChecked ? 'fixed' : 'flexible')}
+                />
+            </div>
+
+            {settings.scheduleType === 'fixed' && (
+                <div className="space-y-4">
+                    <h4 className="text-md font-semibold">Vorlagen-Editor für fixen Stundenplan</h4>
+                    <p className="text-sm text-slate-600 dark:text-slate-400">Ziehen Sie Fächer in die Zeitfenster.</p>
+                    <FixedScheduleTemplateEditor
+                        initialTemplate={settings.fixedScheduleTemplate || {}}
+                        onSave={handleTemplateSave}
+                        classes={classes}
+                        subjects={subjects}
+                        lessonsPerDay={settings.lessonsPerDay || 8}
+                    />
+                </div>
+            )}
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-2">

@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { User } from "@/api/entities";
 import { createPageUrl } from '@/utils/index.js';
-import { Calendar, Users, Settings, GraduationCap, LogOut, ClipboardList } from "lucide-react";
+import { Calendar, Users, Settings, GraduationCap, LogOut, ClipboardList, Sun, Moon, BookOpen } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -21,20 +21,26 @@ import SettingsModal from "../components/settings/SettingsModal";
 import ThemeToggle from "../components/ui/ThemeToggle";
 import CalendarLoader from "../components/ui/CalendarLoader";
 import pb from '@/api/pb';
+import { Button } from "@/components/ui/button";
 
 const navigationItems = [
   {
-    title: "Timetable",
+    title: "Stundenplan",
     url: createPageUrl("Timetable"),
     icon: Calendar,
   },
   {
-    title: "Grades",
+    title: "Themenansicht",
+    url: createPageUrl("Topics"),
+    icon: BookOpen,
+  },
+  {
+    title: "Leistung",
     url: createPageUrl("Grades"),
     icon: GraduationCap,
   },
   {
-    title: "Groups",
+    title: "Gruppen",
     url: createPageUrl("Groups"),
     icon: Users,
   },
@@ -42,19 +48,6 @@ const navigationItems = [
     title: "Ämtliplan",
     url: createPageUrl("Chores"),
     icon: ClipboardList,
-  },
-];
-
-const footerItems = [
-  {
-    title: "Settings",
-    icon: Settings,
-    action: (setIsSettingsModalOpen) => () => setIsSettingsModalOpen(true),
-  },
-  {
-    title: "Logout",
-    icon: LogOut,
-    action: (handleLogout) => handleLogout,
   },
 ];
 
@@ -88,6 +81,8 @@ export default function Layout({ children, currentPageName }) {
   const [isLoading, setIsLoading] = useState(true);
   const [sidebarError, setSidebarError] = useState(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const themeToggleRef = useRef(null);
+  const [theme, setTheme] = useState(localStorage.getItem('theme') || 'dark');
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -132,6 +127,38 @@ export default function Layout({ children, currentPageName }) {
   const handleMouseLeave = () => {
     setIsSidebarOpen(false);
   };
+
+  useEffect(() => {
+    const root = window.document.documentElement;
+    if (theme === 'dark') {
+      root.classList.add('dark');
+    } else {
+      root.classList.remove('dark');
+    }
+    localStorage.setItem('theme', theme);
+  }, [theme]);
+
+  const toggleTheme = () => {
+    setTheme(theme === 'dark' ? 'light' : 'dark');
+  };
+
+  const footerItems = [
+    {
+      title: "Settings",
+      icon: Settings,
+      action: () => setIsSettingsModalOpen(true),
+    },
+    {
+      title: "Logout",
+      icon: LogOut,
+      action: handleLogout,
+    },
+    {
+      title: "Theme",
+      icon: null,
+      action: toggleTheme,
+    },
+  ];
 
   if (isLoading) {
     return (
@@ -235,10 +262,17 @@ export default function Layout({ children, currentPageName }) {
                                     hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 bg-transparent
                                     ${isSidebarOpen ? 'justify-start' : 'justify-center'}
                                   `}
-                                  onClick={item.action ? item.action(setIsSettingsModalOpen, handleLogout) : undefined}
+                                  onClick={item.action}
                                 >
                                   <div className={`flex items-center ${isSidebarOpen ? 'gap-3 px-4 py-3' : 'px-0 py-3'} font-medium relative z-10`}>
-                                    <IconComponent className="w-5 h-5" />
+                                    {item.title === "Theme" ? (
+                                      <span className="relative flex h-5 w-5 items-center justify-center">
+                                        <Sun className="h-5 w-5 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0 text-slate-600 dark:text-slate-300" />
+                                        <Moon className="absolute top-1/2 left-1/2 h-5 w-5 -translate-x-1/2 -translate-y-1/2 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100 text-slate-600 dark:text-slate-300" />
+                                      </span>
+                                    ) : (
+                                      <IconComponent className="w-5 h-5" />
+                                    )}
                                     <span className={`font-medium tracking-tight ${isSidebarOpen ? '' : 'hidden'}`}>{item.title}</span>
                                   </div>
                                 </SidebarMenuButton>
@@ -251,29 +285,6 @@ export default function Layout({ children, currentPageName }) {
                         </SidebarMenuItem>
                       );
                     })}
-                    <SidebarMenuItem>
-                      <TooltipProvider>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <div 
-                              className={`
-                                relative overflow-hidden rounded-xl mb-2 transition-all duration-200 group border-0
-                                hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 bg-transparent
-                                ${isSidebarOpen ? 'justify-start px-4 py-3' : 'justify-center px-0 py-3'}
-                              `}
-                            >
-                              <div className={`flex items-center ${isSidebarOpen ? 'gap-3' : ''} font-medium relative z-10`}>
-                                <ThemeToggle />
-                                <span className={`font-medium tracking-tight ${isSidebarOpen ? '' : 'hidden'}`}>Theme</span>
-                              </div>
-                            </div>
-                          </TooltipTrigger>
-                          <TooltipContent side="right" className={`${isSidebarOpen ? 'hidden' : ''} bg-slate-800 text-white dark:bg-slate-200 dark:text-slate-900`}>
-                            Theme
-                          </TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
-                    </SidebarMenuItem>
                   </SidebarMenu>
                 </SidebarGroupContent>
               </SidebarGroup>
@@ -289,7 +300,16 @@ export default function Layout({ children, currentPageName }) {
                   />
                   <h1 className="text-xl font-bold text-slate-800 dark:text-white tracking-tight">TimeGrid</h1>
                 </div>
-                <ThemeToggle />
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={toggleTheme}
+                  className="w-8 h-8 rounded-lg text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 flex items-center justify-center"
+                >
+                  <Sun className="h-4 w-4 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
+                  <Moon className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 h-4 w-4 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
+                  <span className="sr-only">Toggle theme</span>
+                </Button>
               </div>
             </header>
 

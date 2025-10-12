@@ -160,7 +160,7 @@ const TimetableGrid = React.forwardRef(
     const gridStyle = useMemo(() => ({
       display: 'grid',
       gridTemplateColumns: `120px repeat(5, var(--cell-width, 120px))`,
-      gridTemplateRows: `auto repeat(${timeSlots?.length || 8}, min-content)`,
+      gridTemplateRows: `auto repeat(${timeSlots?.length || 8}, var(--cell-height, 80px))`, // Verwende --cell-height
       width: 'fit-content',
       gap: '0px',
       borderSpacing: '0px',
@@ -220,8 +220,7 @@ const TimetableGrid = React.forwardRef(
     };
 
     return (
-      <div ref={ref} className="grid gap-0 bg-white dark:bg-slate-800 rounded-2xl" style={gridStyle} key={lessons.length}>
-        {/* Header Row */}
+      <div ref={ref} className="timetable-grid-container grid gap-0 bg-white dark:bg-slate-800 rounded-2xl" style={gridStyle} key={lessons.length}>        {/* Header Row */}
         <div 
           className="p-3 text-center border-r border-b border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 sticky top-0 z-20"
           style={{ ...timeSlotCellStyle, gridRow: 1, gridColumn: 1 }}

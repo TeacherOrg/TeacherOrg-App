@@ -2,8 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { motion } from "framer-motion";
 import { Clock, User, Users, Users2, Building, ChevronLeft, ChevronRight, Play, CheckCircle2, Circle, Coffee, ChevronsRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { getThemeGradient, getGlowColor, getThemeTextColor } from "@/utils/colorDailyUtils";
-import { createGradient } from "@/utils/colorUtils"; // Korrigierter Import
+import { getThemeGradient } from "@/utils/colorDailyUtils";
 
 const WORK_FORM_ICONS = {
   'Single': User,
@@ -30,6 +29,8 @@ export default function LessonDetailPanel({
   onStepCompleteChange,
   manualStepIndex,
   onManualStepChange,
+  theme, // Neu hinzufügen
+  isDark // Neu hinzufügen
 }) {
   const [currentStepIndex, setCurrentStepIndex] = useState(-1);
   const [manualStepControl, setManualStepControl] = useState(false);
@@ -42,6 +43,12 @@ export default function LessonDetailPanel({
   // Anpassung für Allerlei: Nutze lesson.color und isGradient
   const getLessonDisplay = (lesson) => {
     if (lesson.is_allerlei) {
+      console.log("Debug: Allerlei Lesson in Detail", {
+        lessonId: lesson.id,
+        color: lesson.color,
+        isGradient: lesson.isGradient,
+        allerlei_subjects: lesson.allerlei_subjects
+      });
       return {
         name: "Allerlei",
         emoji: "🌈",
@@ -195,14 +202,16 @@ export default function LessonDetailPanel({
       <div 
         className="rounded-2xl shadow-2xl border-2 overflow-hidden h-full flex flex-col"
         style={{ 
-          backgroundColor: isGradient ? undefined : color + '10',
+          background: isGradient ? color : getThemeGradient(theme || 'default', color, undefined, isDark),
           borderColor: color + '40'
         }}
       >
         {/* Header */}
         <div 
           className="p-4 cursor-default border-b flex justify-between items-center"
-          style={{ background: isGradient ? color : color + '90' }}
+          style={{ 
+            background: isGradient ? color : getThemeGradient(theme || 'default', color, -10, isDark),
+          }}
         >
           <div>
             <h2 className={`${customization.fontSize.title} font-bold text-white`}>

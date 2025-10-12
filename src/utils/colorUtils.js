@@ -110,6 +110,32 @@ export const getTextColor = (bgColor) => {
 };
 
 /**
+ * Berechnet optimale Textfarbe für einen Hintergrund (unterstützt Hex und lineare Gradients)
+ * @param {string} bg - Hintergrund (Hex oder linear-gradient String)
+ * @returns {'black' | 'white'} Optimale Textfarbe
+ */
+export const getTextColorForBackground = (bg) => {
+  try {
+    let colorToCheck = bg;
+    
+    if (bg.startsWith('linear-gradient')) {
+      // Extrahiere die erste Farbe aus dem Gradient (z.B. #rrggbb)
+      const match = bg.match(/linear-gradient\([^,]+,\s*(#[a-fA-F0-9]{6})/i);
+      if (match && match[1]) {
+        colorToCheck = match[1];
+      } else {
+        return 'white'; // Fallback bei ungültigem Gradient
+      }
+    }
+    
+    return getTextColor(colorToCheck);
+  } catch (error) {
+    console.warn('getTextColorForBackground error:', error);
+    return 'white'; // Sicherer Fallback
+  }
+};
+
+/**
  * Konvertiert Hex-Farbe zu RGB Objekt
  * @param {string} hex - Hex-Farbe (#RRGGBB oder RRGGBB)
  * @returns {{r: number, g: number, b: number}} RGB Werte (0-255)

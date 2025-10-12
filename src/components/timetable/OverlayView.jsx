@@ -12,6 +12,11 @@ const WORK_FORMS = {
 const OverlayView = memo(({ lesson, schedule, overlayRef, disableHover, isDragging, onMouseMove, onMouseLeave, position, subjectColor }) => {
   if (disableHover || isDragging || position.top === 0) return null;
 
+  // Use lesson.color for Allerlei lessons, fallback to single-color gradient
+  const backgroundStyle = lesson.isGradient
+    ? lesson.color // Use the multi-color gradient from Allerlei
+    : `linear-gradient(135deg, ${subjectColor || '#ffffff'} 0%, ${adjustColor(subjectColor || '#ffffff', -20)} 100%)`;
+
   const overlayContent = (
     <div
       ref={overlayRef}
@@ -22,7 +27,7 @@ const OverlayView = memo(({ lesson, schedule, overlayRef, disableHover, isDraggi
         top: `${position.top}px`,
         left: `${position.left}px`,
         display: 'block',
-        background: `linear-gradient(135deg, ${subjectColor || '#ffffff'} 0%, ${adjustColor(subjectColor || '#ffffff', -20)} 100%)`  // Hier backgroundColor -> subjectColor ersetzt
+        background: backgroundStyle // Updated to use conditional background
       }}
       onMouseMove={onMouseMove}
       onMouseLeave={onMouseLeave}
@@ -60,15 +65,13 @@ const OverlayView = memo(({ lesson, schedule, overlayRef, disableHover, isDraggi
             </tr>
           </thead>
           <tbody>
+            <tr>
+              <td colSpan="4">
+                <hr className="border-t border-white" />
+              </td>
+            </tr>
             {lesson.steps.map((step, index) => (
                 <React.Fragment key={index}>
-                    {index > 0 && (
-                        <tr>
-                            <td colSpan="4">
-                                <hr className="border-t border-gray-300 dark:border-gray-600" />
-                            </td>
-                        </tr>
-                    )}
                     <tr className="bg-transparent">
                         <td className="px-2 py-2 text-white font-medium">
                             {step.time ? `${step.time}min` : ''}
@@ -99,7 +102,9 @@ const OverlayView = memo(({ lesson, schedule, overlayRef, disableHover, isDraggi
          JSON.stringify(prev.lesson.steps) === JSON.stringify(next.lesson.steps) && 
          prev.disableHover === next.disableHover && 
          prev.isDragging === next.isDragging &&
-         prev.position.top === next.position.top;
+         prev.position.top === next.position.top &&
+         prev.lesson.color === next.lesson.color && // Add color to memoization
+         prev.lesson.isGradient === next.lesson.isGradient; // Add isGradient to memoization
 });
 
 export default OverlayView;

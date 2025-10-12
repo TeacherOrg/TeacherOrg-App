@@ -2,7 +2,6 @@ import React from "react";
 import { motion } from "framer-motion";
 import { Clock, BookOpen } from "lucide-react";
 import { getThemeGradient, getGlowColor, getThemeTextColor } from "@/utils/colorDailyUtils";
-import { createGradient } from "@/utils/colorUtils"; // Korrigierter Import
 
 export default function LessonOverviewPanel({
   items,
@@ -57,6 +56,12 @@ export default function LessonOverviewPanel({
   // Anpassung für Allerlei: Nutze lesson.color und isGradient
   const getLessonDisplay = (lesson) => {
     if (lesson.is_allerlei) {
+      console.log("Debug: Allerlei Lesson in Overview", {
+        lessonId: lesson.id,
+        color: lesson.color,
+        isGradient: lesson.isGradient,
+        allerlei_subjects: lesson.allerlei_subjects
+      });
       return {
         name: "Allerlei",
         emoji: "🌈",
@@ -108,7 +113,7 @@ export default function LessonOverviewPanel({
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             className="text-white p-4 md:p-6 rounded-xl text-center"
-            style={{ background: getThemeGradient(theme, getHolidayHexColor(currentHoliday), -10, isDark) }}
+            style={{ background: getThemeGradient(theme || 'default', getHolidayHexColor(currentHoliday), -10, isDark) }}
           >
             <div className="text-4xl md:text-6xl mb-2 md:mb-4">{getHolidayEmoji(currentHoliday)}</div>
             <h3 className={`${customization.fontSize.title} font-bold mb-1 md:mb-2 font-[Inter]`}>
@@ -139,11 +144,11 @@ export default function LessonOverviewPanel({
               const isPast = lesson.progress >= 100;
               const { name, emoji, color, isGradient } = getLessonDisplay(lesson);
               const cardStyle = {
-                background: isGradient ? color : getThemeGradient(theme, color, undefined, isDark),
+                background: isGradient ? color : getThemeGradient(theme || 'default', color, undefined, isDark),
                 borderColor: isSelected ? color : undefined,
-                color: getThemeTextColor(theme, color, isDark),
+                color: getThemeTextColor(theme || 'default', color, isDark),
               };
-              const glowStyle = isCurrent ? { boxShadow: getGlowColor(theme, color, undefined, isDark) } : {};
+              const glowStyle = isCurrent ? { boxShadow: getGlowColor(theme || 'default', color, undefined, isDark) } : {};
               
               return (
                 <motion.div

@@ -30,7 +30,7 @@ const LessonCard = ({ lesson, isDragging, onEdit, onMouseEnter, onMouseLeave, on
   });
 
   const cardStyle = {
-    background: isGradient ? color : `linear-gradient(135deg, ${color} 0%, ${adjustColor(color, -20)} 100%)`,
+    background: isGradient ? color : color,  // Kein Gradient bei false
   };
 
   return (
@@ -72,7 +72,7 @@ const LessonCard = ({ lesson, isDragging, onEdit, onMouseEnter, onMouseLeave, on
               {lesson?.is_double_lesson && lesson?.second_yearly_lesson_id && lesson?.secondYearlyLesson ? (
                 `${lesson?.primaryYearlyLesson?.name || `Lektion ${lesson?.primaryYearlyLesson?.lesson_number || ''}`} + ${lesson?.secondYearlyLesson?.name || `Lektion ${Number(lesson?.primaryYearlyLesson?.lesson_number || 1) + 1}`}`
               ) : (
-                lesson?.primaryYearlyLesson?.name || `Lektion ${lesson?.primaryYearlyLesson?.lesson_number || ''}` || 'Neue Lektion'
+                lesson?.primaryYearlyLesson?.name || `Lektion ${lesson?.primaryYearlyLesson?.lesson_number || ''}` || 'Primäre (fehlt)'  // Neu: Fallback
               )}
             </div>
           </div>
@@ -80,7 +80,7 @@ const LessonCard = ({ lesson, isDragging, onEdit, onMouseEnter, onMouseLeave, on
           lesson?.is_double_lesson && lesson?.second_yearly_lesson_id && lesson?.secondYearlyLesson ? (
             `${lesson?.primaryYearlyLesson?.name || `Lektion ${lesson?.primaryYearlyLesson?.lesson_number || ''}`} + ${lesson?.secondYearlyLesson?.name || `Lektion ${Number(lesson?.primaryYearlyLesson?.lesson_number || 1) + 1}`}`
           ) : (
-            lesson?.primaryYearlyLesson?.name || `Lektion ${lesson?.primaryYearlyLesson?.lesson_number || ''}` || 'Neue Lektion'
+            lesson?.primaryYearlyLesson?.name || `Lektion ${lesson?.primaryYearlyLesson?.lesson_number || ''}` || 'Primäre (fehlt)'  // Neu: Fallback
           )
         )}
       </div>

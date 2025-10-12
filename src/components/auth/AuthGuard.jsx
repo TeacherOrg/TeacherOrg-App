@@ -7,11 +7,6 @@ const AuthGuard = ({ children }) => {
 
   useEffect(() => {
     const checkAuth = () => {
-      console.log('AuthGuard: isValid?', pb.authStore.isValid);
-      console.log('AuthGuard: model?', pb.authStore.model);
-      console.log('AuthGuard: verified?', pb.authStore.model?.verified);
-      console.log('AuthGuard: role?', pb.authStore.model?.role);
-
       if (!pb.authStore.isValid || !pb.authStore.model) {
         // Kein gültiger User – leite zu Login
         navigate('/login?error=invalid_auth'); // Änderung: navigate statt router.push

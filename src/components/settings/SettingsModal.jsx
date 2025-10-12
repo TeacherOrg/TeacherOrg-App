@@ -1,4 +1,3 @@
-// src/components/settings/SettingsModal.jsx
 import React, { useState, useEffect, useCallback } from 'react';
 import { Setting, Class, Subject, Holiday } from '@/api/entities';
 import { Button } from '@/components/ui/button';
@@ -275,6 +274,7 @@ const SettingsModal = ({ isOpen, onClose }) => {
   const [user, setUser] = useState(null);
   const [pendingEmail, setPendingEmail] = useState('');
   const [pendingUserSettings, setPendingUserSettings] = useState({ preferred_theme: 'dark', default_start_page: 'Timetable' });
+  const [initialSettings, setInitialSettings] = useState(null);
 
   const loadAllData = useCallback(async () => {
     setIsLoading(true);
@@ -298,9 +298,11 @@ const SettingsModal = ({ isOpen, onClose }) => {
         if (settingsData.length > 0) {
         const latestSettings = settingsData.sort((a, b) => new Date(b.updated) - new Date(a.updated))[0];
         setSettings(latestSettings);
+        setInitialSettings(latestSettings);
         } else {
         const defaultSettings = {
             user_id: userId,
+            scheduleType: 'flexible',
             startTime: '08:00',
             lessonsPerDay: 8,
             lessonDuration: 45,
@@ -312,16 +314,19 @@ const SettingsModal = ({ isOpen, onClose }) => {
             afternoonBreakAfter: 6,
             afternoonBreakDuration: 15,
             cellWidth: 120,
-            cellHeight: 80
+            cellHeight: 80,
+            fixedScheduleTemplate: {}
         };
         try {
             const newSettings = await Setting.create(defaultSettings);
             setSettings(newSettings);
+            setInitialSettings(newSettings);
         } catch (error) {
             if (error.status === 409) {
             const existingSettings = await Setting.findOne({ user_id: userId });
             if (existingSettings) {
                 setSettings(existingSettings);
+                setInitialSettings(existingSettings);
             } else {
                 throw new Error('Failed to fetch existing settings after 409 error');
             }
@@ -394,7 +399,7 @@ const SettingsModal = ({ isOpen, onClose }) => {
     switch (activeCategory) {
       case 'Klassen': return { classes, refreshData: loadAllData, setActiveClassId };
       case 'Fächer': return { subjects, classes, activeClassId, setActiveClassId, refreshData: loadAllData };
-      case 'Stundenplan': return { settings, setSettings };
+      case 'Stundenplan': return { settings, setSettings, classes, subjects };
       case 'Ferien': return { holidays, refreshData: loadAllData };
       case 'Größe': return { settings, setSettings };
       case 'Profil': return { 
@@ -406,7 +411,7 @@ const SettingsModal = ({ isOpen, onClose }) => {
   };
 
   const hasPendingChanges = () => {
-    return pendingEmail !== user?.email || Object.keys(pendingUserSettings).length > 0;
+    return pendingEmail !== user?.email || JSON.stringify(pendingUserSettings) !== JSON.stringify({ preferred_theme: user?.preferred_theme, default_start_page: user?.default_start_page }) || JSON.stringify(settings) !== JSON.stringify(initialSettings);
   };
 
   return (
@@ -451,7 +456,7 @@ const SettingsModal = ({ isOpen, onClose }) => {
         </div>
         <div className="p-4 flex justify-end gap-3 border-t border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800">
           <Button variant="outline" onClick={onClose}>Abbrechen</Button>
-          <Button onClick={handleSave} disabled={!hasPendingChanges() && activeCategory === 'Profil'} className="bg-blue-600 hover:bg-blue-700">Speichern & Schließen</Button>
+          <Button onClick={handleSave} disabled={!hasPendingChanges()} className="bg-blue-600 hover:bg-blue-700">Speichern & Schließen</Button>
         </div>
       </div>
     </div>

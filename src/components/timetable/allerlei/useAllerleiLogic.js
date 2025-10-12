@@ -1,6 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
-import { handleAllerleiUnlink, validateAllerlei } from './AllerleiUtils';
-import { Lesson, YearlyLesson } from '@/api/entities';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { allerleiService } from '@/components/timetable/hooks/allerleiService';  
 
 const WORK_FORMS = ['👤 Single', '👥 Partner', '👨‍👩‍👧‍👦 Group', '🏛️ Plenum'];
 
@@ -16,28 +15,116 @@ export const useAllerleiLogic = ({
   onSubjectsChange,
   onLessonsChange,
   onStepsChange,
-  onIntegratedDataChange
+  onIntegratedDataChange,
+  initialLessonId  
 }) => {
-  const [isAllerlei, setIsAllerlei] = useState(initialData.is_allerlei || false);
+  const [isAllerlei, setIsAllerlei] = useState(!!initialData.id);
   const [allerleiSubjects, setAllerleiSubjects] = useState(initialData.allerlei_subjects || []);
   const [selectedLessons, setSelectedLessons] = useState({});
   const [allerleiSteps, setAllerleiSteps] = useState({});
   const [integratedOriginalData, setIntegratedOriginalData] = useState({});
 
+  const isInitialized = useRef(false);
+
   const generateId = useCallback(() => Math.random().toString(36).substr(2, 9), []);
 
-  // Initialize selectedLessons from initial data
+  // Initialize from initial data
   useEffect(() => {
-    if (initialData.allerlei_yearly_lesson_ids && initialData.allerlei_subjects) {
+    if (isInitialized.current) return;
+
+    isInitialized.current = true;
+
+    if (initialData.primary_yearly_lesson_id && initialData.added_yearly_lesson_ids) {
       const initialSelected = {};
-      initialData.allerlei_yearly_lesson_ids.forEach((id, index) => {
-        if (initialData.allerlei_subjects[index] && id) {
-          initialSelected[index] = id;
+      initialSelected[0] = initialData.primary_yearly_lesson_id;
+      initialData.added_yearly_lesson_ids.forEach((id, index) => {
+        if (initialData.allerlei_subjects[index + 1] && id) {
+          initialSelected[index + 1] = id;
         }
       });
+      console.log('Debug: useAllerleiLogic init - initialSelected:', initialSelected, 'initialData:', initialData);
       setSelectedLessons(initialSelected);
+      setIsAllerlei(true);
+      setAllerleiSubjects(initialData.allerlei_subjects || []);
+    } else {
+      // Set primary lesson based on initiating lesson
+      const initiatingSubject = initialData.subject || initialLessonId ? allLessons.find(l => l.id === initialLessonId)?.subject : '';
+      console.log('Debug: useAllerleiLogic init - Initiating subject:', initiatingSubject, 'InitialData:', initialData, 'InitialLessonId:', initialLessonId);
+      
+      // NEU: Füge diesen Block hier ein (direkt nach der console.log)
+      if (!initiatingSubject) {
+        console.warn('No initiating subject provided; skipping primary lesson setup.');
+        setSelectedLessons({});
+        setAllerleiSteps({});
+        setIntegratedOriginalData({});
+        setIsAllerlei(false);
+        setAllerleiSubjects([]);
+        return;  // Early return, um den Rest zu überspringen
+      }
+      // ENDE DES NEUEN BLOCKS
+      
+      const primaryYl = yearlyLessons.find(yl => yl.subject === initiatingSubject && yl.week_number === currentWeek);
+      if (primaryYl) {
+        console.log('Debug: useAllerleiLogic init - Setting primary lesson:', primaryYl.id, 'Subject:', primaryYl.subject_name || primaryYl.expand?.subject?.name);
+        setSelectedLessons({ 0: primaryYl.id });
+        setAllerleiSubjects(['']);
+        setIsAllerlei(true);
+      } else {
+        console.warn('Debug: useAllerleiLogic init - No yearly lesson found for initiating subject:', initiatingSubject, 'Week:', currentWeek);
+        setSelectedLessons({});
+        setAllerleiSteps({});
+        setIntegratedOriginalData({});
+        setIsAllerlei(false);
+        setAllerleiSubjects([]);
+      }
     }
-  }, [initialData.allerlei_yearly_lesson_ids, initialData.allerlei_subjects]);
+  }, [
+    initialData.primary_yearly_lesson_id,
+    initialData.added_yearly_lesson_ids,
+    initialData.allerlei_subjects,
+    initialData.subject,
+    initialLessonId,
+    allLessons,
+    yearlyLessons,
+    currentWeek,
+    subjectOptions
+  ]);
+
+  // Load steps when lessons are selected
+  useEffect(() => {
+    if (!isAllerlei) {
+      setAllerleiSteps({});
+      onStepsChange?.({});
+      return;
+    }
+
+    const newSteps = {};
+    let hasChanges = false;
+    Object.entries(selectedLessons).forEach(([idx, lessonId]) => {
+      if (!lessonId) {
+        newSteps[idx] = [];
+        hasChanges = true;
+        return;
+      }
+
+      const yearlyLesson = yearlyLessons.find(yl => yl.id === lessonId);
+      if (yearlyLesson && yearlyLesson.steps) {
+        newSteps[idx] = yearlyLesson.steps.map(step => ({
+          ...step,
+          id: `allerlei-${idx}-${generateId()}-${step.id || generateId()}`
+        }));
+        hasChanges = true;
+      } else {
+        newSteps[idx] = [];
+        hasChanges = true;
+      }
+    });
+
+    if (hasChanges) {
+      setAllerleiSteps(newSteps);
+      onStepsChange?.(newSteps);
+    }
+  }, [isAllerlei, selectedLessons, yearlyLessons, generateId]);
 
   const getCurrentLessonPosition = useCallback(() => {
     return currentPosition || { dayOrder: 0, period: 0 };
@@ -46,7 +133,6 @@ export const useAllerleiLogic = ({
   const getAvailableAllerleiLessons = useCallback((subjectName, subjectIndex) => {
     if (!subjectName) return [];
 
-    // Filter valid subjects for active class
     const validSubjectNames = subjectOptions.map(s => s.name);
     if (!validSubjectNames.includes(subjectName)) return [];
 
@@ -58,7 +144,6 @@ export const useAllerleiLogic = ({
       )
       .sort((a, b) => Number(a.lesson_number) - Number(b.lesson_number));
 
-    // Get scheduled lessons for this subject
     const scheduledLessonsForSubject = allLessons
       .filter(l => 
         (l.subject_name === subjectName || l.expand?.subject?.name === subjectName) && 
@@ -78,23 +163,19 @@ export const useAllerleiLogic = ({
         };
       });
 
-    // Filter available lessons
     const availableLessons = subjectYearlyLessons.filter(yl => {
-      // Always show currently selected lesson
       const isCurrentlySelected = selectedLessons[subjectIndex] === yl.id;
       if (isCurrentlySelected) return true;
 
-      // Don't show lessons scheduled before current position (unless hidden)
       const scheduledBefore = scheduledLessonsForSubject.some(sl => 
         sl.yearly_lesson_id === yl.id && sl.isBeforeCurrent && !sl.isHidden
       );
       if (scheduledBefore) return false;
 
-      // Prevent duplicates in other Allerlei lessons
       const isDuplicateInOtherAllerlei = allLessons.some(l => 
-        l.is_allerlei && l.week_number === currentWeek && 
-        l.allerlei_yearly_lesson_ids?.includes(yl.id) && 
-        l.id !== initialData.id // Exclude current lesson if editing
+        l.collectionName === 'allerlei_lessons' && l.week_number === currentWeek && 
+        l.added_yearly_lesson_ids?.includes(yl.id) && 
+        l.id !== initialData.id
       );
       if (isDuplicateInOtherAllerlei) return false;
 
@@ -104,60 +185,25 @@ export const useAllerleiLogic = ({
     return availableLessons;
   }, [yearlyLessons, allLessons, currentWeek, selectedLessons, subjectOptions, getCurrentLessonPosition, initialData.id]);
 
-  // Load steps when lessons are selected
-  useEffect(() => {
-    if (!isAllerlei) return;
-    
-    const newSteps = {};
-    Object.entries(selectedLessons).forEach(([idx, lessonId]) => {
-      if (!lessonId) return;
-      
-      const yearlyLesson = yearlyLessons.find(yl => yl.id === lessonId);
-      if (yearlyLesson && yearlyLesson.steps) {
-        newSteps[idx] = yearlyLesson.steps.map(step => ({
-          ...step,
-          id: `allerlei-${idx}-${generateId()}-${step.id || generateId()}`
-        }));
-      } else {
-        newSteps[idx] = [];
-      }
-    });
-    
-    // Vermeide unnötige Updates, indem wir prüfen, ob newSteps sich geändert hat
-    setAllerleiSteps(prev => {
-      if (JSON.stringify(prev) === JSON.stringify(newSteps)) {
-        return prev;
-      }
-      return newSteps;
-    });
-    onStepsChange?.(newSteps);
-  }, [isAllerlei, selectedLessons, yearlyLessons, generateId, onStepsChange]);
-
   const handleToggle = useCallback(async (checked) => {
     setIsAllerlei(checked);
     onToggleChange?.(checked);
-    
-    if (!checked && Object.keys(selectedLessons).length > 0) {
-      const lessonIds = Object.values(selectedLessons).filter(Boolean);
-      await handleAllerleiUnlink(
-        lessonIds, 
-        allLessons, 
-        timeSlots, 
-        currentWeek, 
-        integratedOriginalData
-      );
+    if (!checked && initialLessonId) { 
+      // Unlink logic now in service, but handle in modal
+    }
+    if (!checked) {
       setSelectedLessons({});
       setAllerleiSteps({});
       setIntegratedOriginalData({});
     }
-  }, [allLessons, timeSlots, currentWeek, integratedOriginalData, onToggleChange]);
+  }, [onToggleChange]);
 
   const addSubject = useCallback(() => {
-    const newIndex = allerleiSubjects.length;
-    const newSubjects = [...allerleiSubjects, ''];
+    const newIndex = allerleiSubjects.length; // Use next available index
+    const newSubjects = [...allerleiSubjects, '']; // Add empty subject
+    console.log('Debug: addSubject - Adding subject at index:', newIndex, 'New subjects:', newSubjects);
     setAllerleiSubjects(newSubjects);
     onSubjectsChange?.(newSubjects);
-    setSelectedLessons(prev => ({ ...prev, [newIndex]: null }));
   }, [allerleiSubjects, onSubjectsChange]);
 
   const removeSubject = useCallback((index) => {
@@ -165,7 +211,6 @@ export const useAllerleiLogic = ({
     const newSelected = { ...selectedLessons };
     const newSteps = { ...allerleiSteps };
     
-    // Reindex remaining subjects
     delete newSelected[index];
     delete newSteps[index];
     
@@ -188,15 +233,21 @@ export const useAllerleiLogic = ({
   }, [allerleiSubjects, selectedLessons, allerleiSteps, onSubjectsChange, onLessonsChange, onStepsChange]);
 
   const updateSubject = useCallback((index, value) => {
+    // Prevent overwriting primary lesson (index 0) unless explicitly changing it
+    if (index === 0) {
+      console.log('Debug: updateSubject - Attempting to update primary subject, ignoring:', { index, value });
+      return;
+    }
     const newSubjects = [...allerleiSubjects];
     newSubjects[index] = value;
     
-    // Clear lesson selection when subject changes
     const newSelected = { ...selectedLessons };
-    delete newSelected[index];
     const newSteps = { ...allerleiSteps };
+    
+    delete newSelected[index];
     delete newSteps[index];
     
+    console.log('Debug: updateSubject - New subjects:', newSubjects, 'New selectedLessons:', newSelected);
     setAllerleiSubjects(newSubjects);
     setSelectedLessons(newSelected);
     setAllerleiSteps(newSteps);
@@ -206,9 +257,19 @@ export const useAllerleiLogic = ({
   }, [allerleiSubjects, selectedLessons, allerleiSteps, onSubjectsChange, onLessonsChange, onStepsChange]);
 
   const selectLesson = useCallback((subjectIndex, lessonId) => {
-    setSelectedLessons(prev => ({ ...prev, [subjectIndex]: lessonId }));
-    onLessonsChange?.({ ...selectedLessons, [subjectIndex]: lessonId });
-  }, [selectedLessons, onLessonsChange]);
+    // Prevent overwriting primary lesson (index 0)
+    if (subjectIndex === 0) {
+      console.log('Debug: selectLesson - Attempting to update primary lesson, ignoring:', { subjectIndex, lessonId });
+      return;
+    }
+    let newSelected;
+    setSelectedLessons(prev => {
+      newSelected = { ...prev, [subjectIndex]: lessonId };
+      console.log('Debug: selectLesson - New selectedLessons:', newSelected);
+      return newSelected;
+    });
+    onLessonsChange?.(newSelected);
+  }, [onLessonsChange]);
 
   const updateStep = useCallback((subjectIndex, stepId, field, value) => {
     setAllerleiSteps(prev => ({
@@ -247,39 +308,35 @@ export const useAllerleiLogic = ({
   }, [allerleiSubjects, selectedLessons]);
 
   const validate = useCallback(() => {
-    const data = {
-      is_allerlei: isAllerlei,
-      allerlei_subjects: allerleiSubjects,
-      allerlei_yearly_lesson_ids: getAllerleiYearlyLessonIds()
-    };
-    if (!validateAllerlei(data)) return false;
-
-    // Check duplicates
-    const uniqueIds = new Set(data.allerlei_yearly_lesson_ids.filter(id => id));
-    if (uniqueIds.size !== data.allerlei_yearly_lesson_ids.length) {
-      throw new Error('Keine doppelten Lektionen in Allerlei erlaubt.');
-    }
-
-    // Check no already-scheduled non-hidden
-    for (const id of uniqueIds) {
-      const isScheduledVisible = allLessons.some(l => l.yearly_lesson_id === id && l.week_number === currentWeek && !l.is_hidden);
-      if (isScheduledVisible) {
-        throw new Error('Kann keine bereits sichtbar geplante Lektion in Allerlei integrieren.');
+    if (!isAllerlei) return true;
+    if (!selectedLessons[0]) throw new Error('Bitte wählen Sie eine primäre Lektion für eine Allerleilektion aus.');
+    const allIds = Object.values(selectedLessons).filter(Boolean);
+    const uniqueIds = new Set(allIds);
+    if (uniqueIds.size !== allIds.length) throw new Error('Keine doppelten Lektionen in Allerleilektion erlaubt.');
+    const scheduled = allLessons.filter(l => l.week_number === currentWeek && !l.is_hidden);
+    const invalid = allIds.some((id, index) => {
+      const isPrimary = index === 0;
+      const isScheduled = scheduled.some(l => l.yearly_lesson_id === id && l.id !== initialLessonId);
+      if (isScheduled && !isPrimary) {
+        console.log('Debug: validate - Invalid lesson detected:', { id, isPrimary, scheduledLesson: scheduled.find(l => l.yearly_lesson_id === id) });
+        return true;
       }
-    }
-
+      return false;
+    });
+    if (invalid) throw new Error('Kann keine bereits sichtbar geplante Lektion in Allerlei integrieren.');
+    console.log('Debug: validate - Validation passed, selectedLessons:', selectedLessons);
     return true;
-  }, [isAllerlei, allerleiSubjects, selectedLessons, allLessons, currentWeek]);
+  }, [isAllerlei, selectedLessons, allLessons, currentWeek, initialLessonId]);
 
   return {
-    // States
     isAllerlei,
     allerleiSubjects,
+    setAllerleiSubjects,
     selectedLessons,
+    setSelectedLessons,
     allerleiSteps,
+    setAllerleiSteps,
     integratedOriginalData,
-    
-    // Handlers
     handleToggle,
     addSubject,
     removeSubject,
@@ -288,15 +345,9 @@ export const useAllerleiLogic = ({
     updateStep,
     addStep,
     removeStep,
-    
-    // Computed
     getAvailableAllerleiLessons,
     getAllerleiYearlyLessonIds,
-    
-    // Actions
     validate,
-    
-    // Callbacks for parent
     setIntegratedOriginalData: onIntegratedDataChange || setIntegratedOriginalData
   };
 };

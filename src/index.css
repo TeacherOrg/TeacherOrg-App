@@ -1,3 +1,5 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&family=Poppins:wght@400;500;600&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -37,6 +39,7 @@
     --sidebar-accent-foreground: 240 5.9% 10%;
     --sidebar-border: 220 13% 91%;
     --sidebar-ring: 217.2 91.2% 59.8%;
+    --border-color: hsl(var(--border)); /* Fällt zurück auf --border */
   }
   .dark {
     --background: 0 0% 3.9%;
@@ -71,11 +74,9 @@
     --sidebar-accent-foreground: 240 4.8% 95.9%;
     --sidebar-border: 240 3.7% 15.9%;
     --sidebar-ring: 217.2 91.2% 59.8%;
+    --border-color: hsl(var(--border));
   }
 }
-
-/* Import moderne Fonts */
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&family=Poppins:wght@400;500;600&display=swap');
 
 @layer base {
   * {
@@ -166,16 +167,19 @@
 
   .yearly-table-container {
     overflow-x: auto;
-    overflow-y: hidden;
-    scroll-snap-type: x proximity; /* ← proximity statt mandatory für natürlicheres Gefühl */
+    overflow-y: auto;
+    scroll-snap-type: none; /* Entferne Snap für einfacheres Mausrad-Scrolling */
     -webkit-overflow-scrolling: touch;
-    scrollbar-width: thin;
-    scrollbar-color: theme('colors.slate.300') transparent;
-    scroll-padding-left: 120px; /* ← Platz für Week Column */
+    scrollbar-width: none; /* Verstecke vertikale Scrollbar (falls vorhanden) */
   }
 
   .yearly-table-container::-webkit-scrollbar {
-    height: 8px;
+    display: none; /* Verstecke Scrollbar komplett */
+  }
+
+  .yearly-table-container [style*="width"] {
+    box-sizing: border-box;
+    will-change: transform;
   }
 
   .yearly-table-container::-webkit-scrollbar-track {
@@ -202,6 +206,11 @@
   /* Smooth Scrolling zwischen Subjects */
   .yearly-table-container {
     scroll-behavior: smooth;
+  }
+
+  .yearly-table-container .react-window-list > div {
+    margin: 0 !important; /* Entferne Margin von react-window */
+    padding: 0 !important; /* Entferne Padding */
   }
 
   .subject-block {
@@ -426,6 +435,27 @@
   .topic-manager-compact .flex-1 {
     max-height: 300px;
   }
+
+  /* Verbessertes Sticky für Headers im Scroll-Container */
+  .yearly-table-container .sticky-header {
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    background: inherit; /* Erbt vom Parent für konsistentes Design */
+  }
+
+  /* Stelle sicher, dass Subject-Headers mit Zellen synchron sind */
+  .yearly-table-container [class*="sticky-top"] {
+    overflow: hidden; /* Verhindert Überlappungen */
+  }
+
+  /* Sticky left für Woche-Spalte im Header (bereits vorhanden, aber verstärkt) */
+  .sticky-week-column {
+    position: sticky !important;
+    left: 0;
+    z-index: 60; /* Höher als andere Sticky-Elemente */
+    background: inherit;
+  }
 }
 
 /* Scrollbar Styles */
@@ -587,4 +617,156 @@
   .theme-minimal {
     @apply bg-gradient-to-b from-gray-50 to-gray-100 dark:from-slate-800 dark:to-slate-900;
   }
+}
+
+/* TimetableGrid-spezifische Stile */
+.timetable-grid-container {
+  --cell-height: 80px; /* Standardwert, sollte überschreibbar sein */
+  --cell-width: 120px; /* Standardwert, sollte überschreibbar sein */
+  display: grid;
+  grid-template-columns: 120px repeat(5, var(--cell-width));
+  gap: 0px;
+  background-color: #ffffff;
+  border-radius: 1rem;
+  overflow: hidden;
+}
+
+.dark .timetable-grid-container {
+  background-color: #1e293b; /* dark:bg-slate-800 */
+}
+
+.timetable-grid-container .border-r {
+  border-right: 1px solid #e2e8f0; /* border-slate-300 */
+}
+
+.dark .timetable-grid-container .border-r {
+  border-right: 1px solid #334155; /* dark:border-slate-700 */
+}
+
+.timetable-grid-container .border-b {
+  border-bottom: 1px solid #e2e8f0; /* border-slate-300 */
+}
+
+.dark .timetable-grid-container .border-b {
+  border-bottom: 1px solid #334155; /* dark:border-slate-700 */
+}
+
+/* TimetablePage-spezifische Stile */
+.timetable-page-container {
+  background-color: #f8fafc; /* bg-slate-50 */
+  display: flex;
+  flex-direction: column;
+  align-items: center; /* Zentriert den gesamten Inhalt horizontal */
+  padding: 0 1rem; /* Seitenabstand für kleine Bildschirme */
+}
+
+.dark .timetable-page-container {
+  background-color: #0f172a; /* dark:bg-slate-900 */
+}
+
+.timetable-grid-wrapper {
+  flex: 1; /* Nimmt den größten Raum ein */
+  max-width: 75%; /* Begrenzt den Stundenplan auf 75% der Breite */
+  overflow: hidden; /* Verhindert Überlauf */
+}
+
+.timetable-pool-container {
+  width: 25%; /* Feste Breite */
+  min-width: 250px; /* Mindestbreite */
+  height: auto; /* Dynamisch an Inhalt anpassen */
+  max-height: 100%; /* Maximal die volle Höhe des Parents */
+  background-color: #ffffff; /* bg-white */
+  border-top: 1px solid #e2e8f0; /* border-slate-200 */
+  border-left: 1px solid #e2e8f0; /* Dünnere Trennlinie */
+  border-radius: 1rem; /* Gerundete Ecken */
+  margin-left: 0.5rem; /* Kleinerer Abstand zum Stundenplan */
+  overflow-y: auto; /* Scrollen, wenn zu viele Fächer */
+  padding: 1rem; /* Innenabstand */
+}
+
+.dark .timetable-pool-container {
+  background-color: #1e293b; /* dark:bg-slate-800 */
+  border-top: 1px solid #334155; /* dark:border-slate-700 */
+  border-left: 1px solid #334155; /* Dünnere Trennlinie im Dark-Modus */
+  margin-left: 0.5rem; /* Kleinerer Abstand im Dark-Modus */
+}
+
+.timetable-grid-container {
+  --cell-height: 80px; /* Standardwert, anpassen an settings.cellHeight */
+  --cell-width: 120px; /* Standardwert, anpassen an settings.cellWidth */
+  display: grid;
+  grid-template-columns: 120px repeat(5, var(--cell-width));
+  gap: 0px;
+  background-color: #ffffff; /* bg-white */
+  border-radius: 1rem; /* Gerundete Außenecken */
+  overflow: hidden; /* Verhindert Überlauf bei gerundeten Ecken */
+}
+
+.dark .timetable-grid-container {
+  background-color: #1e293b; /* dark:bg-slate-800 */
+}
+
+.timetable-grid-container .border-r {
+  border-right: 1px solid #e2e8f0; /* border-slate-300 */
+}
+
+.dark .timetable-grid-container .border-r {
+  border-right: 1px solid #334155; /* dark:border-slate-700 */
+}
+
+.timetable-grid-container .border-b {
+  border-bottom: 1px solid #e2e8f0; /* border-slate-300 */
+}
+
+.dark .timetable-grid-container .border-b {
+  border-bottom: 1px solid #334155; /* dark:border-slate-700 */
+}
+
+/* Responsive Anpassungen */
+@media (max-width: 1024px) {
+  .timetable-grid-wrapper {
+    max-width: 100%; /* Auf kleinen Bildschirmen volle Breite */
+  }
+  .timetable-pool-container {
+    width: 100%; /* Stundenpool stackt unter dem Stundenplan */
+    margin-top: 1rem; /* Abstand zum Stundenplan */
+    border-left: none; /* Keine Trennlinie, wenn gestapelt */
+  }
+}
+
+.timetable-pool-container .flex-col > div {
+  width: 100%; /* Vollbreite */
+  height: auto; /* Dynamische Höhe */
+  min-height: 40px; /* Mindesthöhe für Sichtbarkeit */
+  padding: 0.5rem; /* Reduziertes Padding für mehr Nutzfläche */
+  background-color: inherit; /* Farbe erbt von Parent */
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.timetable-pool-container .flex-col > div:hover {
+  transform: scale(1.02); /* Leichter Zoom statt Farbwechsel */
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1); /* Schatten für "mehr Platz"-Effekt */
+}
+
+.dark .timetable-pool-container .flex-col > div:hover {
+  background-color: rgba(255, 255, 255, 0.1); /* Hover-Effekt im Dark-Modus */
+}
+
+/* Moderne Button-Styling */
+.timetable-page-container .bg-gray-100,
+.timetable-page-container .bg-slate-700 {
+  border: 1px solid #e2e8f0; /* Leichte Trennlinie */
+  backdrop-filter: blur(5px); /* Moderner Hintergrund */
+}
+
+.timetable-page-container .shadow-md {
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1); /* Sanfterer Schatten */
+}
+
+.timetable-page-container .shadow-inner {
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.1); /* Innerer Schatten für aktive Buttons */
+}
+
+.timetable-page-container .transition-all.duration-200:hover {
+  transform: translateY(-1px); /* Leichtes Hochheben beim Hover */
 }

@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
-import { YearlyLesson, Topic, Subject, Class, Holiday, Lesson } from "@/api/entities";
+import { YearlyLesson, Topic, Subject, Class, Holiday, Lesson } from "@/api/entities"; 
 import { Button } from "@/components/ui/button";
 import { ChevronsLeft, ChevronsRight } from "lucide-react";
 import { motion } from "framer-motion";
 import { useRef } from 'react';
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import TopicModal from "@/components/topics/TopicModal";
 import LessonModal from "../components/yearly/LessonModal";
@@ -65,6 +65,12 @@ export default function YearlyOverviewPage() {
 
 function InnerYearlyOverviewPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const mode = searchParams.get('mode');
+  const assignSubject = searchParams.get('subject');
+  const isAssignMode = mode === 'assign';
+  const topicMode = searchParams.get('topic');
+
   const yearlyLessons = useLessonStore((state) => state.yearlyLessons);
   const { setYearlyLessons, optimisticUpdateYearlyLessons } = useLessonStore();
   const [topics, setTopics] = useState([]);
@@ -97,7 +103,13 @@ function InnerYearlyOverviewPage() {
 
   const [hoverLesson, setHoverLesson] = useState(null);
   const [hoverPosition, setHoverPosition] = useState({ top: 0, left: 0 });
+  const handleAddTopic = useCallback(() => {
+    setEditingTopic(null);
+    setIsTopicModalOpen(true);
+  }, []);
   const overlayRef = useRef(null);
+
+  const [selectedLessons, setSelectedLessons] = useState([]); // Für Assign-Modus
 
   const debouncedShowRef = useRef(null);
   const debouncedHideRef = useRef(null);
@@ -131,6 +143,67 @@ function InnerYearlyOverviewPage() {
     if (debouncedHideRef.current) debouncedHideRef.current();
   }, []);
 
+  // Füge hier ein:
+  const handleSelectLesson = useCallback((slot) => {
+    if (!slot || typeof slot.week_number === 'undefined' || !slot.subject || typeof slot.lesson_number === 'undefined') {
+      console.error('Invalid slot for selection:', slot);
+      return;
+    }
+    const key = `${slot.week_number}-${slot.subject}-${slot.lesson_number}`;
+    setSelectedLessons(prev => {
+      const safePrev = prev.filter(k => typeof k === 'string');
+      if (safePrev.includes(key)) {
+        return safePrev.filter(k => k !== key);
+      }
+      return [...safePrev, key];
+    });
+  }, []);
+
+  const handleAssignAndBack = async () => {
+    const topicId = searchParams.get('topic');
+    if (!topicId) {
+      console.error('No topicId provided for assign');
+      return;
+    }
+
+    try {
+      const updates = selectedLessons.map(key => {
+        const [week, subject, number] = key.split('-');
+        const lesson = lessonsForYear.find(l => l.week_number == week && l.subject === subject && l.lesson_number == number);
+        if (lesson) {
+          return YearlyLesson.update(lesson.id, { topic_id: topicId });
+        } else {
+          const subjectObj = subjects.find(s => s.name.toLowerCase() === subject.toLowerCase());
+          if (!subjectObj) {
+            console.error('No subject found for:', subject);
+            return Promise.resolve();
+          }
+          return YearlyLesson.create({
+            week_number: parseInt(week),
+            lesson_number: parseInt(number),
+            subject: subjectObj.id,
+            school_year: currentYear,
+            topic_id: topicId,
+            user_id: pb.authStore.model.id,
+            class_id: activeClassId,
+            name: 'Neue Lektion'
+          });
+        }
+      });
+
+      await Promise.all(updates);
+      await Topic.update(topicId, { is_draft: false });
+      // Save topicId to localStorage for modal to load
+      const draft = JSON.parse(localStorage.getItem('draftTopic')) || {};
+      draft.topicId = topicId;
+      localStorage.setItem('draftTopic', JSON.stringify(draft));
+      navigate(-1); // Back to modal
+    } catch (error) {
+      console.error('Error assigning lessons:', error);
+      alert('Fehler beim Zuweisen der Lektionen: ' + (error.data?.message || 'Unbekannter Fehler'));
+    }
+  };
+
   const queryClientLocal = useQueryClient();
 
   const { data, isLoading: queryLoading, refetch } = useQuery({
@@ -148,13 +221,20 @@ function InnerYearlyOverviewPage() {
     staleTime: 0,
   });
 
+  const prevModeRef = useRef(mode);
+
+  useEffect(() => {
+    if (prevModeRef.current === 'assign' && mode !== 'assign') {
+      refetch();
+    }
+    prevModeRef.current = mode;
+  }, [mode, refetch]);
+
   useEffect(() => {
     if (data) {
       console.log('Debug: Loaded yearlyLessons', data.lessonsData);
       setYearlyLessons(data.lessonsData.map(l => ({ ...l, lesson_number: Number(l.lesson_number) })) || []);
       
-      // FIXED: SAFE SORTING FÜR TOPICS
-      console.log('Debug: Raw topicsData:', data.topicsData);
       const safeTopics = safeSortByName(data.topicsData || []);
       console.log('Debug: Safe topics after sorting:', safeTopics);
       setTopics(safeTopics);
@@ -166,9 +246,19 @@ function InnerYearlyOverviewPage() {
       if (Array.isArray(data.classesData) && data.classesData.length > 0 && !activeClassId) {
         setActiveClassId(data.classesData[0].id);
       }
+
+      if (assignSubject && data.subjectsData) {
+        const matchingSubject = data.subjectsData.find(s => s.name.toLowerCase() === assignSubject.toLowerCase());
+        if (matchingSubject) {
+          setActiveSubjectName(matchingSubject.name);
+          console.log('Debug: Set activeSubjectName to', matchingSubject.name);
+        } else {
+          console.error('No subject found for assignSubject:', assignSubject);
+        }
+      }
     }
     setIsLoading(queryLoading);
-  }, [data, queryLoading, activeClassId, setYearlyLessons]);
+  }, [data, queryLoading, assignSubject]);
 
   useEffect(() => {
     const handleDataRefresh = () => queryClientLocal.invalidateQueries(['yearlyData', currentYear]);
@@ -181,7 +271,6 @@ function InnerYearlyOverviewPage() {
 
   useEffect(() => {
     const handleResize = () => {
-      // Toggle Quick Actions basierend auf Bildschirmgröße
       if (window.innerWidth >= 1024) {
         setShowQuickActions(false);
       }
@@ -213,16 +302,31 @@ function InnerYearlyOverviewPage() {
   }, [subjects, activeClassId]);
 
   const lessonsForYear = useMemo(() => {
-    return yearlyLessons.filter(lesson => {
-      const lessonYear = Number(lesson.school_year);
-      if (!lessonYear) {
-        return currentYear === new Date().getFullYear();
+    let filtered = yearlyLessons.filter(lesson => Number(lesson.school_year) === currentYear || !lesson.school_year);
+    if (isAssignMode && assignSubject) {
+      const subject = subjects.find(s => s.name.toLowerCase() === assignSubject.toLowerCase());
+      if (subject) {
+        filtered = filtered.filter(lesson => lesson.subject === subject.id && !lesson.topic_id);
+      } else {
+        console.error('No subject found for assignSubject:', assignSubject);
+        filtered = [];
       }
-      return lessonYear === currentYear;
-    });
-  }, [yearlyLessons, currentYear]);
+    }
+    return filtered;
+  }, [yearlyLessons, currentYear, isAssignMode, assignSubject, subjects]);
 
-  const handleLessonClick = useCallback(async (lesson, slot) => {
+const handleLessonClick = useCallback(async (lesson, slot) => {
+    if (isAssignMode) {
+      const id = lesson?.id || `${slot.week_number}-${slot.subject}-${slot.lesson_number}`;
+      setSelectedLessons(prev => {
+        if (prev.includes(id)) {
+          return prev.filter(l => l !== id);
+        }
+        return [...prev, id];
+      });
+      return;
+    }
+
     if (activeTopicId) {
       if (lesson && lesson.id) {
         const newTopicId = lesson.topic_id === activeTopicId ? null : activeTopicId;
@@ -243,7 +347,7 @@ function InnerYearlyOverviewPage() {
 
           if (weekLessons.length > 1) {
             const minNum = Math.min(...weekLessons.map(l => Number(l.lesson_number)));
-            const maxNum = Math.max(...weekLessons.map(l => Number(b.lesson_number)));
+            const maxNum = Math.max(...weekLessons.map(l => Number(l.lesson_number)));
 
             for (let num = minNum; num <= maxNum; num++) {
               if (!weekLessons.some(l => Number(l.lesson_number) === num)) {
@@ -267,7 +371,7 @@ function InnerYearlyOverviewPage() {
                   name: 'Neue Lektion',
                   description: '',
                   user_id: pb.authStore.model.id,
-                  class_id: activeClassId,
+                  class_id: activeClassId, // Sicherstellen, dass class_id gesetzt ist
                   subject: subjects.find(s => s.name === gapSlot.subject)?.id
                 }).then(gapCreated => {
                   optimisticUpdateYearlyLessons(gapLesson, false, true);
@@ -298,6 +402,11 @@ function InnerYearlyOverviewPage() {
           setYearlyLessons(yearlyLessons);
         }
       } else if (slot) {
+        if (!activeClassId) {
+          console.error('Error: No activeClassId set for creating new lesson');
+          alert('Bitte wählen Sie eine Klasse aus, bevor Sie eine neue Lektion erstellen.');
+          return;
+        }
         const subjectId = subjects.find(s => s.name === slot.subject)?.id;
         console.log('Debug: Subject mapping in handleLessonClick', {
           slotSubject: slot.subject,
@@ -307,6 +416,7 @@ function InnerYearlyOverviewPage() {
         });
         if (!subjectId) {
           console.error('Error: No valid subject ID found for', slot.subject);
+          alert('Ungültiges Fach. Bitte wählen Sie ein gültiges Fach aus.');
           return;
         }
 
@@ -317,7 +427,8 @@ function InnerYearlyOverviewPage() {
           school_year: currentYear,
           notes: '',
           is_double_lesson: false,
-          second_yearly_lesson_id: null
+          second_yearly_lesson_id: null,
+          class_id: activeClassId // Hinzufügen von class_id
         };
         optimisticUpdateYearlyLessons(newLesson, true);
 
@@ -331,7 +442,7 @@ function InnerYearlyOverviewPage() {
             name: 'Neue Lektion',
             description: '',
             user_id: pb.authStore.model.id,
-            class_id: activeClassId,
+            class_id: activeClassId, // Sicherstellen, dass class_id gesetzt ist
             subject: subjectId,
             notes: '',
             is_double_lesson: false,
@@ -376,7 +487,7 @@ function InnerYearlyOverviewPage() {
                   name: 'Neue Lektion',
                   description: '',
                   user_id: pb.authStore.model.id,
-                  class_id: activeClassId,
+                  class_id: activeClassId, // Sicherstellen, dass class_id gesetzt ist
                   subject: subjectId
                 }).then(gapCreated => {
                   optimisticUpdateYearlyLessons(gapLesson, false, true);
@@ -428,12 +539,21 @@ function InnerYearlyOverviewPage() {
         setEditingLesson(fullLesson);
         setNewLessonSlot(null);
       } else {
+        if (!activeClassId) {
+          console.error('Error: No activeClassId set for creating new lesson');
+          alert('Bitte wählen Sie eine Klasse aus, bevor Sie eine neue Lektion erstellen.');
+          return;
+        }
         setEditingLesson(null);
-        setNewLessonSlot({ ...slot, school_year: currentYear });
+        setNewLessonSlot({ 
+          ...slot, 
+          school_year: currentYear,
+          class_id: activeClassId // Hinzufügen von class_id
+        });
       }
       setIsLessonModalOpen(true);
     }
-  }, [activeTopicId, currentYear, topicsById, yearlyLessons, activeClassId, subjects, refetch, setYearlyLessons, optimisticUpdateYearlyLessons, setSelectedTopicLessons, setSelectedTopicInfo, setIsTopicLessonsModalOpen, setEditingLesson, setNewLessonSlot, setIsLessonModalOpen]);
+  }, [activeTopicId, currentYear, topicsById, yearlyLessons, activeClassId, subjects, refetch, setYearlyLessons, optimisticUpdateYearlyLessons, setSelectedTopicLessons, setSelectedTopicInfo, setIsTopicLessonsModalOpen, setEditingLesson, setNewLessonSlot, setIsLessonModalOpen, isAssignMode]);
 
   const handleSaveLesson = useCallback(async (lessonData, lessonContext) => {
     const originalLesson = lessonContext || editingLesson;
@@ -445,7 +565,7 @@ function InnerYearlyOverviewPage() {
       const nextLesson = yearlyLessons.find(l => l.id === finalLessonData.second_yearly_lesson_id);
       if (!nextLesson || parseInt(nextLesson.lesson_number) !== parseInt(originalLesson?.lesson_number || newLessonSlot?.lesson_number) + 1) {
         if (!nextLesson) {
-          const subjectId = subjects.find(s => s.name === (originalLesson?.subject || newLessonSlot?.subject))?.id;
+          const subjectId = originalLesson?.subject || newLessonSlot?.subject;
           if (!subjectId) {
             throw new Error('No valid subject ID found for ' + (originalLesson?.subject || newLessonSlot?.subject));
           }
@@ -474,45 +594,65 @@ function InnerYearlyOverviewPage() {
     }
 
     try {
-      optimisticUpdateYearlyLessons(finalLessonData);
+      // Entferne id aus finalLessonData für Create
+      const { id, ...cleanLessonData } = finalLessonData;
+      optimisticUpdateYearlyLessons(cleanLessonData, true);
 
       let primaryId = originalLesson?.id;
 
       if (primaryId) {
-        await YearlyLesson.update(primaryId, { ...finalLessonData, steps: finalLessonData.steps });
+        await YearlyLesson.update(primaryId, { ...cleanLessonData, steps: cleanLessonData.steps });
       } else if (newLessonSlot) {
-        const subjectId = subjects.find(s => s.name === newLessonSlot.subject)?.id;
+        const subjectId = newLessonSlot.subject;
         console.log('Debug: Saving lesson with subject', { subject: newLessonSlot.subject, subjectId });
         if (!subjectId) {
           throw new Error('No valid subject ID found for ' + newLessonSlot.subject);
         }
+        if (!activeClassId) {
+          throw new Error('No valid class_id found');
+        }
+        if (!pb.authStore.model?.id) {
+          throw new Error('No authenticated user found');
+        }
 
-        const created = await YearlyLesson.create({
+        const createPayload = {
           ...newLessonSlot,
-          ...finalLessonData,
-          steps: finalLessonData.steps,
-          name: finalLessonData.name || 'Neue Lektion',
-          description: finalLessonData.description || '',
+          ...cleanLessonData,
+          steps: cleanLessonData.steps,
+          name: cleanLessonData.name || 'Neue Lektion',
+          description: cleanLessonData.description || '',
           user_id: pb.authStore.model.id,
           class_id: activeClassId,
-          subject: subjectId
-        });
+          subject: subjectId,
+          topic_id: cleanLessonData.topic_id || null
+        };
+        // Entferne id explizit aus dem Create-Payload
+        delete createPayload.id;
+
+        const created = await YearlyLesson.create(createPayload);
         primaryId = created.id;
-        optimisticUpdateYearlyLessons(created, true);
-        console.log('Debug: Created lesson', created);
+        if (created) {
+          optimisticUpdateYearlyLessons({ ...created, lesson_number: Number(created.lesson_number) }, true);
+          console.log('Debug: Created lesson', created);
+        } else {
+          throw new Error('Failed to create lesson: No response from server');
+        }
       }
 
       if (finalLessonData.is_double_lesson && finalLessonData.second_yearly_lesson_id) {
         await YearlyLesson.update(finalLessonData.second_yearly_lesson_id, {
           steps: finalLessonData.secondSteps,
           is_double_lesson: true,
-          name: finalLessonData.second_name
+          name: finalLessonData.second_name,
+          topic_id: finalLessonData.topic_id || null
         });
-        optimisticUpdateYearlyLessons(finalLessonData.second_yearly_lesson_id, {
+        optimisticUpdateYearlyLessons({
+          id: finalLessonData.second_yearly_lesson_id,
           steps: finalLessonData.secondSteps,
           is_double_lesson: true,
-          name: finalLessonData.second_name
-        });
+          name: finalLessonData.second_name,
+          topic_id: finalLessonData.topic_id || null
+        }, false);
       }
 
       if (!finalLessonData.is_double_lesson && wasDoubleLesson && oldSecondYearlyId) {
@@ -520,21 +660,27 @@ function InnerYearlyOverviewPage() {
         const originalTopicId = primaryYL?.topic_id;
 
         await YearlyLesson.update(oldSecondYearlyId, { is_double_lesson: false, topic_id: originalTopicId });
-        optimisticUpdateYearlyLessons(oldSecondYearlyId, { is_double_lesson: false, topic_id: originalTopicId });
+        optimisticUpdateYearlyLessons({ id: oldSecondYearlyId, is_double_lesson: false, topic_id: originalTopicId }, false);
         await YearlyLesson.update(primaryId, { is_double_lesson: false, second_yearly_lesson_id: null, topic_id: originalTopicId });
-        optimisticUpdateYearlyLessons(primaryId, { is_double_lesson: false, second_yearly_lesson_id: null, topic_id: originalTopicId });
+        optimisticUpdateYearlyLessons({ id: primaryId, is_double_lesson: false, second_yearly_lesson_id: null, topic_id: originalTopicId }, false);
       }
 
+      // Separater try-catch für Lesson.list()
       const week = originalLesson?.week_number || newLessonSlot?.week_number;
       if (week && primaryId) {
-        const allWeeklyLessons = await Lesson.list();
-        const primaryWeeklyLesson = allWeeklyLessons.find(l => l.yearly_lesson_id === primaryId);
-        if (primaryWeeklyLesson) {
-          await Lesson.update(primaryWeeklyLesson.id, {
-            is_double_lesson: finalLessonData.is_double_lesson,
-            second_yearly_lesson_id: finalLessonData.is_double_lesson ? finalLessonData.second_yearly_lesson_id : null,
-            topic_id: finalLessonData.topic_id
-          });
+        try {
+          const allWeeklyLessons = await Lesson.list();
+          const primaryWeeklyLesson = allWeeklyLessons.find(l => l.yearly_lesson_id === primaryId);
+          if (primaryWeeklyLesson) {
+            await Lesson.update(primaryWeeklyLesson.id, {
+              is_double_lesson: finalLessonData.is_double_lesson,
+              second_yearly_lesson_id: finalLessonData.is_double_lesson ? finalLessonData.second_yearly_lesson_id : null,
+              topic_id: finalLessonData.topic_id || null
+            });
+          }
+        } catch (error) {
+          console.warn('Warning: Failed to update weekly lesson, continuing with save:', error);
+          // Fortfahren, da dies die Hauptspeicherung nicht beeinflussen sollte
         }
       }
 
@@ -543,11 +689,19 @@ function InnerYearlyOverviewPage() {
       setNewLessonSlot(null);
       queryClientLocal.invalidateQueries(['yearlyData', currentYear]);
       queryClientLocal.invalidateQueries(['timetableData']);
+      import('react-hot-toast').then(({ toast }) => {
+        toast.success('Lektion erfolgreich gespeichert');
+      });
     } catch (error) {
-      optimisticUpdateYearlyLessons(originalLesson);
       console.error("CRITICAL ERROR saving lesson:", error);
+      if (originalLesson) {
+        optimisticUpdateYearlyLessons(originalLesson, false);
+      }
       queryClientLocal.invalidateQueries(['yearlyData', currentYear]);
       queryClientLocal.invalidateQueries(['timetableData']);
+      import('react-hot-toast').then(({ toast }) => {
+        toast.error('Fehler beim Speichern der Lektion: ' + (error.message || 'Unbekannter Fehler'));
+      });
     }
   }, [editingLesson, newLessonSlot, queryClientLocal, currentYear, yearlyLessons, subjects, activeClassId]);
 
@@ -569,11 +723,6 @@ function InnerYearlyOverviewPage() {
       queryClientLocal.invalidateQueries(['timetableData']);
     }
   }, [yearlyLessons, queryClientLocal, currentYear]);
-
-  const handleAddTopic = useCallback(() => {
-    setEditingTopic(null);
-    setIsTopicModalOpen(true);
-  }, []);
 
   const handleEditTopic = useCallback((topic) => {
     setEditingTopic(topic);
@@ -713,8 +862,15 @@ function InnerYearlyOverviewPage() {
               </div>
             ) : (
               <>
-                {(!topics || topics.length === 0) ? (
-                  <div className="text-center text-slate-400">Keine Themen verfügbar – Lade Daten neu.</div>
+                {isAssignMode && (
+                  <div className="p-4">
+                    <Button onClick={handleAssignAndBack} className="mb-4">
+                      Zuweisen & Zurück
+                    </Button>
+                  </div>
+                )}
+                {subjectsForClass.length === 0 ? (
+                  <div className="text-center text-slate-400">Keine Fächer verfügbar – Bitte fügen Sie ein Fach hinzu.</div>
                 ) : (
                   <YearlyGrid
                     lessons={lessonsForYear}
@@ -731,6 +887,9 @@ function InnerYearlyOverviewPage() {
                     onHideHover={handleHideHover}
                     allYearlyLessons={yearlyLessons}
                     densityMode={densityMode}
+                    isAssignMode={isAssignMode}
+                    selectedLessons={selectedLessons}
+                    onSelectLesson={handleSelectLesson}
                   />
                 )}
               </>
@@ -815,6 +974,9 @@ function InnerYearlyOverviewPage() {
         onDelete={handleDeleteTopic}
         topic={editingTopic}
         subjectColor={subjects.find(s => s.name === activeSubjectName)?.color}
+        subject={subjects.find(s => s.name === activeSubjectName)}
+        topics={topics} // Ensure topics are passed for the Select in LessonModal
+        autoAssignTopicId={editingTopic?.id}
       />
 
       <LessonModal
@@ -845,6 +1007,7 @@ function InnerYearlyOverviewPage() {
         onDeleteLesson={handleDeleteLesson}
         topics={topics}
         currentYear={currentYear}
+        autoAssignTopicId={selectedTopicInfo?.topic?.id} // Corrected: Pass topic ID directly
       />
     </div>
   );

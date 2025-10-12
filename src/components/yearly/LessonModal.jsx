@@ -8,23 +8,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Save, X, Trash2, PlusCircle, BookOpen } from "lucide-react";
 import { debounce } from 'lodash';
 import pb from '@/api/pb';
+import { createGradient, getTextColorForBackground } from '@/utils/colorUtils';
+import { YearlyLesson } from '@/api/entities';
 
 const WORK_FORMS = ['👤 Single', '👥 Partner', '👨‍👩‍👧‍👦 Group', '🏛️ Plenum'];
 const generateId = () => Math.random().toString(36).substr(2, 9);
-
-// Mock for YearlyLesson API calls - replace with actual import/service in a real app
-const YearlyLesson = {
-  update: async (id, data) => {
-    console.log(`[MOCK API] Updating YearlyLesson ${id} with data:`, data);
-    await new Promise(resolve => setTimeout(resolve, 300));
-    return { success: true, id, data };
-  },
-  create: async (data) => {
-    console.log(`[MOCK API] Creating YearlyLesson with data:`, data);
-    await new Promise(resolve => setTimeout(resolve, 300));
-    return { success: true, id: generateId(), ...data };
-  }
-};
 
 const StepRow = ({ step, onUpdate, onRemove }) => (
   <div className="grid grid-cols-[60px_140px_1fr_1fr_auto] gap-2 items-center">
@@ -65,10 +53,23 @@ const StepRow = ({ step, onUpdate, onRemove }) => (
   </div>
 );
 
-export default function LessonModal({ isOpen, onClose, onSave, onDelete, lesson, topics, newLessonSlot, subjectColor, allYearlyLessons, currentWeek, currentYear }) {
+export default function LessonModal({ 
+  isOpen, 
+  onClose, 
+  onSave, 
+  onDelete, 
+  lesson, 
+  topics = [], 
+  newLessonSlot, 
+  subjectColor, 
+  allYearlyLessons = [], 
+  currentWeek = null, 
+  currentYear = new Date().getFullYear(),
+  autoAssignTopicId
+}) {
   const [formData, setFormData] = useState({
     name: '',
-    second_name: '', // Neues Feld für den Titel der zweiten Lektion
+    second_name: '',
     topic_id: '',
     is_double_lesson: false,
     is_exam: false,
@@ -87,19 +88,26 @@ export default function LessonModal({ isOpen, onClose, onSave, onDelete, lesson,
 
   const displayLesson = lesson || newLessonSlot;
 
+  // Berechne subjectId und subjectTopics außerhalb von useEffect
+  const subjectId = typeof displayLesson?.subject === 'object' ? displayLesson.subject.id : displayLesson?.subject;
+  const subjectTopics = topics?.filter(topic => topic.subject === subjectId) || [];
+
   // Initialize form data and steps when the modal opens or lesson changes
   useEffect(() => {
     if (isOpen) {
       const currentLesson = lesson || newLessonSlot;
       const hasSecondLesson = !!currentLesson?.second_yearly_lesson_id;
-      const secondLesson = hasSecondLesson && allYearlyLessons
+      const secondLesson = hasSecondLesson && allYearlyLessons?.length > 0
         ? allYearlyLessons.find(yl => String(yl.id) === String(currentLesson.second_yearly_lesson_id))
         : null;
+
+      const initialTopicId = currentLesson?.topic_id || autoAssignTopicId || '';
+      console.log('LessonModal: Initializing formData with topic_id =', initialTopicId);
 
       setFormData({
         name: currentLesson?.name || `Lektion ${currentLesson?.lesson_number || 1}`,
         second_name: secondLesson?.name || (hasSecondLesson ? `Lektion ${Number(currentLesson?.lesson_number || 1) + 1}` : ''),
-        topic_id: currentLesson?.topic_id || '',
+        topic_id: initialTopicId,
         is_double_lesson: currentLesson?.is_double_lesson || false,
         is_exam: currentLesson?.is_exam || false,
         is_half_class: currentLesson?.is_half_class || false,
@@ -119,8 +127,16 @@ export default function LessonModal({ isOpen, onClose, onSave, onDelete, lesson,
       } else {
         setSecondSteps([]);
       }
+
+      console.log('LessonModal init: autoAssignTopicId =', autoAssignTopicId);
+      console.log('LessonModal init: currentLesson.topic_id =', currentLesson?.topic_id);
+      console.log('LessonModal init: formData.topic_id (after set) =', initialTopicId);
+      console.log('LessonModal init: displayLesson.subject =', displayLesson?.subject, ' (type:', typeof displayLesson?.subject, ')');
+      console.log('LessonModal init: subjectId =', subjectId);
+      console.log('LessonModal init: topics prop =', topics);
+      console.log('LessonModal init: subjectTopics (filtered) =', subjectTopics);
     }
-  }, [isOpen, lesson, newLessonSlot, allYearlyLessons]);
+  }, [isOpen, lesson, newLessonSlot, allYearlyLessons, autoAssignTopicId]);
 
   // Handles keyboard shortcuts for modal actions
   useEffect(() => {
@@ -156,7 +172,7 @@ export default function LessonModal({ isOpen, onClose, onSave, onDelete, lesson,
     } else {
       if (displayLesson && allYearlyLessons) {
         const subjectLessonsThisWeek = allYearlyLessons
-          .filter(yl => yl.subject === displayLesson.subject && yl.week_number === displayLesson.week_number)
+          ?.filter(yl => yl.subject === displayLesson.subject && yl.week_number === displayLesson.week_number) || []
           .sort((a, b) => Number(a.lesson_number) - Number(b.lesson_number));
 
         const currentNum = Number(displayLesson.lesson_number);
@@ -230,7 +246,86 @@ export default function LessonModal({ isOpen, onClose, onSave, onDelete, lesson,
     }));
   };
 
-  const debouncedSave = debounce(onSave, 300);
+  const debouncedSave = debounce(async (data) => {
+    try {
+      const finalData = {
+        ...data,
+        topic_id: data.topic_id === 'no_topic' ? null : data.topic_id,
+        steps: cleanStepsData(primarySteps),
+        secondSteps: addSecondLesson ? cleanStepsData(secondSteps) : [],
+        is_double_lesson: data.is_double_lesson,
+        second_yearly_lesson_id: addSecondLesson ? secondYearlyLessonId : null,
+        notes: data.notes
+      };
+
+      let savedLesson;
+      if (isEditing && lesson?.id) {
+        // Update existing lesson
+        savedLesson = await YearlyLesson.update(lesson.id, {
+          ...finalData,
+          subject: displayLesson.subject,
+          week_number: displayLesson.week_number,
+          lesson_number: displayLesson.lesson_number,
+          school_year: currentYear,
+          user_id: pb.authStore.model?.id,
+          class_id: displayLesson.class_id
+        });
+
+        // Update second lesson if double lesson
+        if (finalData.is_double_lesson && secondYearlyLessonId) {
+          const secondLessonData = {
+            name: finalData.second_name || `Lektion ${Number(displayLesson.lesson_number) + 1}`,
+            steps: cleanStepsData(secondSteps),
+            is_double_lesson: true,
+            topic_id: finalData.topic_id,
+            notes: finalData.notes,
+            subject: displayLesson.subject,
+            week_number: displayLesson.week_number,
+            lesson_number: Number(displayLesson.lesson_number) + 1,
+            school_year: currentYear,
+            user_id: pb.authStore.model?.id,
+            class_id: displayLesson.class_id
+          };
+          await YearlyLesson.update(secondYearlyLessonId, secondLessonData);
+        }
+      } else {
+        // Create new lesson
+        savedLesson = await YearlyLesson.create({
+          ...finalData,
+          subject: displayLesson.subject,
+          week_number: displayLesson.week_number,
+          lesson_number: displayLesson.lesson_number,
+          school_year: currentYear,
+          user_id: pb.authStore.model?.id,
+          class_id: displayLesson.class_id
+        });
+
+        // Create second lesson if double lesson
+        if (finalData.is_double_lesson && !secondYearlyLessonId) {
+          const secondLessonData = {
+            name: finalData.second_name || `Lektion ${Number(displayLesson.lesson_number) + 1}`,
+            steps: cleanStepsData(secondSteps),
+            is_double_lesson: true,
+            topic_id: finalData.topic_id,
+            notes: finalData.notes,
+            subject: displayLesson.subject,
+            week_number: displayLesson.week_number,
+            lesson_number: Number(displayLesson.lesson_number) + 1,
+            school_year: currentYear,
+            user_id: pb.authStore.model?.id,
+            class_id: displayLesson.class_id
+          };
+          const secondLesson = await YearlyLesson.create(secondLessonData);
+          finalData.second_yearly_lesson_id = secondLesson.id;
+        }
+      }
+
+      onSave({ ...finalData, id: savedLesson.id });
+    } catch (error) {
+      console.error('Error saving lesson:', error);
+      alert('Fehler beim Speichern der Lektion: ' + (error.data?.message || 'Unbekannter Fehler'));
+    }
+  }, 300);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -240,19 +335,20 @@ export default function LessonModal({ isOpen, onClose, onSave, onDelete, lesson,
     setIsSubmitting(true);
 
     try {
-      const finalData = {
-        ...formData,
-        topic_id: formData.topic_id === 'no_topic' ? null : formData.topic_id,
-        steps: cleanStepsData(primarySteps),
-        secondSteps: addSecondLesson ? cleanStepsData(secondSteps) : [],
-        is_double_lesson: formData.is_double_lesson,
-        second_yearly_lesson_id: addSecondLesson ? secondYearlyLessonId : null,
-        notes: formData.notes
-      };
-
-      debouncedSave(finalData);
-    } finally {
+      await debouncedSave(formData);
       setIsSubmitting(false);
+      import('react-hot-toast').then(({ toast }) => {
+        toast.success('Lektion erfolgreich gespeichert');
+      });
+    } catch (error) {
+      setIsSubmitting(false);
+      console.error('Error in handleSubmit:', error);
+      import('react-hot-toast').then(({ toast }) => {
+        const message = error.data?.data?.id?.code === 'validation_not_unique'
+          ? 'Fehler: Lektion mit dieser ID existiert bereits. Bitte versuchen Sie es erneut.'
+          : 'Fehler beim Speichern der Lektion: ' + (error.data?.message || error.message || 'Unbekannter Fehler');
+        toast.error(message);
+      });
     }
   };
 
@@ -267,9 +363,11 @@ export default function LessonModal({ isOpen, onClose, onSave, onDelete, lesson,
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
-  const subjectTopics = topics.filter(topic => topic.subject === displayLesson?.subject);
-  const topicColor = formData.topic_id ? topics.find(t => t.id === formData.topic_id)?.color : null;
-  const modalColor = topicColor || subjectColor || '#3b82f6';
+  console.log('LessonModal render: Selected value in Select =', formData.topic_id || "no_topic");
+
+  const modalColor = subjectColor || '#3b82f6';
+  const modalBackground = createGradient(modalColor, -20, '135deg');
+  const buttonTextColor = getTextColorForBackground(modalBackground);
 
   const secondLessonNote = useMemo(() => {
     if (secondYearlyLessonId && allYearlyLessons) {
@@ -450,8 +548,8 @@ export default function LessonModal({ isOpen, onClose, onSave, onDelete, lesson,
               </Button>
               <Button 
                 type="submit"
-                className="text-white shadow-md hover:opacity-90"
-                style={{ backgroundColor: modalColor }}
+                className={`text-${buttonTextColor} shadow-md hover:opacity-90`}
+                style={{ background: modalBackground }}
               >
                 <Save className="w-4 h-4 mr-2" />
                 Lektionsplan speichern

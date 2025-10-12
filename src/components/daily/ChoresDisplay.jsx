@@ -1,9 +1,8 @@
 import React from "react";
 import { motion } from "framer-motion";
 import { CheckCircle2, User } from "lucide-react";
-import { getThemeGradient, getGlowColor, getThemeTextColor } from "@/utils/colorDailyUtils";
 
-export default function ChoresDisplay({ assignments, chores, students, customization, theme, isDark }) {
+export default function ChoresDisplay({ assignments, chores, students, customization, isDark }) {
   // Verknüpfe Assignments mit Chores und Students
   const enrichedAssignments = assignments.map((assignment) => {
     const chore = chores.find((c) => c.id === assignment.chore_id) || {};
@@ -16,7 +15,7 @@ export default function ChoresDisplay({ assignments, chores, students, customiza
     };
   });
 
-  // Animation variants (an LessonOverviewPanel angepasst)
+  // Animation variants
   const cardVariants = {
     hidden: { opacity: 0, y: 20 },
     visible: (index) => ({
@@ -25,7 +24,6 @@ export default function ChoresDisplay({ assignments, chores, students, customiza
       transition: { delay: index * 0.1, duration: 0.5, ease: "easeOut" },
     }),
     hover: { scale: 1.03, boxShadow: "0px 4px 12px rgba(0,0,0,0.1)" },
-    tap: { scale: 0.97 },
   };
 
   return (
@@ -51,13 +49,11 @@ export default function ChoresDisplay({ assignments, chores, students, customiza
                 initial="hidden"
                 animate="visible"
                 whileHover="hover"
-                whileTap="tap"
                 className="p-2 md:p-3 rounded-xl border-2 border-transparent hover:border-slate-300 dark:hover:border-slate-600 transition-all duration-200"
                 style={{
-                  background: getThemeGradient(theme, assignment.choreColor, -10, isDark),
-                  backgroundColor: assignment.choreColor + "20", // Gefüllt mit 20% Opacity wie in LessonOverviewPanel
-                  color: getThemeTextColor(theme, assignment.choreColor, isDark),
-                  boxShadow: getGlowColor(theme, assignment.choreColor, undefined, isDark),
+                  backgroundColor: assignment.choreColor + "20",
+                  borderColor: assignment.choreColor + "40",
+                  color: isDark ? "#e2e8f0" : "#1e293b", // Einfache Textfarbe
                 }}
               >
                 <div className="flex items-center justify-between">

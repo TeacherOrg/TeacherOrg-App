@@ -2,6 +2,7 @@
 /**
  * Utility functions for finding and managing lesson slots in the timetable
  */
+import { toast } from 'react-hot-toast';
 
 /**
  * Finds a free slot for a lesson based on preferred day and current lessons
@@ -64,6 +65,7 @@ export const findFreeSlot = (allLessons, preferredDay, timeSlots, week, preferre
   }
 
   console.warn(`No free slot found for ${preferredDay} in week ${week}`);
+  toast.error('Kein freier Slot verfügbar – Lektion bleibt unplatziert.');
   return null;
 };
 
@@ -73,10 +75,10 @@ export const findFreeSlot = (allLessons, preferredDay, timeSlots, week, preferre
  * @param {string} targetDay - Target day
  * @param {Array} timeSlots - Available time slots
  * @param {number} currentWeek - Current week
- * @param {number} targetPeriod - Original target period
+ * @param {number} [targetPeriod=1] - Original target period
  * @returns {Object|null} - {day, period} or null
  */
-export const findAlternativeSlot = (lessons, targetDay, timeSlots, currentWeek, targetPeriod) => {
+export const findAlternativeSlot = (lessons, targetDay, timeSlots, currentWeek, targetPeriod = 1) => {
   const validDays = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'];
   
   // Try same day, later periods (skip the immediate next one to avoid double-lesson conflicts)
@@ -110,6 +112,7 @@ export const findAlternativeSlot = (lessons, targetDay, timeSlots, currentWeek, 
   }
 
   console.warn(`No alternative slot found for ${targetDay} period ${targetPeriod}`);
+  toast.error('Kein alternativer Slot verfügbar – Lektion bleibt unplatziert.');
   return null;
 };
 

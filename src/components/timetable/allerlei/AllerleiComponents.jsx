@@ -70,8 +70,9 @@ export const AllerleiSubjectSelector = ({
   onUpdateStep,
   onRemoveStep,
   onAddStep,
-  allLessons, // Neu: Prop hinzufügen
-  currentWeek // Neu: Prop hinzufügen
+  allLessons,
+  currentWeek,
+  primarySubject // New prop to exclude primary subject
 }) => (
   <div className="space-y-2 border rounded-lg p-3 bg-slate-50/50 dark:bg-slate-800/50">
     <div className="flex gap-2 items-center">
@@ -80,9 +81,11 @@ export const AllerleiSubjectSelector = ({
           <SelectValue placeholder="Fach auswählen" />
         </SelectTrigger>
         <SelectContent>
-          {availableSubjects.map(s => (
-            <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>
-          ))}
+          {availableSubjects
+            .filter(s => s.name !== primarySubject) // Exclude primary subject
+            .map(s => (
+              <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>
+            ))}
         </SelectContent>
       </Select>
       <Button 

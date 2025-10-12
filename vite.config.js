@@ -1,18 +1,23 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
-import path from 'path';
+import { fileURLToPath } from 'node:url';
+import path from 'node:path';
 
-// https://vite.dev/config/
+console.log('Vite config loaded successfully!');
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 export default defineConfig({
   plugins: [react()],
   server: {
-    host: true, // Exponiert auf 0.0.0.0 für Dev
-    port: 5173, // Standardport explizit setzen
+    host: true,
+    port: 5173,
   },
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
-      '@/components': path.resolve(__dirname, './src/components'), // Expliziter Alias für Komponenten
+      '@/components': path.resolve(__dirname, './src/components'),
     },
     extensions: ['.mjs', '.js', '.jsx', '.ts', '.tsx', '.json'],
   },
@@ -20,12 +25,13 @@ export default defineConfig({
     esbuildOptions: {
       loader: {
         '.js': 'jsx',
+        '.jsx': 'jsx',
       },
     },
   },
   build: {
-    minify: false, // Deaktiviert Minification für Debugging
-    sourcemap: true, // Aktiviert Sourcemaps
+    minify: false,
+    sourcemap: true,
     rollupOptions: {
       output: {
         manualChunks: {
@@ -33,7 +39,7 @@ export default defineConfig({
           components: [
             './src/components/yearly/YearlyGrid.jsx',
             './src/components/yearly/LessonModal.jsx',
-            './src/components/topics/TopicModal.jsx', // Korrigierter Pfad
+            './src/components/topics/TopicModal.jsx',
             './src/components/yearly/TopicLessonsModal.jsx',
             './src/components/yearly/YearLessonCell.jsx',
             './src/components/yearly/YearLessonOverlay.jsx',
@@ -43,6 +49,6 @@ export default defineConfig({
     },
   },
   define: {
-    'process.env': {}, // Leerer Fallback
+    'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV || 'development'),
   },
 });

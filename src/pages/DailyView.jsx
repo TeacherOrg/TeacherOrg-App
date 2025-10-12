@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback, useRef } from "react"
 import { useNavigate } from "react-router-dom";
 import { Lesson, YearlyLesson, Subject, Holiday, Setting, Class, DailyNote, Announcement, Chore, ChoreAssignment, Student } from "@/api/entities";
 import { Button } from "@/components/ui/button";
-import { ChevronLeft, ChevronRight, Maximize, Settings, Calendar, Clock, Users, Home, Zap } from "lucide-react"; // Added Calendar, Clock, Users, Home, Zap
+import { ChevronLeft, ChevronRight, Maximize, Settings, Calendar, Clock, Users, Home, Zap } from "lucide-react";
 import { motion } from "framer-motion";
 import CalendarLoader from "../components/ui/CalendarLoader";
 import LessonOverviewPanel from "../components/daily/LessonOverviewPanel";
@@ -12,10 +12,11 @@ import CustomizationPanel from "../components/daily/CustomizationPanel";
 import TeacherNotesPanel from "../components/daily/TeacherNotesPanel";
 import AnnouncementsTicker from "../components/daily/AnnouncementsTicker";
 import ChoresDisplay from "../components/daily/ChoresDisplay";
-import { createPageUrl } from "@/utils"; // Added createPageUrl
+import { createPageUrl } from "@/utils";
 import { getThemeGradient } from "@/utils/colorDailyUtils";
-import { CustomizationSettings } from "@/api/entities"; // Neue Entity aus entities.js
-import pb from "@/api/pb"; // Für authStore
+import { normalizeAllerleiData } from "@/components/timetable/allerlei/AllerleiUtils";
+import { CustomizationSettings } from "@/api/entities";
+import pb from "@/api/pb";
 
 // Utility functions
 function getCurrentWeek() {
@@ -125,7 +126,7 @@ export default function DailyView({ currentDate, onDateChange }) {
   const [chores, setChores] = useState([]);
   const [choreAssignments, setChoreAssignments] = useState([]);
   const [students, setStudents] = useState([]);
-  const [announcements, setAnnouncements] = useState([]); // Added announcements state
+  const [announcements, setAnnouncements] = useState([]);
 
   // New feature states
   const [completedSteps, setCompletedSteps] = useState(new Set());
@@ -136,7 +137,7 @@ export default function DailyView({ currentDate, onDateChange }) {
   const [customization, setCustomization] = useState({
     fontSize: { title: 'text-2xl', content: 'text-lg', clock: 'text-4xl' },
     background: { type: 'gradient', value: 'from-blue-50 to-indigo-100 dark:from-slate-900 dark:to-slate-800' },
-    theme: 'default',
+    theme: 'default', // Fallback auf 'default'
     autoFocusCurrentLesson: true,
     showOverview: true,
     showNotes: true,
@@ -226,7 +227,7 @@ export default function DailyView({ currentDate, onDateChange }) {
         const settings = await CustomizationSettings.list({ filter: `user_id = "${userId}"` });
         const data = {
           user_id: userId,
-          theme: customization.theme,
+          theme: customization.theme || 'default',
           background_type: customization.background.type,
           background_value: customization.background.value,
           font_size_title: customization.fontSize.title,
@@ -256,7 +257,7 @@ export default function DailyView({ currentDate, onDateChange }) {
   const loadAllData = async () => {
     setIsLoading(true);
     try {
-      const [lessonsData, yearlyLessonsData, subjectsData, holidaysData, settingsData, classesData, choresData, assignmentsData, announcementsData] = await Promise.all([
+      const [lessonsData, yearlyLessonsData, subjectsData, holidaysData, settingsData, classesData, choresData, assignmentsData, announcementsData, studentsData] = await Promise.all([
         Lesson.list(),
         YearlyLesson.list(),
         Subject.list(),
@@ -265,7 +266,8 @@ export default function DailyView({ currentDate, onDateChange }) {
         Class.list(),
         Chore.list(),
         ChoreAssignment.list(),
-        Announcement.list() // Added Announcement.list()
+        Announcement.list(),
+        Student.list() // Hinzugefügt
       ]);
       
       setAllLessons(lessonsData || []);
@@ -275,7 +277,8 @@ export default function DailyView({ currentDate, onDateChange }) {
       setClasses(classesData || []);
       setChores(choresData || []);
       setChoreAssignments(assignmentsData || []);
-      setAnnouncements(announcementsData || []); // Set announcements state
+      setStudents(studentsData || []);
+      setAnnouncements(announcementsData || []);
       
       if (settingsData && settingsData.length > 0) {
         setSettings(settingsData[0]);
@@ -290,13 +293,12 @@ export default function DailyView({ currentDate, onDateChange }) {
     }
   };
 
-  // Memoize calculateProgress function as it is used in lessonsForDate memoization
+  // Memoize calculateProgress function
   const calculateProgress = useCallback((startTime, endTime) => {
     const now = new Date();
     const today = now.toDateString();
     const selectedDay = currentDate.toDateString();
     
-    // Only calculate progress for today
     if (today !== selectedDay) return 0;
     
     const start = new Date(`${today} ${startTime}`);
@@ -319,19 +321,43 @@ export default function DailyView({ currentDate, onDateChange }) {
       lesson.week_number === currentWeek
     );
 
+    console.log("Debug: Subjects in DailyView", subjects); // Debug subjects
+
     return lessonsForDay.map(lesson => {
       const yearlyLesson = lesson.yearly_lesson_id ? 
         yearlyLessons.find(yl => yl.id === lesson.yearly_lesson_id) : null;
       const secondYearlyLesson = lesson.second_yearly_lesson_id ? 
         yearlyLessons.find(yl => yl.id === lesson.second_yearly_lesson_id) : null;
-      const subject = subjects.find(s => s.id === lesson.subject); // Fix: Match by ID instead of name
+      const subject = subjects.find(s => s.id === lesson.subject);
 
-      const timeSlot = timeSlots.find(ts => ts.period === lesson.period_slot);
+      const timeSlot = timeSlots.find(ts => ts.period === lesson.period_slot) || null; // Fallback null
 
       let steps = [];
       let description = '';
       
-      if (lesson.is_double_lesson && yearlyLesson && secondYearlyLesson) {
+      if (lesson.is_allerlei) {
+        // Allerlei-Lektionen normalisieren
+        const normalized = normalizeAllerleiData(lesson, subjects);
+        steps = normalized.steps || [];
+        description = normalized.description || 'Allerlei-Lektion';
+        return {
+          ...lesson,
+          type: 'lesson',
+          yearlyLesson,
+          secondYearlyLesson,
+          subject: subject ? {
+            ...subject,
+            name: subject.name || lesson.subject_name || 'Unbekannt',
+            color: subject.color || '#3b82f6'
+          } : { name: lesson.subject_name || 'Unbekannt', color: '#3b82f6' },
+          timeSlot,
+          steps,
+          description,
+          progress: timeSlot ? calculateProgress(timeSlot.start, timeSlot.end) : 0,
+          color: normalized.color, // Gradient oder Farbe
+          isGradient: normalized.isGradient
+        };
+      } else if (lesson.is_double_lesson && yearlyLesson && secondYearlyLesson) {
         steps = [...(yearlyLesson.steps || []), ...(secondYearlyLesson.steps || [])];
         description = `${yearlyLesson.notes || ''} + ${secondYearlyLesson.notes || ''}`.trim();
       } else if (yearlyLesson) {
@@ -345,14 +371,14 @@ export default function DailyView({ currentDate, onDateChange }) {
       // Add unique IDs to steps if they don't have one
       steps = steps.map((step, index) => ({ ...step, id: step.id || `${lesson.id}-step-${index}` }));
 
-      return {
+      const enrichedLesson = {
         ...lesson,
         type: 'lesson',
         yearlyLesson,
         secondYearlyLesson,
         subject: subject ? {
           ...subject,
-          name: subject.name || lesson.subject_name || 'Unbekannt', // Fallback to normalized subject_name
+          name: subject.name || lesson.subject_name || 'Unbekannt',
           color: subject.color || '#3b82f6'
         } : { name: lesson.subject_name || 'Unbekannt', color: '#3b82f6' },
         timeSlot,
@@ -360,19 +386,32 @@ export default function DailyView({ currentDate, onDateChange }) {
         description,
         progress: timeSlot ? calculateProgress(timeSlot.start, timeSlot.end) : 0
       };
+
+      // Debug: Logge die normalisierten Allerlei-Daten
+      if (lesson.is_allerlei) {
+        console.log("Debug: Normalized Allerlei Lesson in DailyView", {
+          lessonId: lesson.id,
+          color: enrichedLesson.color,
+          isGradient: enrichedLesson.isGradient,
+          allerlei_subjects: lesson.allerlei_subjects
+        });
+      }
+
+      return enrichedLesson;
     }).sort((a, b) => a.period_slot - b.period_slot);
   }, [allLessons, yearlyLessons, subjects, timeSlots, dayOfWeek, currentWeek, calculateProgress]);
   
   // Create a combined schedule of lessons and breaks for the current item logic
   const combinedSchedule = useMemo(() => {
-    const combined = [...lessonsForDate, ...breaks.map(b => ({...b, type: 'break'}))];
-    return combined.sort((a, b) => {
-        const timeA = a.timeSlot.start.split(':').map(Number);
-        const timeB = b.timeSlot.start.split(':').map(Number);
-        if (timeA[0] !== timeB[0]) {
-            return timeA[0] - timeB[0];
-        }
-        return timeA[1] - timeB[1];
+    const validItems = [...lessonsForDate, ...breaks.map(b => ({...b, type: 'break'}))].filter(item => item.timeSlot); // Filter ungültige Items
+    return validItems.sort((a, b) => {
+      if (!a.timeSlot || !b.timeSlot) return 0; // Fallback für fehlende timeSlots
+      const timeA = a.timeSlot.start.split(':').map(Number);
+      const timeB = b.timeSlot.start.split(':').map(Number);
+      if (timeA[0] !== timeB[0]) {
+        return timeA[0] - timeB[0];
+      }
+      return timeA[1] - timeB[1];
     });
   }, [lessonsForDate, breaks]);
 
@@ -399,7 +438,6 @@ export default function DailyView({ currentDate, onDateChange }) {
     const todayDate = new Date().toDateString();
     const selectedDateString = currentDate.toDateString();
     
-    // Only show current item if viewing today
     if (todayDate !== selectedDateString) return null;
     
     return combinedSchedule.find(item => {
@@ -450,7 +488,6 @@ export default function DailyView({ currentDate, onDateChange }) {
     }
   }, [currentTime, lessonsForDate, currentDate]);
 
-
   // Play audio at the end of a lesson
   useEffect(() => {
       if (customization.audio?.enabled && audioRef.current && currentItem?.type === 'lesson') {
@@ -458,7 +495,6 @@ export default function DailyView({ currentDate, onDateChange }) {
           const lessonEndTime = new Date(`${now.toDateString()} ${currentItem.timeSlot.end}`);
           const secondsToEnd = (lessonEndTime.getTime() - now.getTime()) / 1000;
 
-          // Play sound 1 second before end
           if (secondsToEnd > 0 && secondsToEnd < 1.5) { 
               audioRef.current.volume = customization.audio.volume || 0.5;
               audioRef.current.play().catch(e => console.error("Audio play failed:", e));
@@ -516,7 +552,7 @@ export default function DailyView({ currentDate, onDateChange }) {
   const getBackgroundStyle = () => {
     const { background, theme } = customization;
     const baseColor = background.value || '#ffffff';
-    const gradient = getThemeGradient(theme, baseColor, undefined, isDark);
+    const gradient = getThemeGradient(theme || 'default', baseColor, undefined, isDark);
     
     switch (background.type) {
       case 'solid':
@@ -530,7 +566,7 @@ export default function DailyView({ currentDate, onDateChange }) {
       case 'gradient':
         return { background: gradient };
       default:
-        return { background: getThemeGradient('default', baseColor, undefined, isDark) }; // Fallback zu default Theme
+        return { background: getThemeGradient('default', baseColor, undefined, isDark) };
     }
   };
 
@@ -565,7 +601,7 @@ export default function DailyView({ currentDate, onDateChange }) {
     >
       <audio ref={audioRef} src="/audio/end_of_lesson.ogg" preload="auto" />
       
-      {/* Announcements Ticker - Moved to top as per outline */}
+      {/* Announcements Ticker */}
       <AnnouncementsTicker announcements={announcements} />
       
       {/* Settings & Fullscreen buttons top-right */}
@@ -598,7 +634,7 @@ export default function DailyView({ currentDate, onDateChange }) {
         {customization.showOverview && (
           <motion.div 
             className="h-full overflow-hidden"
-            drag // Verschiebbar via framer-motion
+            drag
             dragConstraints={{ left: -100, right: 100, top: -100, bottom: 100 }}
             whileDrag={{ scale: 0.95 }}
           >
@@ -609,7 +645,7 @@ export default function DailyView({ currentDate, onDateChange }) {
               currentHoliday={currentHoliday}
               customization={customization}
               currentItem={currentItem}
-              theme={customization.theme}
+              theme={customization.theme || 'default'}
               isDark={isDark}
             />
           </motion.div>
@@ -618,7 +654,13 @@ export default function DailyView({ currentDate, onDateChange }) {
         {/* Main Central Panel */}
         <div className="h-full overflow-hidden">
           {showChoresView ? (
-            <ChoresDisplay assignments={todaysAssignments} chores={chores} students={students} customization={customization} />
+            <ChoresDisplay
+              assignments={todaysAssignments}
+              chores={chores}
+              students={students}
+              customization={customization}
+              isDark={isDark}
+            />
           ) : selectedItem ? (
             <LessonDetailPanel
               lesson={selectedItem}
@@ -631,6 +673,8 @@ export default function DailyView({ currentDate, onDateChange }) {
               onStepCompleteChange={handleStepCompleteChange}
               manualStepIndex={manualStepIndex}
               onManualStepChange={handleManualStepChange}
+              theme={customization.theme || 'default'} // Neu hinzufügen
+              isDark={isDark} // Neu hinzufügen
             />
           ) : (
              <div className="flex items-center justify-center h-full text-center bg-white/50 dark:bg-slate-800/50 rounded-2xl">
@@ -647,11 +691,11 @@ export default function DailyView({ currentDate, onDateChange }) {
           )}
         </div>
         
-        {/* Teacher Notes Panel - Conditionally rendered */}
+        {/* Teacher Notes Panel */}
         {customization.showNotes && (
              <motion.div 
                className="h-full overflow-hidden"
-               drag // Verschiebbar
+               drag
                dragConstraints={{ left: -100, right: 100, top: -100, bottom: 100 }}
                whileDrag={{ scale: 0.95 }}
              >
@@ -660,11 +704,11 @@ export default function DailyView({ currentDate, onDateChange }) {
         )}
       </div>
 
-      {/* Clock Panel - Positioned top-right relative to root div */}
+      {/* Clock Panel */}
       {customization.showClock && (
         <motion.div 
           className="absolute top-24 right-4 z-30 w-[220px] h-[120px]"
-          drag // Verschiebbar
+          drag
           dragConstraints={{ left: -100, right: 100, top: -100, bottom: 100 }}
           whileDrag={{ scale: 0.95 }}
         >

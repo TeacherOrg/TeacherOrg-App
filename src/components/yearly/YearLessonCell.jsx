@@ -1,3 +1,4 @@
+import React from 'react';
 import { motion } from 'framer-motion';
 import { Plus } from 'lucide-react';
 import { 
@@ -19,7 +20,7 @@ import {
  * @param {Array} allYearlyLessons - Alle Jahreslektions
  * @param {string} densityMode - Dichte-Modus ('compact'|'standard'|'spacious')
  */
-export default function YearLessonCell({ 
+function YearLessonCell({ 
   lesson, 
   onClick, 
   activeTopicId, 
@@ -206,3 +207,14 @@ export default function YearLessonCell({
 
 // Memoization für Performance
 YearLessonCell.displayName = 'YearLessonCell';
+
+export default React.memo(YearLessonCell, (prevProps, nextProps) => {
+  return (
+    prevProps.lesson?.id === nextProps.lesson?.id &&
+    prevProps.activeTopicId === nextProps.activeTopicId &&
+    prevProps.defaultColor === nextProps.defaultColor &&
+    prevProps.isDoubleLesson === nextProps.isDoubleLesson &&
+    prevProps.isTopicBlock === nextProps.isTopicBlock &&
+    prevProps.densityMode === nextProps.densityMode
+  );
+});

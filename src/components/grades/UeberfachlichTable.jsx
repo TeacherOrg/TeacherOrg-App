@@ -268,24 +268,17 @@ export default function UeberfachlichTable({
   }, [allCompetenciesCombined]);
 
   const assessmentsMap = useMemo(() => {
-    const map = new Map();
-    if (!ueberfachlich || !Array.isArray(ueberfachlich)) {
-      console.warn('ueberfachlich is not an array or is undefined:', ueberfachlich);
-      return map;
-    }
-    ueberfachlich.forEach(u => {
-      if (!u.student_id || !u.competency_id || !Array.isArray(u.assessments)) {
-        console.warn('Invalid ueberfachlich entry for assessmentsMap:', u);
-        return;
-      }
+    if (!Array.isArray(ueberfachlich)) return new Map();
+    return ueberfachlich.reduce((map, u) => {
+      if (!u.student_id || !u.competency_id || !Array.isArray(u.assessments)) return map;
       const studentMap = map.get(u.student_id) || new Map();
       const assessments = u.assessments
         .filter(a => a && a.date && typeof a.score === 'number' && a.score >= 1 && a.score <= 5)
         .sort((a, b) => new Date(b.date) - new Date(a.date));
       studentMap.set(u.competency_id, assessments);
       map.set(u.student_id, studentMap);
-    });
-    return map;
+      return map;
+    }, new Map());
   }, [ueberfachlich]);
 
   const getAssessments = useCallback((studentId, competencyId) => {
@@ -857,3 +850,4 @@ export default function UeberfachlichTable({
     </>
   );
 }
+
