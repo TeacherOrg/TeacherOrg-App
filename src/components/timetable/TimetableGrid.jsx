@@ -160,10 +160,12 @@ const TimetableGrid = React.forwardRef(
     const gridStyle = useMemo(() => ({
       display: 'grid',
       gridTemplateColumns: `120px repeat(5, var(--cell-width, 120px))`,
-      gridTemplateRows: `auto repeat(${timeSlots?.length || 8}, var(--cell-height, 80px))`, // Verwende --cell-height
-      width: 'fit-content',
+      gridTemplateRows: `auto repeat(${timeSlots?.length || 8}, var(--cell-height, 80px))`,
+      maxWidth: `calc(120px + 5 * var(--cell-width, 120px))`, // Constrain total width
       gap: '0px',
       borderSpacing: '0px',
+      minHeight: 0,
+      '--num-slots': timeSlots?.length || 8,
     }), [timeSlots?.length]);
 
     const headerCellStyle = useMemo(() => ({}), []);

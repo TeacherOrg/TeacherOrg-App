@@ -10,7 +10,6 @@ import { useCallback } from 'react';
 
 const ACADEMIC_WEEKS = 52;
 
-// Angepasste getHolidayDisplay-Funktion, die Gradienten aus TimetableGrid übernimmt
 const getHolidayDisplay = (holiday) => {
   if (!holiday) return { emoji: '', color: '', gradient: '' };
   switch (holiday.type) {
@@ -44,7 +43,7 @@ const YearlyGrid = React.memo(({
   densityMode = 'standard',
   isAssignMode = false,
   selectedLessons = [],
-  onSelectLesson // New prop for selection callback
+  onSelectLesson
 }) => {
   const tableRef = useRef(null);
   const hasScrolledToCurrentWeek = useRef(false);
@@ -198,16 +197,16 @@ const YearlyGrid = React.memo(({
   }, [rowHeight]);
 
   useEffect(() => {
-    const updateHeights = () => {
+    const updateDimensions = () => {
       if (classHeaderRef.current) {
         setClassHeaderHeight(classHeaderRef.current.getBoundingClientRect().height);
       }
     };
 
-    const observer = new ResizeObserver(updateHeights);
+    const observer = new ResizeObserver(updateDimensions);
     if (tableRef.current) observer.observe(tableRef.current);
 
-    updateHeights(); // Initial
+    updateDimensions(); // Initial call
 
     return () => observer.disconnect();
   }, [densityMode, uniqueSubjects.length]);
@@ -225,13 +224,6 @@ const YearlyGrid = React.memo(({
     hasScrolledToCurrentWeek.current = false;
   }, [activeClassId, densityMode]);
 
-  useEffect(() => {
-    console.log('Debug YearlyGrid: subjects', subjects);
-    console.log('Debug YearlyGrid: uniqueSubjects', uniqueSubjects);
-    console.log('Debug YearlyGrid: subjectBlockWidths', subjectBlockWidths);
-    console.log('Debug YearlyGrid: scrolledWidth', scrolledWidth);
-  }, [subjects, uniqueSubjects, subjectBlockWidths, scrolledWidth]);
-
   if (!subjects || subjects.length === 0 || uniqueSubjects.length === 0) {
     return (
       <div className="flex items-center justify-center h-64 text-gray-500 dark:text-slate-400 bg-white dark:bg-slate-800 rounded-xl border border-gray-400 dark:border-slate-700">
@@ -240,18 +232,24 @@ const YearlyGrid = React.memo(({
     );
   }
 
-  const Inner = forwardRef(({ children, style, ...rest }, ref) => (
-    <div
-      ref={ref}
-      style={{
-        ...style,
-        width: `${totalWidth}px`
-      }}
-      {...rest}
-    >
-      {children}
-    </div>
-  ));
+  const Inner = forwardRef(({ children, style, ...rest }, ref) => {
+    const effectiveWidth = Math.min(style.width || totalWidth, totalWidth); // Verwende die kleinere Breite
+    return (
+      <div
+        ref={ref}
+        style={{
+          ...style,
+          width: `${effectiveWidth}px`,
+          minWidth: '100%',
+          maxWidth: '100%',
+          margin: '0 auto' // Zentriert die Tabelle
+        }}
+        {...rest}
+      >
+        {children}
+      </div>
+    );
+  });
 
   const selectedSet = useMemo(() => new Set(selectedLessons.filter(l => typeof l === 'string')), [selectedLessons]);
 
@@ -306,6 +304,231 @@ const YearlyGrid = React.memo(({
     const holiday = getHolidayForWeek(week);
     const holidayDisplay = getHolidayDisplay(holiday);
 
+    const subjectCells = uniqueSubjects.map((subject, subjectIndex) => {
+      const lessonSlotsCount = lessonsPerWeekBySubject[subject] || 4;
+      const subjectColor = subjectsByName[subject]?.color || '#3b82f6';
+      const renderedSlots = new Set();
+      const cells = [];
+
+      for (let i = 0; i < lessonSlotsCount; i++) {
+        const lessonNumber = i + 1;
+
+        if (renderedSlots.has(lessonNumber)) continue;
+
+        const lessonKey = `${week}-${subject}-${lessonNumber}`;
+        const lesson = lessonsByWeek[lessonKey] || null;
+        const slot = { week_number: week, subjectName: subject, subject: subjectsByName[subject].id, lesson_number: lessonNumber, school_year: currentYear };
+
+        if (!lesson) {
+          const safeSelected = selectedLessons.filter(l => typeof l === 'string');
+          const isSelected = safeSelected.some(l => {
+            const [w, sub, num] = l.split('-');
+            return Number(w) === week && sub === subject && Number(num) === lessonNumber;
+          });
+          cells.push(
+            <div
+              key={`${subject}-${lessonNumber}`}
+              className={`p-0.5 border border-gray-200 dark:border-slate-700 ${isSelected ? 'bg-blue-100 dark:bg-blue-900' : ''}`}
+              style={{
+                width: `${cellWidth}px`,
+                minWidth: `${cellWidth}px`,
+                maxWidth: `${cellWidth}px`,
+                height: `${rowHeight}px`
+              }}
+              onClick={isAssignMode ? () => onSelectLesson({ week_number: week, subject, lesson_number: lessonNumber }) : undefined}
+            >
+              <div className="h-full flex items-center justify-center bg-slate-100 dark:bg-slate-900/50">
+                {isAssignMode && (
+                  <Checkbox
+                    checked={isSelected}
+                    onCheckedChange={() => onSelectLesson({ week_number: week, subject, lesson_number: lessonNumber })}
+                    className="absolute top-2 left-2 z-50"
+                  />
+                )}
+                <YearLessonCell
+                  lesson={null}
+                  onClick={() => handleCellClick(null, slot)}
+                  activeTopicId={activeTopicId}
+                  defaultColor={subjectColor}
+                  densityMode={densityMode}
+                />
+              </div>
+            </div>
+          );
+          continue;
+        }
+
+        if (lesson.topic_id) {
+          const topic = topicsById.get(lesson.topic_id);
+          if (topic) {
+            let span = 0;
+            const topicLessons = [];
+
+            let j = lessonNumber;
+            while (j <= lessonSlotsCount) {
+              const checkKey = `${week}-${subject}-${j}`;
+              const checkLesson = lessonsByWeek[checkKey] || null;
+              
+              if (checkLesson && checkLesson.topic_id === lesson.topic_id) {
+                topicLessons.push(checkLesson);
+                span += 1;
+                renderedSlots.add(j);
+                j++;
+              } else {
+                break;
+              }
+            }
+
+            if (span === 1 && lesson.is_double_lesson && lesson.second_yearly_lesson_id) {
+              const nextNumber = lessonNumber + 1;
+              const nextKey = `${week}-${subject}-${nextNumber}`;
+              const nextLesson = lessonsByWeek[nextKey] || null;
+              
+              if (nextLesson && nextLesson.topic_id === lesson.topic_id) {
+                span += 1;
+                renderedSlots.add(nextNumber);
+                topicLessons.push(nextLesson);
+              }
+            }
+
+            if (span > 1) {
+              i += span - 1;
+            }
+
+            const topicWidth = span * cellWidth;
+
+            cells.push(
+              <div
+                key={`topic-${lesson.id || lessonKey}`}
+                className="p-0 border border-gray-200 dark:border-slate-700"
+                style={{
+                  width: `${topicWidth}px`,
+                  minWidth: `${topicWidth}px`,
+                  maxWidth: `${topicWidth}px`,
+                  height: `${rowHeight}px`
+                }}
+                onMouseEnter={(e) => onShowHover({
+                  ...lesson,
+                  topic_id: topic.id,
+                  color: topic.color || subjectColor,
+                  mergedLessons: topicLessons
+                }, e)}
+                onMouseLeave={onHideHover}
+              >
+                <div
+                  className="h-full w-full cursor-pointer flex items-center justify-center text-center rounded-md"
+                  style={{
+                    background: `linear-gradient(135deg, ${topic.color} 0%, ${adjustColor(topic.color, -20)} 100%)`,
+                    border: `1px solid ${topic.color}`,
+                    color: 'white'
+                  }}
+                  onClick={() => handleCellClick({
+                    ...lesson,
+                    topic_id: topic.id,
+                    mergedLessons: topicLessons
+                  }, null)}
+                >
+                  <div className={`text-xs font-bold px-1 ${densityMode === 'compact' ? 'text-[10px]' : ''}`}>
+                    <div className="truncate">{topic.name}</div>
+                  </div>
+                </div>
+              </div>
+            );
+            continue;
+          }
+        }
+
+        if (lesson.is_double_lesson && lesson.second_yearly_lesson_id) {
+          const nextNumber = lessonNumber + 1;
+          const nextKey = `${week}-${subject}-${nextNumber}`;
+          const nextLesson = lessonsByWeek[nextKey] || null;
+          
+          let span = 1;
+          if (nextLesson && nextLesson.id === lesson.second_yearly_lesson_id) {
+            span = 2;
+            i += 1;
+            renderedSlots.add(nextNumber);
+          }
+
+          const lessonToPass = { 
+            ...lesson, 
+            color: subjectColor,
+            subjectName: subject,
+            is_double_lesson: true,
+            second_yearly_lesson_id: lesson.second_yearly_lesson_id
+          };
+
+          const doubleWidth = span * cellWidth;
+
+          cells.push(
+            <div
+              key={lessonKey}
+              className="p-0.5 border border-gray-200 dark:border-slate-700"
+              style={{
+                width: `${doubleWidth}px`,
+                minWidth: `${doubleWidth}px`,
+                maxWidth: `${doubleWidth}px`,
+                height: `${rowHeight}px`
+              }}
+            >
+              <YearLessonCell
+                lesson={lessonToPass}
+                onClick={() => handleCellClick(lessonToPass, slot)}
+                activeTopicId={activeTopicId}
+                defaultColor={subjectColor}
+                densityMode={densityMode}
+                isDoubleLesson={true}
+              />
+            </div>
+          );
+          continue;
+        }
+
+        const lessonToPass = { 
+          ...lesson, 
+          color: subjectColor,
+          subjectName: subject
+        };
+
+        cells.push(
+          <div
+            key={lessonKey}
+            className="p-0.5 border border-gray-200 dark:border-slate-700"
+            style={{
+              width: `${cellWidth}px`,
+              minWidth: `${cellWidth}px`,
+              maxWidth: `${cellWidth}px`,
+              height: `${rowHeight}px`
+            }}
+          >
+            {isAssignMode && !lesson.topic_id && (
+              <Checkbox
+                checked={selectedLessons.includes(lesson.id)}
+                onCheckedChange={() => onLessonClick(lesson, slot)}
+                className="absolute top-2 left-2 z-50"
+              />
+            )}
+            <YearLessonCell
+              lesson={lessonToPass}
+              onClick={() => handleCellClick(lessonToPass, slot)}
+              activeTopicId={activeTopicId}
+              defaultColor={subjectColor}
+              onMouseEnter={(e) => onShowHover(lessonToPass, e)}
+              onMouseLeave={onHideHover}
+              allYearlyLessons={allYearlyLessons}
+              densityMode={densityMode}
+            />
+          </div>
+        );
+      }
+
+      return (
+        <div key={subjectIndex} className="flex">
+          {cells}
+        </div>
+      );
+    });
+
     return (
       <div style={style} className={`flex flex-nowrap relative ${isCurrentWeek ? 'bg-blue-50 dark:bg-blue-900/30' : ''}`}>
         {holiday && (
@@ -349,231 +572,7 @@ const YearlyGrid = React.memo(({
             </div>
           )}
         </div>
-
-        {uniqueSubjects.map((subject, subjectIndex) => {
-          const lessonSlotsCount = lessonsPerWeekBySubject[subject] || 4;
-          const subjectColor = subjectsByName[subject]?.color || '#3b82f6';
-          const renderedSlots = new Set();
-          const subjectCells = [];
-
-          for (let i = 0; i < lessonSlotsCount; i++) {
-            const lessonNumber = i + 1;
-
-            if (renderedSlots.has(lessonNumber)) continue;
-
-            const lessonKey = `${week}-${subject}-${lessonNumber}`;
-            const lesson = lessonsByWeek[lessonKey] || null;
-            const slot = { week_number: week, subjectName: subject, subject: subjectsByName[subject].id, lesson_number: lessonNumber, school_year: currentYear };
-
-            if (!lesson) {
-              const safeSelected = selectedLessons.filter(l => typeof l === 'string');
-              const isSelected = safeSelected.some(l => {
-                const [w, sub, num] = l.split('-');
-                return Number(w) === week && sub === subject && Number(num) === lessonNumber;
-              });
-              subjectCells.push(
-                <div
-                  key={`${subject}-${lessonNumber}`}
-                  className={`p-0.5 border border-gray-200 dark:border-slate-700 ${isSelected ? 'bg-blue-100 dark:bg-blue-900' : ''}`}
-                  style={{
-                    width: `${cellWidth}px`,
-                    minWidth: `${cellWidth}px`,
-                    maxWidth: `${cellWidth}px`,
-                    height: `${rowHeight}px`
-                  }}
-                  onClick={isAssignMode ? () => onSelectLesson({ week_number: week, subject, lesson_number: lessonNumber }) : undefined}
-                >
-                  <div className="h-full flex items-center justify-center bg-slate-100 dark:bg-slate-900/50">
-                    {isAssignMode && (
-                      <Checkbox
-                        checked={isSelected}
-                        onCheckedChange={() => onSelectLesson({ week_number: week, subject, lesson_number: lessonNumber })}
-                        className="absolute top-2 left-2 z-50"
-                      />
-                    )}
-                    <YearLessonCell
-                      lesson={null}
-                      onClick={() => handleCellClick(null, slot)}
-                      activeTopicId={activeTopicId}
-                      defaultColor={subjectColor}
-                      densityMode={densityMode}
-                    />
-                  </div>
-                </div>
-              );
-              continue;
-            }
-
-            if (lesson.topic_id) {
-              const topic = topicsById.get(lesson.topic_id);
-              if (topic) {
-                let span = 0;
-                const topicLessons = [];
-
-                let j = lessonNumber;
-                while (j <= lessonSlotsCount) {
-                  const checkKey = `${week}-${subject}-${j}`;
-                  const checkLesson = lessonsByWeek[checkKey] || null;
-                  
-                  if (checkLesson && checkLesson.topic_id === lesson.topic_id) {
-                    topicLessons.push(checkLesson);
-                    span += 1;
-                    renderedSlots.add(j);
-                    j++;
-                  } else {
-                    break;
-                  }
-                }
-
-                if (span === 1 && lesson.is_double_lesson && lesson.second_yearly_lesson_id) {
-                  const nextNumber = lessonNumber + 1;
-                  const nextKey = `${week}-${subject}-${nextNumber}`;
-                  const nextLesson = lessonsByWeek[nextKey] || null;
-                  
-                  if (nextLesson && nextLesson.topic_id === lesson.topic_id) {
-                    span += 1;
-                    renderedSlots.add(nextNumber);
-                    topicLessons.push(nextLesson);
-                  }
-                }
-
-                if (span > 1) {
-                  i += span - 1;
-                }
-
-                const topicWidth = span * cellWidth;
-
-                subjectCells.push(
-                  <div
-                    key={`topic-${lesson.id || lessonKey}`}
-                    className="p-0 border border-gray-200 dark:border-slate-700"
-                    style={{
-                      width: `${topicWidth}px`,
-                      minWidth: `${topicWidth}px`,
-                      maxWidth: `${topicWidth}px`,
-                      height: `${rowHeight}px`
-                    }}
-                    onMouseEnter={(e) => onShowHover({
-                      ...lesson,
-                      topic_id: topic.id,
-                      color: topic.color || subjectColor,
-                      mergedLessons: topicLessons
-                    }, e)}
-                    onMouseLeave={onHideHover}
-                  >
-                    <div
-                      className="h-full w-full cursor-pointer flex items-center justify-center text-center rounded-md"
-                      style={{
-                        background: `linear-gradient(135deg, ${topic.color} 0%, ${adjustColor(topic.color, -20)} 100%)`,
-                        border: `1px solid ${topic.color}`,
-                        color: 'white'
-                      }}
-                      onClick={() => handleCellClick({
-                        ...lesson,
-                        topic_id: topic.id,
-                        mergedLessons: topicLessons
-                      }, null)}
-                    >
-                      <div className={`text-xs font-bold px-1 ${densityMode === 'compact' ? 'text-[10px]' : ''}`}>
-                        <div className="truncate">{topic.name}</div>
-                      </div>
-                    </div>
-                  </div>
-                );
-                continue;
-              }
-            }
-
-            if (lesson.is_double_lesson && lesson.second_yearly_lesson_id) {
-              const nextNumber = lessonNumber + 1;
-              const nextKey = `${week}-${subject}-${nextNumber}`;
-              const nextLesson = lessonsByWeek[nextKey] || null;
-              
-              let span = 1;
-              if (nextLesson && nextLesson.id === lesson.second_yearly_lesson_id) {
-                span = 2;
-                i += 1;
-                renderedSlots.add(nextNumber);
-              }
-
-              const lessonToPass = { 
-                ...lesson, 
-                color: subjectColor,
-                subjectName: subject,
-                is_double_lesson: true,
-                second_yearly_lesson_id: lesson.second_yearly_lesson_id
-              };
-
-              const doubleWidth = span * cellWidth;
-
-              subjectCells.push(
-                <div
-                  key={lessonKey}
-                  className="p-0.5 border border-gray-200 dark:border-slate-700"
-                  style={{
-                    width: `${doubleWidth}px`,
-                    minWidth: `${doubleWidth}px`,
-                    maxWidth: `${doubleWidth}px`,
-                    height: `${rowHeight}px`
-                  }}
-                >
-                  <YearLessonCell
-                    lesson={lessonToPass}
-                    onClick={() => handleCellClick(lessonToPass, slot)}
-                    activeTopicId={activeTopicId}
-                    defaultColor={subjectColor}
-                    densityMode={densityMode}
-                    isDoubleLesson={true}
-                  />
-                </div>
-              );
-              continue;
-            }
-
-            const lessonToPass = { 
-              ...lesson, 
-              color: subjectColor,
-              subjectName: subject
-            };
-
-            subjectCells.push(
-              <div
-                key={lessonKey}
-                className="p-0.5 border border-gray-200 dark:border-slate-700"
-                style={{
-                  width: `${cellWidth}px`,
-                  minWidth: `${cellWidth}px`,
-                  maxWidth: `${cellWidth}px`,
-                  height: `${rowHeight}px`
-                }}
-              >
-                {isAssignMode && !lesson.topic_id && (
-                  <Checkbox
-                    checked={selectedLessons.includes(lesson.id)}
-                    onCheckedChange={() => onLessonClick(lesson, slot)}
-                    className="absolute top-2 left-2 z-50"
-                  />
-                )}
-                <YearLessonCell
-                  lesson={lessonToPass}
-                  onClick={() => handleCellClick(lessonToPass, slot)}
-                  activeTopicId={activeTopicId}
-                  defaultColor={subjectColor}
-                  onMouseEnter={(e) => onShowHover(lessonToPass, e)}
-                  onMouseLeave={onHideHover}
-                  allYearlyLessons={allYearlyLessons}
-                  densityMode={densityMode}
-                />
-              </div>
-            );
-          }
-
-          return (
-            <div key={subjectIndex} className="flex">
-              {subjectCells}
-            </div>
-          );
-        })}
+        {subjectCells}
       </div>
     );
   };
@@ -584,28 +583,12 @@ const YearlyGrid = React.memo(({
         <AutoSizer>
           {({ height, width }) => (
             <>
-              <div ref={classHeaderRef} className="class-header" style={{ position: 'sticky', top: 0, zIndex: 50, width: `${totalWidth}px`, display: 'flex' }}>
+              <div ref={classHeaderRef} className="class-header" style={{ position: 'sticky', top: 0, zIndex: 50, width: '100%', maxWidth: `${totalWidth}px`, margin: '0 auto', textAlign: 'center' }}>
                 <div 
-                  className="sticky left-0 p-3 font-bold text-slate-800 dark:text-slate-100 border-b-2 border-r-2 border-slate-200 dark:border-slate-600 text-center bg-gradient-to-r from-slate-50 to-slate-100 dark:from-slate-700 dark:to-slate-800 z-50"
-                  style={{ 
-                    width: `${weekColumnWidth}px`, 
-                    minWidth: `${weekColumnWidth}px`, 
-                    maxWidth: `${weekColumnWidth}px`,
-                    left: 0
-                  }}
+                  className="p-3 font-bold border-b-2 border-slate-200 dark:border-slate-600 text-slate-800 dark:text-slate-100 bg-gradient-to-r from-slate-50 to-slate-100 dark:from-slate-700 dark:to-slate-800 z-40"
+                  style={{ width: '100%' }}
                 >
-                  Klasse
-                </div>
-                <div 
-                  className="p-3 font-bold border-b-2 border-slate-200 dark:border-slate-600 text-center text-slate-800 dark:text-slate-100 bg-gradient-to-r from-slate-50 to-slate-100 dark:from-slate-700 dark:to-slate-800 z-40"
-                  style={{
-                    width: `calc(100% - ${weekColumnWidth}px)`,
-                    minWidth: `calc(100% - ${weekColumnWidth}px)`
-                  }}
-                >
-                  <div className="flex items-center justify-center">
-                    {activeClassName || 'Klasse auswählen'}
-                  </div>
+                  {activeClassName || 'Klasse auswählen'}
                 </div>
               </div>
               

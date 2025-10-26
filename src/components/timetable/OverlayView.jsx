@@ -1,4 +1,4 @@
-import React, { memo } from 'react';
+import React, { memo, forwardRef } from 'react';
 import { createPortal } from 'react-dom';
 import { adjustColor } from '@/utils/colorUtils';
 
@@ -9,7 +9,7 @@ const WORK_FORMS = {
   'Plenum': '🏛️ Plenum'
 };
 
-const OverlayView = memo(({ lesson, schedule, overlayRef, disableHover, isDragging, onMouseMove, onMouseLeave, position, subjectColor }) => {
+const OverlayView = forwardRef(({ lesson, schedule, overlayRef, disableHover, isDragging, onMouseMove, onMouseLeave, position, subjectColor }, ref) => {
   if (disableHover || isDragging || position.top === 0) return null;
 
   // Use lesson.color for Allerlei lessons, fallback to single-color gradient
@@ -19,7 +19,7 @@ const OverlayView = memo(({ lesson, schedule, overlayRef, disableHover, isDraggi
 
   const overlayContent = (
     <div
-      ref={overlayRef}
+      ref={ref}
       className="overlay fixed z-50 p-2 rounded-lg shadow-lg min-w-[300px]"
       style={{ 
         transition: 'transform 0.2s ease-out', 

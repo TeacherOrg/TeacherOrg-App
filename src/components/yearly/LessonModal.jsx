@@ -11,7 +11,15 @@ import pb from '@/api/pb';
 import { createGradient, getTextColorForBackground } from '@/utils/colorUtils';
 import { YearlyLesson } from '@/api/entities';
 
-const WORK_FORMS = ['👤 Single', '👥 Partner', '👨‍👩‍👧‍👦 Group', '🏛️ Plenum'];
+const WORK_FORMS = [
+    { value: 'frontal', label: '🗣️ Frontal' },
+    { value: 'single', label: '👤 Einzelarbeit' },
+    { value: 'partner', label: '👥 Partnerarbeit' },
+    { value: 'group', label: '👨‍👩‍👧‍👦 Gruppenarbeit' },
+    { value: 'plenum', label: '🏛️ Plenum' },
+    { value: 'discussion', label: '💬 Diskussion' },
+    { value: 'experiment', label: '🧪 Experiment' }
+];
 const generateId = () => Math.random().toString(36).substr(2, 9);
 
 const StepRow = ({ step, onUpdate, onRemove }) => (
@@ -31,7 +39,7 @@ const StepRow = ({ step, onUpdate, onRemove }) => (
       </SelectTrigger>
       <SelectContent>
         {WORK_FORMS.map(form => (
-          <SelectItem key={form} value={form.split(' ')[1]}>{form}</SelectItem>
+          <SelectItem key={form.value} value={form.value}>{form.label}</SelectItem>
         ))}
       </SelectContent>
     </Select>

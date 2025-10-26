@@ -372,7 +372,11 @@ const SettingsModal = ({ isOpen, onClose }) => {
   const handleSave = async () => {
     try {
       if (settings && settings.id) {
-        await Setting.update(settings.id, settings);
+        // Erweitere mit autoFit (falls in SizeSettings geändert)
+        await Setting.update(settings.id, {
+          ...settings,
+          autoFit: settings.autoFit ?? true, // Speichere autoFit persistent
+        });
       }
 
       if (activeCategory === 'Profil') {

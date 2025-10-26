@@ -68,16 +68,15 @@ export default function TopicLessonsModal({
     }
   }, [allYearlyLessons, topic?.id, subject, week, currentYear]);
 
-  // Memoized and sorted lessons for consistent rendering and calculation
+  // Memo für gefilterte Topics
   const sortedLessons = useMemo(() => {
     try {
-      if (!initialTopicLessons) return [];
-      return [...initialTopicLessons].sort((a, b) => (parseInt(a.lesson_number) || 0) - (parseInt(b.lesson_number) || 0));
+      return [...safeTopicLessons].sort((a, b) => (parseInt(a.lesson_number) || 0) - (parseInt(b.lesson_number) || 0));
     } catch (e) {
       console.error('Error sorting lessons:', e);
       return [];
     }
-  }, [initialTopicLessons]);
+  }, [safeTopicLessons]);
 
   const gridColumns = useMemo(() => {
     if (sortedLessons.length === 0) {

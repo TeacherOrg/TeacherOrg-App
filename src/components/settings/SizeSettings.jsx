@@ -8,6 +8,10 @@ export default function SizeSettings({ settings, setSettings }) {
         setSettings(prev => ({ ...prev, [key]: value }));
     };
 
+    const handleAutoFitChange = (checked) => {
+        setSettings(prev => ({ ...prev, autoFit: checked }));
+    };
+
     // Calculate max cell height based on screen size
     const calculateMaxCellHeight = () => {
         const headerHeight = 280; // Headers, controls, navigation etc.
@@ -47,6 +51,21 @@ export default function SizeSettings({ settings, setSettings }) {
             <div>
                 <h3 className="text-lg font-semibold text-white">Größeneinstellungen</h3>
                 <p className="text-sm text-slate-400">Passen Sie die Größe der Stundenplan-Zellen an.</p>
+            </div>
+            
+            <div className="space-y-3">
+                <Label className="text-white flex items-center gap-2">
+                    <input
+                        type="checkbox"
+                        checked={settings.autoFit ?? true}
+                        onChange={(e) => handleAutoFitChange(e.target.checked)}
+                        className="w-4 h-4"
+                    />
+                    Automatische Anpassung (Auto-Fit)
+                </Label>
+                <p className="text-xs text-slate-400">
+                    Passt Zellengrößen dynamisch an den Bildschirm an, damit der Plan immer vollständig sichtbar ist. Deaktiviert: Manuelle Werte werden verwendet (kann zu Scrollen/Abgeschnittenem führen).
+                </p>
             </div>
             
             <div className="space-y-6">

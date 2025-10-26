@@ -2,10 +2,18 @@ import React, { memo } from 'react';
 import { createPortal } from 'react-dom';
 
 const WORK_FORMS = {
-    'Single': '👤 Single',
-    'Partner': '👥 Partner', 
-    'Group': '👨‍👩‍👧‍👦 Group',
-    'Plenum': '🏛️ Plenum'
+    'single': '👤',
+    'einzel': '👤',
+    'partner': '👥',
+    'partnerarbeit': '👥',
+    'group': '👨‍👩‍👧‍👦',
+    'gruppe': '👨‍👩‍👧‍👦',
+    'gruppenarbeit': '👨‍👩‍👧‍👦',
+    'plenum': '🏛️',
+    'frontal': '🗣️',
+    'discussion': '💬',
+    'diskussion': '💬',
+    'experiment': '🧪'
 };
 
 const LessonOverlay = memo(({ lesson, overlayRef, position, onMouseMove, onMouseLeave, subjectColor }) => {
@@ -55,7 +63,7 @@ const LessonOverlay = memo(({ lesson, overlayRef, position, onMouseMove, onMouse
                                         {step.time ? `${step.time}min` : ''}
                                     </td>
                                     <td className="px-2 py-2 text-slate-700">
-                                        {WORK_FORMS[step.workForm] || step.workForm || ''}
+                                        {WORK_FORMS[step.workForm.toLowerCase()] || step.workForm || ''}
                                     </td>
                                     <td className="px-2 py-2 text-slate-900">
                                         {step.activity || ''}

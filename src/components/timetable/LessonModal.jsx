@@ -18,12 +18,13 @@ import { allerleiService } from '@/components/timetable/hooks/allerleiService';
 import { useLessonStore } from '@/store';
 
 const WORK_FORMS = [
-  { value: 'frontal', label: 'Frontal' },
-  { value: 'einzel', label: 'Einzelarbeit' },
-  { value: 'partner', label: 'Partnerarbeit' },
-  { value: 'gruppe', label: 'Gruppenarbeit' },
-  { value: 'diskussion', label: 'Diskussion' },
-  { value: 'experiment', label: 'Experiment' },
+  { value: 'frontal', label: '🗣️ Frontal' },
+  { value: 'single', label: '👤 Einzelarbeit' },
+  { value: 'partner', label: '👥 Partnerarbeit' },
+  { value: 'group', label: '👨‍👩‍👧‍👦 Gruppenarbeit' },
+  { value: 'plenum', label: '🏛️ Plenum' },
+  { value: 'discussion', label: '💬 Diskussion' },
+  { value: 'experiment', label: '🧪 Experiment' }
 ];
 
 const generateId = () => Math.random().toString(36).substr(2, 9);
@@ -765,7 +766,7 @@ export default function LessonModal({
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent 
-        className="max-w-4xl border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900" 
+        className="max-w-4xl border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 max-h-[80vh] overflow-y-auto" 
         style={{ borderColor: (subjectColor || '#3b82f6') + '40' }}
       >
         <DialogHeader 

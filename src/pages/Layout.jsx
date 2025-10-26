@@ -83,6 +83,16 @@ export default function Layout({ children, currentPageName }) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const themeToggleRef = useRef(null);
   const [theme, setTheme] = useState(localStorage.getItem('theme') || 'dark');
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+  }, []);
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -191,6 +201,7 @@ export default function Layout({ children, currentPageName }) {
               bg-white dark:bg-slate-900/95 backdrop-blur-lg shadow-xl transition-all duration-300 border-r border-slate-200 dark:border-slate-700/80 flex flex-col
               ${isSidebarOpen ? 'w-64' : 'w-20'}
               md:${isSidebarOpen ? 'w-64' : 'w-20'}
+              ${isFullscreen && location.pathname === createPageUrl("Timetable") ? 'hidden' : ''}
             `}
             onMouseEnter={handleMouseEnter}
             onMouseLeave={handleMouseLeave}

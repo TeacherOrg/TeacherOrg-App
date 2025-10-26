@@ -19,6 +19,7 @@ import YearLessonOverlay from "../components/yearly/YearLessonOverlay";
 import { adjustColor } from '@/utils/colorUtils';
 import { useLessonStore } from '@/store';
 import pb from '@/api/pb';
+import { Plus } from "lucide-react";
 
 const ACADEMIC_WEEKS = 52;
 
@@ -135,8 +136,6 @@ function InnerYearlyOverviewPage() {
   const handleShowHover = useCallback((lesson, e) => {
     const rect = e.currentTarget.getBoundingClientRect();
     if (debouncedShowRef.current) debouncedShowRef.current(lesson, { top: rect.bottom + 10, left: rect.left });
-    console.log('Hover-Lesson-Objekt:', JSON.stringify(lesson, null, 2));
-    console.log('Übergebene Farbe:', lesson?.color || 'undefined');
   }, []);
 
   const handleHideHover = useCallback(() => {
@@ -561,6 +560,7 @@ const handleLessonClick = useCallback(async (lesson, slot) => {
     const oldSecondYearlyId = originalLesson?.second_yearly_lesson_id;
 
     let finalLessonData = { ...lessonData };
+    console.log('Debug: Saving lesson with is_half_class:', finalLessonData.is_half_class); // Debugging hinzufügen
     if (finalLessonData.is_double_lesson) {
       const nextLesson = yearlyLessons.find(l => l.id === finalLessonData.second_yearly_lesson_id);
       if (!nextLesson || parseInt(nextLesson.lesson_number) !== parseInt(originalLesson?.lesson_number || newLessonSlot?.lesson_number) + 1) {
@@ -843,6 +843,15 @@ const handleLessonClick = useCallback(async (lesson, slot) => {
                 ))}
               </div>
             </div>
+
+            {/* Add Topic button moved here, directly opens TopicModal */}
+            <Button
+              onClick={handleAddTopic}
+              className="ml-4 bg-blue-600 text-white hover:bg-blue-700 rounded-lg shadow-md flex items-center gap-2 px-4 py-2"
+            >
+              <Plus className="w-4 h-4" />
+              Thema hinzufügen
+            </Button>
           </motion.div>
         </div>
       </div>
@@ -896,29 +905,6 @@ const handleLessonClick = useCallback(async (lesson, slot) => {
             )}
           </motion.div>
         </div>
-
-        {/* Intelligente Sidebar - VERSTECKT bei sehr kleinen Screens */}
-        {window.innerWidth >= 768 ? ( // ← Sidebar nur ab 768px
-          <div className="yearly-sidebar flex-shrink-0">
-            <div className="sticky top-6 max-h-[70vh] overflow-hidden flex flex-col">
-              <TopicManager
-                topics={topics}
-                subjects={subjects}
-                classes={classes}
-                activeClassId={activeClassId}
-                onSelectClass={setActiveClassId}
-                activeSubjectName={activeSubjectName}
-                onSelectSubject={setActiveSubjectName}
-                activeTopicId={activeTopicId}
-                onSelectTopic={setActiveTopicId}
-                onAddTopic={handleAddTopic}
-                onEditTopic={handleEditTopic}
-                yearlyLessons={lessonsForYear}
-                isCompact={window.innerWidth < 1024}
-              />
-            </div>
-          </div>
-        ) : null} {/* ← Bei < 768px: komplett ausblenden */}
       </div>
 
       {/* Floating Quick Actions (nur auf Mobile) */}

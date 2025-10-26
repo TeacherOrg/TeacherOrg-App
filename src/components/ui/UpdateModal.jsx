@@ -12,23 +12,47 @@ import { Button } from '@/components/ui/button'; // Assume you have a Button com
 const UpdateModal = ({ isOpen, onClose, version }) => {
   // Structured updates with categories and sub-items
   // Each item has a 'text' and optional 'type' ('fixed', 'not-fixed', 'warning')
-  // You can replace this with your actual data
   const updates = [
     {
       category: 'Änderungen',
       subcategories: [
         {
-          subcategory: 'Jahresplanung',
+          subcategory: 'Wochenansicht',
           items: [
-            { text: 'Bugfix: Fixed authentication timeout issues.', type: 'fixed' },
-            { text: 'New: Added debounce to auth checks for better performance.', type: 'warning' },
+            { text: 'Diverse Verbesserungen (Grösseneinstellungen, Effizienz, Drag und Drop)', type: 'fixed' },
           ],
         },
         {
-          subcategory: 'Allerleilektion',
+          subcategory: 'Lektionsmodal',
           items: [
-            { text: 'Improvement: Enhanced UI responsiveness on mobile devices.', type: 'not-fixed' },
-            { text: 'Another item here.', type: 'fixed' },
+            { text: 'Scrollbar für Erweiterungen', type: 'fixed' },
+          ],
+        },
+        {
+          subcategory: 'Jahresansicht',
+          items: [
+            { text: 'Optische Anpassungen', type: 'fixed' },
+            { text: 'Tabellenskalierung noch nicht optimal', type: 'not-fixed' },
+          ],
+        },
+        {
+          subcategory: 'Leistungsansicht',
+          items: [
+            { text: 'Überfachliche Kompetenzen Bugfix', type: 'fixed' },
+          ],
+        },
+      ],
+    },
+    {
+      category: 'Nächste Updates',
+      subcategories: [
+        {
+          subcategory: 'Geplante Änderungen',
+          items: [
+            { text: 'Jahrestabelle optimieren', type: 'not-fixed' },
+            { text: 'Allerleilektionsmerging einfügen', type: 'not-fixed' },
+            { text: 'Halbklassenlektionslogik', type: 'not-fixed' },
+            { text: 'Sofortige Titelübernahme LessonCard in Jahresansicht', type: 'not-fixed' },
           ],
         },
       ],
@@ -53,7 +77,7 @@ const UpdateModal = ({ isOpen, onClose, version }) => {
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>TeacherOrg Update: Version {version}</DialogTitle>
+          <DialogTitle>TeacherOrg Update: Version Alpha 2</DialogTitle>
           <DialogDescription>
             Hier sind die neuesten Änderungen:
             {updates.map((section, sectionIndex) => (

@@ -90,7 +90,7 @@ function YearLessonCell({
       return (
         <div className="flex flex-col items-center">
           <div 
-            className={`font-bold text-center ${config.fontSize}`}
+            className={`font-bold text-center ${config.fontSize} dark:text-white`}
             style={{ lineHeight: config.lineHeight }}
           >
             {truncateText(lesson.name, config.maxTextLength)}
@@ -104,7 +104,7 @@ function YearLessonCell({
       return (
         <div className="flex flex-col items-center">
           <div 
-            className={`font-medium ${config.fontSize}`}
+            className={`font-medium ${config.fontSize} dark:text-white`}
             style={{ lineHeight: config.lineHeight }}
           >
             {truncateText(lesson.name || 'Doppelstunde', config.maxTextLength)}
@@ -125,7 +125,7 @@ function YearLessonCell({
     return (
       <div className="flex flex-col items-center">
         <div 
-          className={`font-medium text-center ${config.fontSize}`}
+          className={`font-medium text-center ${config.fontSize} dark:text-white`}
           style={{ lineHeight: config.lineHeight }}
         >
           {displayTitle}
@@ -164,7 +164,6 @@ function YearLessonCell({
   // MODERNES ZELLEN-DESIGN - MIT UTILS
   const baseClasses = `w-full h-full cursor-pointer transition-all duration-200 flex items-center justify-center overflow-hidden rounded-lg relative group ${config.padding}`;
   const activeClasses = isTopicActive ? 'ring-2 ring-blue-300/30 shadow-lg' : 'shadow-sm';
-  const examClasses = lesson.is_exam ? 'ring-2 ring-red-400/50' : '';
   const densityBorder = densityMode === 'compact' ? 'border border-white/20' : '';
 
   return (
@@ -173,7 +172,7 @@ function YearLessonCell({
       animate={{ scale: 1, opacity: 1 }}
       whileHover={{ scale: 1.02 }}
       whileTap={{ scale: 0.98 }}
-      className={`${baseClasses} ${activeClasses} ${examClasses} ${densityBorder}`}
+      className={`${baseClasses} ${activeClasses} ${densityBorder}`}
       style={{
         // ELEGANT: Utils für perfekten Gradient-Effekt
         background: createGradient(bgColor, -20), // ← Automatischer Overlay-Stil!
@@ -191,6 +190,17 @@ function YearLessonCell({
           background: createGradient(bgColor, -30) // ← Noch subtiler Hover-Effekt
         }}
       />
+      
+      {lesson.is_half_class && (
+        <div className="absolute top-1 right-1 bg-black/30 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full shadow-md">
+          1/2
+        </div>
+      )}
+      {lesson.is_exam && (
+        <div className="absolute top-1 right-1 bg-black/30 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full shadow-md">
+          ❗
+        </div>
+      )}
       
       {/* Content - Sauber und zentriert */}
       <div className="relative z-10 text-center flex items-center justify-center h-full">
