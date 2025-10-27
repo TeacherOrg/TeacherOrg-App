@@ -361,20 +361,6 @@ export default function CustomizationPanel({ customization, onCustomizationChang
                  <div className="flex items-center justify-between">
                   <div>
                     <Label className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                      Lektions-Übersicht anzeigen
-                    </Label>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                      Zeigt die linke Spalte mit allen Lektionen des Tages.
-                    </p>
-                  </div>
-                  <Switch
-                    checked={customization.showOverview}
-                    onCheckedChange={(checked) => handleToggleChange('showOverview', checked)}
-                  />
-                </div>
-                 <div className="flex items-center justify-between">
-                  <div>
-                    <Label className="text-sm font-medium text-slate-700 dark:text-slate-300">
                       Lehrer-Notizen anzeigen
                     </Label>
                     <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">

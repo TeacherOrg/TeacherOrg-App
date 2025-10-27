@@ -599,138 +599,122 @@ const useLessonHandlers = (editingLesson, currentYear, allLessons, yearlyLessons
     }
   }, [allLessons, subjects, currentYear, currentWeek, queryClientLocal, removeAllLesson, setAllLessons, refetch, reassignYearlyLessonLinks]);
 
- const handleCreateFromPool = useCallback(async (subject, day, period) => {
-  // Finde die verfügbaren YearlyLessons für das Subject
-  const integratedYearlyIds = new Set();
-  allLessons
-    .filter(l => l.is_allerlei && l.week_number === currentWeek)
-    .forEach(l => l.allerlei_yearly_lesson_ids?.forEach(id => integratedYearlyIds.add(id)));
+  const handleCreateFromPool = useCallback(async (subject, day, period) => {
+    console.log('Debug: handleCreateFromPool called with:', { subject, day, period });
 
-  const available = yearlyLessons
-    .filter(yl => 
-      yl.expand?.subject?.name === subject.name && 
-      yl.week_number === currentWeek && 
-      !allLessons.some(l => l.yearly_lesson_id === yl.id || l.second_yearly_lesson_id === yl.id) && 
-      !integratedYearlyIds.has(yl.id) && 
-      !yl.is_allerlei
-    )
-    .sort((a, b) => Number(a.lesson_number) - Number(b.lesson_number));
+    // Finde die verfügbaren YearlyLessons für das Subject
+    const integratedYearlyIds = new Set();
+    allLessons
+      .filter(l => l.is_allerlei && l.week_number === currentWeek)
+      .forEach(l => l.allerlei_yearly_lesson_ids?.forEach(id => integratedYearlyIds.add(id)));
 
-  if (available.length === 0) {
-    console.warn(`No available YearlyLessons for subject ${subject.name} in week ${currentWeek}`);
-    return;
-  }
+    const available = yearlyLessons
+      .filter(yl => 
+        yl.expand?.subject?.name === subject.name && 
+        yl.week_number === currentWeek && 
+        !allLessons.some(l => l.yearly_lesson_id === yl.id || l.second_yearly_lesson_id === yl.id) && 
+        !integratedYearlyIds.has(yl.id) && 
+        !yl.is_allerlei
+      )
+      .sort((a, b) => Number(a.lesson_number) - Number(b.lesson_number));
 
-  const yl = available[0];
-  console.log('Debug: Selected YearlyLesson for creation:', {
-    id: yl.id,
-    subject: subject.name,
-    week_number: yl.week_number,
-    is_half_class: yl.is_half_class,
-    lesson_number: yl.lesson_number
-  });
+    console.log('Debug: Available YearlyLessons:', available.map(yl => ({
+      id: yl.id,
+      subject: yl.expand?.subject?.name,
+      week_number: yl.week_number,
+      lesson_number: yl.lesson_number,
+      is_half_class: yl.is_half_class
+    })));
 
-  const timeSlot = timeSlots.find(ts => ts.period === period);
-  if (!timeSlot) {
-    console.error(`No time slot found for period ${period}`);
-    return;
-  }
-
-  const createData = {
-    subject: subject.id,
-    day_of_week: day,
-    period_slot: period,
-    week_number: currentWeek,
-    start_time: timeSlot.start,
-    end_time: timeSlot.end,
-    yearly_lesson_id: yl.id,
-    topic_id: yl.topic_id || null,
-    is_double_lesson: yl.is_double_lesson,
-    second_yearly_lesson_id: yl.second_yearly_lesson_id || null,
-    is_exam: yl.is_exam,
-    is_allerlei: yl.is_allerlei,
-    is_half_class: yl.is_half_class, // Sicherstellen, dass is_half_class übernommen wird
-    is_hidden: false,
-    user_id: pb.authStore.model.id,
-    class_id: activeClassId,
-  };
-
-  console.log('Debug: Creating lesson with data:', createData);
-
-  const newLesson = await Lesson.create(createData);
-  optimisticUpdateAllLessons(newLesson, true);
-  console.log('Debug: Created lesson:', newLesson);
-
-  let tempLessons = [...allLessons, newLesson];
-
-  if (yl.is_half_class) {
-    console.log('Debug: Handling half-class lesson, searching for next free slot');
-    const nextSlot = findFreeSlot(tempLessons, day, period + 1, timeSlots, currentWeek);
-    if (nextSlot) {
-      console.log('Debug: Found free slot for half-class copy:', nextSlot);
-      const nextTimeSlot = timeSlots.find(ts => ts.period === nextSlot.period_slot);
-      if (!nextTimeSlot) {
-        console.error(`No time slot found for period ${nextSlot.period_slot}`);
-        return;
-      }
-      const copyData = {
-        ...createData,
-        day_of_week: nextSlot.day_of_week,
-        period_slot: nextSlot.period_slot,
-        start_time: nextTimeSlot.start,
-        end_time: nextTimeSlot.end,
-        id: null, // Sicherstellen, dass eine neue ID generiert wird
-      };
-      console.log('Debug: Creating half-class copy with data:', copyData);
-      const copyLesson = await Lesson.create(copyData);
-      optimisticUpdateAllLessons(copyLesson, true);
-      console.log('Debug: Created half-class copy lesson:', copyLesson);
-      tempLessons.push(copyLesson);
-    } else {
-      console.warn(`No free slot found for half-class copy on day ${day}, period ${period + 1}`);
+    if (available.length === 0) {
+      console.warn(`No available YearlyLessons for subject ${subject.name} in week ${currentWeek}`);
+      toast.error(`Keine verfügbaren Lektionen für ${subject.name} in Woche ${currentWeek}`);
+      return;
     }
-  }
 
-  // Handle double lesson similarly if needed
-  if (yl.is_double_lesson && yl.second_yearly_lesson_id) {
-    const nextPeriod = period + 1;
-    if (nextPeriod <= timeSlots.length && !tempLessons.some(l => l.day_of_week === day && l.period_slot === nextPeriod && l.week_number === currentWeek)) {
-      const secondYl = yearlyLessons.find(y => y.id === yl.second_yearly_lesson_id);
-      if (secondYl) {
-        const nextTimeSlot = timeSlots.find(ts => ts.period === nextPeriod);
-        const createDataNext = {
-          ...createData,
-          yearly_lesson_id: secondYl.id,
-          topic_id: secondYl.topic_id || null,
-          is_double_lesson: true,
-          second_yearly_lesson_id: yl.id,
-          is_exam: secondYl.is_exam,
-          is_allerlei: secondYl.is_allerlei,
-          is_half_class: secondYl.is_half_class,
-          period_slot: nextPeriod,
-          start_time: nextTimeSlot.start,
-          end_time: nextTimeSlot.end,
-        };
-        console.log('Debug: Creating double lesson with data:', createDataNext);
-        const newNext = await Lesson.create(createDataNext);
-        optimisticUpdateAllLessons(newNext, true);
-        tempLessons.push(newNext);
-        console.log('Debug: Created double lesson:', newNext);
+    const yl = available[0];
+    console.log('Debug: Selected YearlyLesson for creation:', {
+      id: yl.id,
+      subject: subject.name,
+      week_number: yl.week_number,
+      lesson_number: yl.lesson_number,
+      is_half_class: yl.is_half_class
+    });
+
+    const timeSlot = timeSlots.find(ts => ts.period === period);
+    if (!timeSlot) {
+      console.error(`No time slot found for period ${period}`);
+      toast.error(`Kein Zeitfenster für Periode ${period} gefunden`);
+      return;
+    }
+
+    const createData = {
+      subject: subject.id,
+      day_of_week: day,
+      period_slot: period,
+      week_number: currentWeek,
+      start_time: timeSlot.start,
+      end_time: timeSlot.end,
+      yearly_lesson_id: yl.id,
+      topic_id: yl.topic_id || null,
+      is_double_lesson: yl.is_double_lesson,
+      second_yearly_lesson_id: yl.second_yearly_lesson_id || null,
+      is_exam: yl.is_exam,
+      is_allerlei: yl.is_allerlei,
+      is_half_class: yl.is_half_class,
+      is_hidden: false,
+      user_id: pb.authStore.model.id,
+      class_id: activeClassId,
+    };
+
+    console.log('Debug: Creating lesson with data:', createData);
+
+    const newLesson = await Lesson.create(createData);
+    optimisticUpdateAllLessons(newLesson, true);
+    console.log('Debug: Created lesson:', newLesson);
+
+    let tempLessons = [...allLessons, newLesson];
+
+    // Handle double lesson if applicable
+    if (yl.is_double_lesson && yl.second_yearly_lesson_id) {
+      const nextPeriod = period + 1;
+      if (nextPeriod <= timeSlots.length && !tempLessons.some(l => l.day_of_week === day && l.period_slot === nextPeriod && l.week_number === currentWeek)) {
+        const secondYl = yearlyLessons.find(y => y.id === yl.second_yearly_lesson_id);
+        if (secondYl) {
+          const nextTimeSlot = timeSlots.find(ts => ts.period === nextPeriod);
+          const createDataNext = {
+            ...createData,
+            yearly_lesson_id: secondYl.id,
+            topic_id: secondYl.topic_id || null,
+            is_double_lesson: true,
+            second_yearly_lesson_id: yl.id,
+            is_exam: secondYl.is_exam,
+            is_allerlei: secondYl.is_allerlei,
+            is_half_class: secondYl.is_half_class,
+            period_slot: nextPeriod,
+            start_time: nextTimeSlot.start,
+            end_time: nextTimeSlot.end,
+          };
+          console.log('Debug: Creating double lesson with data:', createDataNext);
+          const newNext = await Lesson.create(createDataNext);
+          optimisticUpdateAllLessons(newNext, true);
+          tempLessons.push(newNext);
+          console.log('Debug: Created double lesson:', newNext);
+        }
       }
     }
-  }
 
-  const updatedLessons = await reassignYearlyLessonLinks(subject.name, tempLessons);
-  setAllLessons(updatedLessons);
-  console.log('Debug: Updated lessons after reassignment:', updatedLessons);
+    const updatedLessons = await reassignYearlyLessonLinks(subject.name, tempLessons);
+    setAllLessons(updatedLessons);
+    console.log('Debug: Updated lessons after reassignment:', updatedLessons);
 
-  const updatedYearly = await updateYearlyLessonOrder(subject.name, updatedLessons);
-  setYearlyLessons(updatedYearly);
-  console.log('Debug: Updated yearly lessons order:', updatedYearly);
+    const updatedYearly = await updateYearlyLessonOrder(subject.name, updatedLessons);
+    setYearlyLessons(updatedYearly);
+    console.log('Debug: Updated yearly lessons order:', updatedYearly);
 
-  await refetch();
-  console.log('Debug: Refetched data after lesson creation');
-}, [yearlyLessons, allLessons, timeSlots, currentWeek, subjects, optimisticUpdateAllLessons, reassignYearlyLessonLinks, updateYearlyLessonOrder, setAllLessons, setYearlyLessons, refetch, activeClassId]);
+    await refetch();
+    console.log('Debug: Refetched data after lesson creation');
+  }, [yearlyLessons, allLessons, timeSlots, currentWeek, subjects, optimisticUpdateAllLessons, reassignYearlyLessonLinks, updateYearlyLessonOrder, setAllLessons, setYearlyLessons, refetch, activeClassId]);
 
  return { handleSaveLesson, handleDeleteLesson, reassignYearlyLessonLinks, updateYearlyLessonOrder, handleCreateFromPool };
 };

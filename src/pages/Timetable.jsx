@@ -249,6 +249,7 @@ function InnerTimetablePage() {
 
   const availableYearlyLessonsForPool = useMemo(() => {
     if (!activeClassId) {
+      console.log('Debug: No activeClassId, returning empty pool');
       return [];
     }
     const subjectsForClass = subjects.filter(s => s.class_id === activeClassId);
@@ -269,7 +270,7 @@ function InnerTimetablePage() {
         if (lesson.second_yearly_lesson_id && !lesson.is_double_lesson) {
           return acc;
         }
-        let lessonValue = lesson.is_double_lesson ? 2 : lesson.is_half_class ? 0.5 : 1; // Änderung: Halbklassenlektionen zählen 0.5
+        let lessonValue = lesson.is_double_lesson ? 2 : lesson.is_half_class ? 0.5 : 1;
         const subjectName = lesson.expand?.subject?.name || lesson.subject_name;
         if (subjectName) {
           acc[subjectName] = (acc[subjectName] || 0) + lessonValue;
@@ -285,7 +286,7 @@ function InnerTimetablePage() {
         if (yl) {
           const subjectName = yl.expand?.subject?.name || yl.subject_name;
           if (subjectName) {
-            const lessonValue = yl.is_half_class ? 0.5 : 1; // Änderung: Halbklassenlektionen zählen 0.5
+            const lessonValue = yl.is_half_class ? 0.5 : 1;
             acc[subjectName] = (acc[subjectName] || 0) + lessonValue;
           }
         }
@@ -294,31 +295,46 @@ function InnerTimetablePage() {
     }, {});
     const result = uniqueSubjectsForClass.map(subject => {
       const totalScheduled = scheduledCounts[subject.name] || 0;
+      const subjectLessons = scheduledLessonsInWeek.filter(l => 
+        (l.expand?.subject?.name === subject.name || l.subject_name === subject.name) && 
+        l.week_number === currentWeek && 
+        !l.is_hidden
+      );
       const availableLessons = yearlyLessons
         .filter(yl => {
           const matchesSubject = yl.subject_name === subject.name || yl.expand?.subject?.name === subject.name;
           const matchesWeek = yl.week_number === currentWeek;
-          const isNotScheduled = !scheduledLessonsInWeek.some(l => {
-            if (l.collectionName === 'allerlei_lessons') {
-              return (
-                l.primary_yearly_lesson_id === yl.id ||
-                (Array.isArray(l.added_yearly_lesson_ids) ? l.added_yearly_lesson_ids.includes(yl.id) : false)
-              );
-            }
-            return (
-              (l.yearly_lesson_id === yl.id || l.second_yearly_lesson_id === yl.id) &&
-              !l.is_hidden
-            );
-          });
+          const lessonCount = subjectLessons.filter(l => 
+            l.yearly_lesson_id === yl.id && 
+            !l.is_hidden &&
+            (l.collectionName !== 'allerlei_lessons' || 
+            l.primary_yearly_lesson_id === yl.id || 
+            (Array.isArray(l.added_yearly_lesson_ids) && l.added_yearly_lesson_ids.includes(yl.id)))
+          ).length;
           const isNotAllerlei = !yl.is_allerlei;
-          return matchesSubject && isNotScheduled && matchesWeek && isNotAllerlei;
+          console.log('Debug: Checking YearlyLesson availability for pool:', {
+            ylId: yl.id,
+            subject: subject.name,
+            week_number: yl.week_number,
+            lessonCount,
+            is_half_class: yl.is_half_class
+          });
+          return matchesSubject && matchesWeek && isNotAllerlei && lessonCount < (yl.is_half_class ? 2 : 1);
         })
         .sort((a, b) => Number(a.lesson_number) - Number(b.lesson_number));
+      console.log('Debug: Subject data for pool:', {
+        subject: subject.name,
+        totalScheduled,
+        lessonsPerWeek: subject.lessons_per_week || 4,
+        availableLessonsCount: availableLessons.length,
+        subjectLessonsCount: subjectLessons.length
+      });
       return {
         subject,
         totalScheduled,
         lessonsPerWeek: subject.lessons_per_week || 4,
-        availableLessons
+        availableLessons,
+        lessons: subjectLessons // Ensure lessons is always an array
       };
     });
     return result;

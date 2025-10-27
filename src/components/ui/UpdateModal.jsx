@@ -20,6 +20,7 @@ const UpdateModal = ({ isOpen, onClose, version }) => {
           subcategory: 'Wochenansicht',
           items: [
             { text: 'Diverse Verbesserungen (Grösseneinstellungen, Effizienz, Drag und Drop)', type: 'fixed' },
+            { text: 'Halbklassenlektion werden korrekt kopiert', type: 'fixed' },
           ],
         },
         {

@@ -9,7 +9,6 @@ import LessonOverviewPanel from "../components/daily/LessonOverviewPanel";
 import LessonDetailPanel from "../components/daily/LessonDetailPanel";
 import ClockPanel from "../components/daily/ClockPanel";
 import CustomizationPanel from "../components/daily/CustomizationPanel";
-import TeacherNotesPanel from "../components/daily/TeacherNotesPanel";
 import AnnouncementsTicker from "../components/daily/AnnouncementsTicker";
 import ChoresDisplay from "../components/daily/ChoresDisplay";
 import { createPageUrl } from "@/utils";
@@ -140,7 +139,6 @@ export default function DailyView({ currentDate, onDateChange }) {
     theme: 'default', // Fallback auf 'default'
     autoFocusCurrentLesson: true,
     showOverview: true,
-    showNotes: true,
     showClock: true,
     audio: { enabled: false, volume: 0.5 }
   });
@@ -192,7 +190,6 @@ export default function DailyView({ currentDate, onDateChange }) {
               clock: loaded.font_size_clock,
             },
             showOverview: loaded.show_overview,
-            showNotes: loaded.show_notes,
             showClock: loaded.show_clock,
             auto_focus_current_lesson: loaded.auto_focus_current_lesson,
             compactMode: loaded.compact_mode,
@@ -234,7 +231,6 @@ export default function DailyView({ currentDate, onDateChange }) {
           font_size_content: customization.fontSize.content,
           font_size_clock: customization.fontSize.clock,
           show_overview: customization.showOverview,
-          show_notes: customization.showNotes,
           show_clock: customization.showClock,
           auto_focus_current_lesson: customization.autoFocusCurrentLesson,
           compact_mode: customization.compactMode,
@@ -573,12 +569,11 @@ export default function DailyView({ currentDate, onDateChange }) {
   const mainGridStyle = useMemo(() => {
     const columns = [
       customization.showOverview ? 'minmax(0, 1fr)' : '',
-      '2fr',
-      customization.showNotes ? 'minmax(0, 1fr)' : ''
+      '2fr'
     ].filter(Boolean).join(' ');
 
     return { gridTemplateColumns: columns };
-  }, [customization.showOverview, customization.showNotes]);
+  }, [customization.showOverview]);
 
   if (isLoading) {
     return (
@@ -690,18 +685,6 @@ export default function DailyView({ currentDate, onDateChange }) {
             </div>
           )}
         </div>
-        
-        {/* Teacher Notes Panel */}
-        {customization.showNotes && (
-             <motion.div 
-               className="h-full overflow-hidden"
-               drag
-               dragConstraints={{ left: -100, right: 100, top: -100, bottom: 100 }}
-               whileDrag={{ scale: 0.95 }}
-             >
-                <TeacherNotesPanel selectedDate={currentDate} customization={customization} />
-            </motion.div>
-        )}
       </div>
 
       {/* Clock Panel */}

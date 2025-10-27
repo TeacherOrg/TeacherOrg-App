@@ -798,3 +798,19 @@
     }
   }
 }
+/* Pulsierende Rahmen-Animation */
+@keyframes pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.7); /* Blau, passend zu Ihrer Standardfarbe */
+  }
+  50% {
+    box-shadow: 0 0 0 8px rgba(59, 130, 246, 0.3);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(59, 130, 246, 0);
+  }
+}
+
+.pulse-border {
+  animation: pulse 1.5s ease-in-out infinite;
+}

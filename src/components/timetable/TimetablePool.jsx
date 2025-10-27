@@ -16,7 +16,7 @@ const DraggableItem = ({ id, data, children }) => {
   );
 };
 
-const TimetablePool = ({ classes, activeClassId, setActiveClassId, availableYearlyLessonsForPool, subjects, gridRef }) => { // Füge gridRef als Prop hinzu
+const TimetablePool = ({ classes, activeClassId, setActiveClassId, availableYearlyLessonsForPool, subjects, gridRef }) => {
   const poolRef = useRef(null);
 
   useEffect(() => {
@@ -29,7 +29,7 @@ const TimetablePool = ({ classes, activeClassId, setActiveClassId, availableYear
         poolRef.current.style.top = '0px';
         poolRef.current.style.left = `${gridRect.right + abstand}px`;
 
-        // Breite berechnen (unverändert)
+        // Breite berechnen
         const items = poolRef.current.querySelectorAll('.pool-item');
         let maxWidth = 200;
         items.forEach(item => {
@@ -49,7 +49,7 @@ const TimetablePool = ({ classes, activeClassId, setActiveClassId, availableYear
         });
         document.documentElement.style.setProperty('--pool-width', `${maxWidth}px`);
 
-        // Höhe berechnen (deine aktuelle Version, die fast perfekt ist)
+        // Höhe berechnen
         const numItems = availableYearlyLessonsForPool.length;
         const itemHeight = 40;
         const headerHeight = 40;
@@ -86,10 +86,35 @@ const TimetablePool = ({ classes, activeClassId, setActiveClassId, availableYear
         {availableYearlyLessonsForPool.length > 0 ? (
           availableYearlyLessonsForPool.map((subjectData) => {
             const subjectColor = subjectData.subject.color || '#3b82f6';
+            // Prüfen, ob eine Halbklassenlektion nur einmal platziert wurde
+            const hasHalfClassPending = subjectData.availableLessons.some(yl => 
+              yl.is_half_class && 
+              (subjectData.lessons || []).filter(l => 
+                l.yearly_lesson_id === yl.id && 
+                l.week_number === subjectData.week_number && 
+                !l.is_hidden
+              ).length === 1
+            );
+            console.log('Debug: Checking half-class status for subject:', {
+              subject: subjectData.subject.name,
+              hasHalfClassPending,
+              week_number: subjectData.week_number,
+              availableLessons: subjectData.availableLessons.map(yl => ({
+                id: yl.id,
+                lesson_number: yl.lesson_number,
+                is_half_class: yl.is_half_class,
+                placedCount: (subjectData.lessons || []).filter(l => 
+                  l.yearly_lesson_id === yl.id && 
+                  l.week_number === subjectData.week_number && 
+                  !l.is_hidden
+                ).length
+              })),
+              lessonsDefined: !!subjectData.lessons
+            });
             return (
               <DraggableItem key={`pool-${subjectData.subject.id}`} id={`pool-${subjectData.subject.id}`} data={{ type: 'pool', subject: subjectData.subject }}>
                 <div
-                  className="pool-item w-full rounded cursor-grab active:cursor-grabbing flex items-center justify-between"
+                  className={`pool-item w-full rounded cursor-grab active:cursor-grabbing flex items-center justify-between ${hasHalfClassPending ? 'pulse-border' : ''}`}
                   style={{ backgroundColor: subjectColor, height: '40px', padding: '0 0.5rem' }}
                 >
                   <div className="font-bold text-white">
