@@ -40,8 +40,8 @@ export default function AnnouncementsTicker() {
                 <div className="inline-block animate-marquee">
                     <span>{announcementText}</span>
                 </div>
-                <div className="inline-block animate-marquee2">
-                    <span className="ml-8">{announcementText}</span>
+                <div className="inline-block animate-marquee whitespace-nowrap overflow-hidden">
+                    <span>{announcementText}</span>
                 </div>
             </div>
              <style jsx>{`

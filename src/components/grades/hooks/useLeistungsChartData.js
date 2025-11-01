@@ -4,11 +4,18 @@ import { format } from "date-fns";
 export const useLeistungsChartData = ({
   performances = [],
   students = [],
+  subjects = [],
   selectedSubject = 'all',
   selectedStudents = [],
   showClassAverage = true,
   selectedFachbereich = null
 }) => {
+  const getSubjectId = (subject) => typeof subject === 'object' ? subject.id : subject;
+
+  const getSubjectName = (subject, subjectId) => typeof subject === 'object' ? subject.name : subjects.find(s => s.id === subjectId)?.name || subjectId || 'Unknown';
+
+  const getSubjectKey = (subject) => typeof subject === 'object' ? subject.id || '' : subject || '';
+
   const lineData = useMemo(() => {
     if (!Array.isArray(performances) || !Array.isArray(students)) return [];
 
@@ -16,14 +23,14 @@ export const useLeistungsChartData = ({
       p && typeof p.date === 'string' && typeof p.assessment_name === 'string' && typeof p.grade === 'number'
     );
     const sortedPerformances = validPerformances
-      .filter(p => selectedSubject === 'all' || p.subject === selectedSubject)
+      .filter(p => selectedSubject === 'all' || getSubjectId(p.subject) === selectedSubject)
       .sort((a, b) => new Date(a.date) - new Date(b.date));
 
     if (sortedPerformances.length === 0) return [];
 
     const uniqueAssessments = [...new Map(
       sortedPerformances.map(item => [
-        `${item.assessment_name || 'Unknown'}-${item.date || ''}-${item.subject || ''}`,
+        `${item.assessment_name || 'Unknown'}-${item.date || ''}-${getSubjectKey(item.subject)}`,
         item
       ])
     ).values()];
@@ -37,7 +44,7 @@ export const useLeistungsChartData = ({
 
       if (showClassAverage) {
         const sameAssessments = sortedPerformances.filter(perf =>
-          perf.assessment_name === p.assessment_name && perf.date === p.date && perf.subject === p.subject
+          perf.assessment_name === p.assessment_name && perf.date === p.date && getSubjectId(perf.subject) === getSubjectId(p.subject)
         );
         const validGrades = sameAssessments
           .map(perf => perf.grade)
@@ -57,7 +64,7 @@ export const useLeistungsChartData = ({
             perf.student_id === studentId &&
             perf.assessment_name === p.assessment_name &&
             perf.date === p.date &&
-            perf.subject === p.subject
+            getSubjectId(perf.subject) === getSubjectId(p.subject)
           );
           point[student.name || 'Unnamed'] = studentPerf && typeof studentPerf.grade === 'number' ? studentPerf.grade : null;
         }
@@ -67,16 +74,69 @@ export const useLeistungsChartData = ({
     });
   }, [performances, students, selectedSubject, selectedStudents, showClassAverage]);
 
+  const subjectData = useMemo(() => {
+    if (!Array.isArray(performances) || !Array.isArray(students)) return [];
+
+    const filteredPerfs = performances.filter(p => p && (typeof p.subject === 'string' || (typeof p.subject === 'object' && typeof p.subject.id === 'string')));
+
+    if (filteredPerfs.length === 0) return [];
+
+    const subjectMap = {};
+    filteredPerfs.forEach(perf => {
+      const subjectId = getSubjectId(perf.subject);
+      if (!subjectId || typeof subjectId !== 'string') return;
+      const subjectName = getSubjectName(perf.subject, subjectId);
+      if (!subjectMap[subjectName]) {
+        subjectMap[subjectName] = { name: subjectName };
+      }
+      if (showClassAverage) {
+        const allGrades = filteredPerfs
+          .filter(p => getSubjectId(p.subject) === subjectId)
+          .map(p => p.grade)
+          .filter(g => typeof g === 'number' && g > 0);
+        if (allGrades.length > 0) {
+          const avgGrade = allGrades.reduce((sum, grade) => sum + grade, 0) / allGrades.length;
+          subjectMap[subjectName]['Klassenschnitt'] = parseFloat(avgGrade.toFixed(2));
+        } else {
+          subjectMap[subjectName]['Klassenschnitt'] = null;
+        }
+      }
+      selectedStudents.forEach((studentId) => {
+        const student = students.find(s => s && s.id === studentId);
+        if (student) {
+          const studentPerfsForSubject = filteredPerfs.filter(p =>
+            p.student_id === studentId && getSubjectId(p.subject) === subjectId
+          );
+          if (studentPerfsForSubject.length > 0) {
+            const grades = studentPerfsForSubject
+              .map(p => p.grade)
+              .filter(g => typeof g === 'number' && g > 0);
+            if (grades.length > 0) {
+              const avgGrade = grades.reduce((sum, grade) => sum + grade, 0) / grades.length;
+              subjectMap[subjectName][student.name || 'Unnamed'] = parseFloat(avgGrade.toFixed(2));
+            } else {
+              subjectMap[subjectName][student.name || 'Unnamed'] = null;
+            }
+          } else {
+            subjectMap[subjectName][student.name || 'Unnamed'] = null;
+          }
+        }
+      });
+    });
+
+    return Object.values(subjectMap);
+  }, [performances, students, subjects, selectedStudents, showClassAverage]);
+
   const fachbereichData = useMemo(() => {
     if (!Array.isArray(performances) || !Array.isArray(students)) return [];
 
-    const fachbereichMap = {};
     const filteredPerfs = performances.filter(p =>
-      p && typeof p.subject === 'string' && (selectedSubject === 'all' || p.subject === selectedSubject)
+      p && (typeof p.subject === 'string' || (typeof p.subject === 'object' && typeof p.subject.id === 'string')) && (selectedSubject === 'all' || getSubjectId(p.subject) === selectedSubject)
     );
 
     if (filteredPerfs.length === 0) return [];
 
+    const fachbereichMap = {};
     filteredPerfs.forEach(perf => {
       if (Array.isArray(perf.fachbereiche)) {
         perf.fachbereiche.forEach(fachbereich => {
@@ -129,7 +189,7 @@ export const useLeistungsChartData = ({
     if (!Array.isArray(performances) || !Array.isArray(students)) return [];
 
     const filteredPerfs = performances.filter(p =>
-      p && typeof p.subject === 'string' && (selectedSubject === 'all' || p.subject === p.subject) &&
+      p && (typeof p.subject === 'string' || (typeof p.subject === 'object' && typeof p.subject.id === 'string')) && (selectedSubject === 'all' || getSubjectId(p.subject) === selectedSubject) &&
       Array.isArray(p.fachbereiche) && p.fachbereiche.includes(selectedFachbereich)
     );
 
@@ -176,5 +236,5 @@ export const useLeistungsChartData = ({
     return colors[index % colors.length];
   };
 
-  return { lineData, fachbereichData, fachbereichDetailData, getStudentColor };
+  return { lineData, subjectData, fachbereichData, fachbereichDetailData, getStudentColor };
 };

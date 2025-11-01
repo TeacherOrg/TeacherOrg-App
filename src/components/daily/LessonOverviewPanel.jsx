@@ -144,7 +144,9 @@ export default function LessonOverviewPanel({
               const isPast = lesson.progress >= 100;
               const { name, emoji, color, isGradient } = getLessonDisplay(lesson);
               const cardStyle = {
-                background: isGradient ? color : getThemeGradient(theme || 'default', color, undefined, isDark),
+                background: isGradient 
+                  ? color 
+                  : (isCurrent ? color : getThemeGradient(theme || 'default', color, undefined, isDark) + '20'), // Voll saturiert für aktiv
                 borderColor: isSelected ? color : undefined,
                 color: getThemeTextColor(theme || 'default', color, isDark),
               };

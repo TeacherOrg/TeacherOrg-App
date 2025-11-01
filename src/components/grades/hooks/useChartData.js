@@ -1,21 +1,16 @@
-// src/components/grades/hooks/useChartData.js
 import { useMemo } from 'react';
 import { format } from "date-fns";
-import { getStudentColor } from '../utils/constants'; // Passe den Pfad an
 
-export const useChartData = ({
+export const useLeistungsChartData = ({
   performances = [],
-  ueberfachlich = [],
   students = [],
-  selectedSubject = 'Alle',
-  selectedCompetencyForProgression = null,
+  subjects = [],
+  selectedSubject = 'all',
   selectedStudents = [],
   showClassAverage = true,
-  diagramView = 'leistung'
+  selectedFachbereich = null
 }) => {
-  // Leistung Chart Data
   const lineData = useMemo(() => {
-    if (diagramView !== 'leistung') return [];
     if (!Array.isArray(performances) || !Array.isArray(students)) return [];
 
     const validPerformances = performances.filter(p =>
@@ -71,10 +66,64 @@ export const useChartData = ({
 
       return point;
     });
-  }, [performances, students, selectedSubject, selectedStudents, showClassAverage, diagramView]);
+  }, [performances, students, selectedSubject, selectedStudents, showClassAverage]);
+
+  const subjectData = useMemo(() => {
+    if (!Array.isArray(performances) || !Array.isArray(students) || !Array.isArray(subjects)) return [];
+
+    const subjectMap = {};
+    const filteredPerfs = performances.filter(p =>
+      p && typeof p.subject === 'string'
+    );
+
+    if (filteredPerfs.length === 0) return [];
+
+    filteredPerfs.forEach(perf => {
+      const subjectId = perf.subject;
+      if (!subjectId || typeof subjectId !== 'string') return;
+      const subjectName = subjects.find(s => s.id === subjectId)?.name || subjectId;
+      if (!subjectMap[subjectName]) {
+        subjectMap[subjectName] = { name: subjectName };
+      }
+      if (showClassAverage) {
+        const allGrades = filteredPerfs
+          .filter(p => p.subject === subjectId)
+          .map(p => p.grade)
+          .filter(g => typeof g === 'number' && g > 0);
+        if (allGrades.length > 0) {
+          const avgGrade = allGrades.reduce((sum, grade) => sum + grade, 0) / allGrades.length;
+          subjectMap[subjectName]['Klassenschnitt'] = parseFloat(avgGrade.toFixed(2));
+        } else {
+          subjectMap[subjectName]['Klassenschnitt'] = null;
+        }
+      }
+      selectedStudents.forEach((studentId) => {
+        const student = students.find(s => s && s.id === studentId);
+        if (student) {
+          const studentPerfsForSubject = filteredPerfs.filter(p =>
+            p.student_id === studentId && p.subject === subjectId
+          );
+          if (studentPerfsForSubject.length > 0) {
+            const grades = studentPerfsForSubject
+              .map(p => p.grade)
+              .filter(g => typeof g === 'number' && g > 0);
+            if (grades.length > 0) {
+              const avgGrade = grades.reduce((sum, grade) => sum + grade, 0) / grades.length;
+              subjectMap[subjectName][student.name || 'Unnamed'] = parseFloat(avgGrade.toFixed(2));
+            } else {
+              subjectMap[subjectName][student.name || 'Unnamed'] = null;
+            }
+          } else {
+            subjectMap[subjectName][student.name || 'Unnamed'] = null;
+          }
+        }
+      });
+    });
+
+    return Object.values(subjectMap);
+  }, [performances, students, subjects, selectedStudents, showClassAverage]);
 
   const fachbereichData = useMemo(() => {
-    if (diagramView !== 'leistung') return [];
     if (!Array.isArray(performances) || !Array.isArray(students)) return [];
 
     const fachbereichMap = {};
@@ -129,131 +178,59 @@ export const useChartData = ({
     });
 
     return Object.values(fachbereichMap);
-  }, [performances, students, selectedSubject, selectedStudents, showClassAverage, diagramView]);
+  }, [performances, students, selectedSubject, selectedStudents, showClassAverage]);
 
-  const ueberfachlichData = useMemo(() => {
-    if (diagramView !== 'kompetenzen') return [];
-    if (!Array.isArray(ueberfachlich) || !Array.isArray(students)) return [];
+  const fachbereichDetailData = useMemo(() => {
+    if (!selectedFachbereich) return [];
+    if (!Array.isArray(performances) || !Array.isArray(students)) return [];
 
-    const competencyNames = [...new Set(
-      ueberfachlich
-        .filter(comp => comp && comp.competency_name_display)
-        .map(comp => comp.competency_name_display)
-    )];
-
-    if (competencyNames.length === 0) return [];
-
-    const competencyMap = {};
-
-    competencyNames.forEach(competencyName => {
-      if (!competencyMap[competencyName]) {
-        competencyMap[competencyName] = { name: competencyName };
-      }
-      if (showClassAverage) {
-        let allScores = [];
-        ueberfachlich.forEach(comp => {
-          if (comp.competency_name_display === competencyName &&
-              Array.isArray(comp.assessments) &&
-              comp.assessments.length > 0) {
-            const latestAssessment = comp.assessments
-              .filter(a => a && typeof a.score === 'number' && a.score >= 1 && a.score <= 5)
-              .sort((a, b) => new Date(b.date) - new Date(a.date))[0];
-            if (latestAssessment) {
-              allScores.push(latestAssessment.score);
-            }
-          }
-        });
-        if (allScores.length > 0) {
-          const avgScore = allScores.reduce((sum, score) => sum + score, 0) / allScores.length;
-          competencyMap[competencyName]['Klassenschnitt'] = parseFloat(avgScore.toFixed(2));
-        } else {
-          competencyMap[competencyName]['Klassenschnitt'] = null;
-        }
-      }
-      selectedStudents.forEach(studentId => {
-        const student = students.find(s => s && s.id === studentId);
-        if (!student) return;
-        const studentComp = ueberfachlich.find(u =>
-          u.student_id === studentId && u.competency_name_display === competencyName
-        );
-        let studentScore = null;
-        if (studentComp && Array.isArray(studentComp.assessments) && studentComp.assessments.length > 0) {
-          const validAssessments = studentComp.assessments
-            .filter(a => a && typeof a.date === 'string' && typeof a.score === 'number' && a.score >= 1 && a.score <= 5);
-          if (validAssessments.length > 0) {
-            const latestAssessment = validAssessments.reduce((latest, assessment) => {
-              return !latest || new Date(assessment.date) > new Date(latest.date) ? assessment : latest;
-            }, null);
-            studentScore = latestAssessment?.score || null;
-          }
-        }
-        competencyMap[competencyName][student.name || 'Unnamed'] = studentScore;
-      });
-    });
-
-    return Object.values(competencyMap);
-  }, [ueberfachlich, students, selectedStudents, showClassAverage, diagramView]);
-
-  const ueberfachlichProgressionData = useMemo(() => {
-    if (diagramView !== 'kompetenzen') return [];
-    if (!selectedCompetencyForProgression || !Array.isArray(ueberfachlich) || ueberfachlich.length === 0) {
-      return [];
-    }
-
-    const filteredUeberfachlich = ueberfachlich.filter(u =>
-      u.competency_name_display === selectedCompetencyForProgression
+    const filteredPerfs = performances.filter(p =>
+      p && typeof p.subject === 'string' && (selectedSubject === 'all' || p.subject === selectedSubject) &&
+      Array.isArray(p.fachbereiche) && p.fachbereiche.includes(selectedFachbereich)
     );
 
-    const allAssessments = filteredUeberfachlich
-      .flatMap(u => (u.assessments || []))
-      .filter(a => a && a.date && typeof a.date === 'string')
-      .map(a => ({ ...a, competency_name: selectedCompetencyForProgression }));
+    if (filteredPerfs.length === 0) return [];
 
-    const uniqueDates = [...new Set(allAssessments.map(a => a.date))]
-      .sort((a, b) => new Date(a) - new Date(b));
-
-    if (uniqueDates.length === 0) return [];
-
-    return uniqueDates.map(date => {
-      const point = {
-        name: new Date(date).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: '2-digit' }),
-        date: date,
-      };
-
+    const assessmentMap = {};
+    filteredPerfs.forEach(perf => {
+      const key = `${perf.assessment_name || 'Unknown'}-${perf.date || ''}`;
+      if (!assessmentMap[key]) {
+        assessmentMap[key] = { 
+          name: `${perf.assessment_name || 'Unknown'}\n${perf.date ? format(new Date(perf.date), 'dd.MM.yy') : 'Unbekannt'}`,
+          assessment_name: perf.assessment_name || 'Unknown',
+          date: perf.date || ''
+        };
+      }
       if (showClassAverage) {
-        const scoresForDate = allAssessments
-          .filter(a => a.date === date && typeof a.score === 'number' && a.score >= 1 && a.score <= 5)
-          .map(a => a.score);
-
-        if (scoresForDate.length > 0) {
-          const avgScore = scoresForDate.reduce((sum, score) => sum + score, 0) / scoresForDate.length;
-          point['Klassenschnitt'] = parseFloat(avgScore.toFixed(2));
+        const allGrades = filteredPerfs
+          .filter(p => p.assessment_name === perf.assessment_name && p.date === perf.date)
+          .map(p => p.grade)
+          .filter(g => typeof g === 'number' && g > 0);
+        if (allGrades.length > 0) {
+          const avgGrade = allGrades.reduce((sum, grade) => sum + grade, 0) / allGrades.length;
+          assessmentMap[key]['Klassenschnitt'] = parseFloat(avgGrade.toFixed(2));
         } else {
-          point['Klassenschnitt'] = null;
+          assessmentMap[key]['Klassenschnitt'] = null;
         }
       }
-
-      selectedStudents.forEach(studentId => {
+      selectedStudents.forEach((studentId) => {
         const student = students.find(s => s && s.id === studentId);
-        if (!student) return;
-        const studentEntry = filteredUeberfachlich.find(u => u.student_id === studentId);
-        const assessmentForDate = (studentEntry?.assessments || [])
-          .find(a => a.date === date && typeof a.score === 'number');
-
-        point[student.name || 'Unnamed'] = (assessmentForDate && typeof assessmentForDate.score === 'number')
-          ? assessmentForDate.score
-          : null;
+        if (student) {
+          const studentPerf = filteredPerfs.find(p =>
+            p.student_id === studentId && p.assessment_name === perf.assessment_name && p.date === perf.date
+          );
+          assessmentMap[key][student.name || 'Unnamed'] = studentPerf && typeof studentPerf.grade === 'number' ? studentPerf.grade : null;
+        }
       });
-
-      return point;
     });
-  }, [ueberfachlich, students, selectedCompetencyForProgression, selectedStudents, showClassAverage, diagramView]);
 
-  return {
-    lineData,
-    fachbereichData,
-    ueberfachlichData,
-    ueberfachlichProgressionData,
-    getStudentColor
+    return Object.values(assessmentMap);
+  }, [performances, students, selectedSubject, selectedStudents, showClassAverage, selectedFachbereich]);
+
+  const getStudentColor = (index) => {
+    const colors = ['#8884d8', '#82ca9d', '#ffc658', '#ff7300', '#a4de6c'];
+    return colors[index % colors.length];
   };
+
+  return { lineData, subjectData, fachbereichData, fachbereichDetailData, getStudentColor };
 };

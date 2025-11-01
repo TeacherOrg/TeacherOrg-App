@@ -1,5 +1,6 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useLayoutEffect, useRef, useEffect } from 'react';
 import { useDraggable } from '@dnd-kit/core';
+import debounce from 'lodash/debounce';
 
 const DraggableItem = ({ id, data, children }) => {
   const { attributes, listeners, setNodeRef, transform, transition } = useDraggable({ id, data });
@@ -16,113 +17,104 @@ const DraggableItem = ({ id, data, children }) => {
   );
 };
 
-const TimetablePool = ({ classes, activeClassId, setActiveClassId, availableYearlyLessonsForPool, subjects, gridRef }) => {
+const TimetablePool = ({ 
+  classes, 
+  activeClassId, 
+  setActiveClassId, 
+  availableYearlyLessonsForPool, 
+  subjects, 
+  gridRef,
+  currentWeek,
+  lessonsForCurrentWeek   // ← NEU: übergeben!
+}) => {
   const poolRef = useRef(null);
 
-  useEffect(() => {
-    const updatePoolPositionWidthAndHeight = () => {
-      if (poolRef.current && gridRef?.current) {
-        // Position berechnen
-        const gridRect = gridRef.current.getBoundingClientRect();
-        const abstand = 16; // 1rem = 16px
-        poolRef.current.style.position = 'absolute';
-        poolRef.current.style.top = '0px';
-        poolRef.current.style.left = `${gridRect.right + abstand}px`;
-
-        // Breite berechnen
-        const items = poolRef.current.querySelectorAll('.pool-item');
-        let maxWidth = 200;
-        items.forEach(item => {
-          const originalStyles = {
-            whiteSpace: item.style.whiteSpace,
-            overflow: item.style.overflow,
-            textOverflow: item.style.textOverflow,
-          };
-          item.style.whiteSpace = 'nowrap';
-          item.style.overflow = 'visible';
-          item.style.textOverflow = 'clip';
-          const width = item.getBoundingClientRect().width;
-          item.style.whiteSpace = originalStyles.whiteSpace;
-          item.style.overflow = originalStyles.overflow;
-          item.style.textOverflow = originalStyles.textOverflow;
-          maxWidth = Math.max(maxWidth, width + 60);
-        });
-        document.documentElement.style.setProperty('--pool-width', `${maxWidth}px`);
-
-        // Höhe berechnen
-        const numItems = availableYearlyLessonsForPool.length;
-        const itemHeight = 40;
-        const headerHeight = 40;
-        const padding = 24;
-        const poolContentHeight = numItems * itemHeight + headerHeight + padding;
-        document.documentElement.style.setProperty('--pool-height', `${poolContentHeight}px`);
+  useLayoutEffect(() => {
+    const update = () => {
+      if (!poolRef.current || !gridRef?.current) {
+        return;
       }
+
+      const gridRect = gridRef.current.getBoundingClientRect();
+      const abstand = 16;
+
+      poolRef.current.style.position = 'absolute';
+      poolRef.current.style.top = '16px';
+      poolRef.current.style.left = `${gridRect.right + abstand}px`;
+      poolRef.current.style.zIndex = '10';
+
+      // --- Breite & Höhe berechnen ---
+      let maxWidth = 200;
+      const items = poolRef.current.querySelectorAll('.pool-item');
+      items.forEach(item => {
+        const origStyles = {
+          whiteSpace: item.style.whiteSpace,
+          overflow: item.style.overflow,
+          textOverflow: item.style.textOverflow,
+          animation: item.style.animation
+        };
+        item.style.whiteSpace = 'nowrap';
+        item.style.overflow = 'visible';
+        item.style.textOverflow = 'clip';
+        item.style.animation = 'none';
+        const w = item.getBoundingClientRect().width;
+        item.style.whiteSpace = origStyles.whiteSpace;
+        item.style.overflow = origStyles.overflow;
+        item.style.textOverflow = origStyles.textOverflow;
+        item.style.animation = origStyles.animation;
+        maxWidth = Math.max(maxWidth, w + 60);
+      });
+      document.documentElement.style.setProperty('--pool-width', `${maxWidth}px`);
+
+      const h = availableYearlyLessonsForPool.length * 40 + 40 + 24;
+      document.documentElement.style.setProperty('--pool-height', `${h}px`);
+
+      console.log('Debug: Pool position', {
+        container: poolRef.current.parentElement.getBoundingClientRect(),
+        gridRight: gridRect.right,
+        poolLeft: poolRef.current.style.left,
+        poolTop: poolRef.current.style.top,
+        viewportWidth: window.innerWidth,
+        poolWidth: maxWidth
+      });
     };
 
-    updatePoolPositionWidthAndHeight();
-    window.addEventListener('resize', updatePoolPositionWidthAndHeight);
-    return () => window.removeEventListener('resize', updatePoolPositionWidthAndHeight);
-  }, [availableYearlyLessonsForPool, gridRef]);
+    update();
+
+    const resizeHandler = debounce(() => requestAnimationFrame(update), 100);
+    window.addEventListener('resize', resizeHandler);
+
+    return () => {
+      window.removeEventListener('resize', resizeHandler);
+      resizeHandler.cancel();
+    };
+  }, [availableYearlyLessonsForPool, gridRef, currentWeek]);
 
   return (
-    <div
-      ref={poolRef}
-      className="timetable-pool-container p-4 shadow-md rounded-2xl overflow-y-hidden ml-4"
-      style={{ width: 'var(--pool-width, 150px)', height: 'var(--pool-height, auto)' }}
-    >
+    <div ref={poolRef} className="timetable-pool-container p-4 shadow-md rounded-2xl overflow-y-hidden ml-4"
+         style={{ width: 'var(--pool-width, 150px)', height: 'var(--pool-height, auto)' }}>
       <h3 className="text-lg font-semibold mb-2">Stundenpool</h3>
-      {classes.length > 0 && (
-        <select
-          value={activeClassId || ''}
-          onChange={e => setActiveClassId(e.target.value)}
-          className="w-full p-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-slate-100 dark:bg-slate-700 text-slate-800 dark:text-white text-sm mb-2"
-        >
-          {classes.map(cls => (
-            <option key={cls.id} value={cls.id}>{cls.name}</option>
-          ))}
-        </select>
-      )}
       <div className="flex flex-col gap-1">
         {availableYearlyLessonsForPool.length > 0 ? (
           availableYearlyLessonsForPool.map((subjectData) => {
             const subjectColor = subjectData.subject.color || '#3b82f6';
-            // Prüfen, ob eine Halbklassenlektion nur einmal platziert wurde
             const hasHalfClassPending = subjectData.availableLessons.some(yl => 
               yl.is_half_class && 
               (subjectData.lessons || []).filter(l => 
                 l.yearly_lesson_id === yl.id && 
-                l.week_number === subjectData.week_number && 
+                l.week_number === currentWeek && 
                 !l.is_hidden
               ).length === 1
             );
-            console.log('Debug: Checking half-class status for subject:', {
-              subject: subjectData.subject.name,
-              hasHalfClassPending,
-              week_number: subjectData.week_number,
-              availableLessons: subjectData.availableLessons.map(yl => ({
-                id: yl.id,
-                lesson_number: yl.lesson_number,
-                is_half_class: yl.is_half_class,
-                placedCount: (subjectData.lessons || []).filter(l => 
-                  l.yearly_lesson_id === yl.id && 
-                  l.week_number === subjectData.week_number && 
-                  !l.is_hidden
-                ).length
-              })),
-              lessonsDefined: !!subjectData.lessons
-            });
+
             return (
               <DraggableItem key={`pool-${subjectData.subject.id}`} id={`pool-${subjectData.subject.id}`} data={{ type: 'pool', subject: subjectData.subject }}>
                 <div
                   className={`pool-item w-full rounded cursor-grab active:cursor-grabbing flex items-center justify-between ${hasHalfClassPending ? 'pulse-border' : ''}`}
                   style={{ backgroundColor: subjectColor, height: '40px', padding: '0 0.5rem' }}
                 >
-                  <div className="font-bold text-white">
-                    {subjectData.subject.name}
-                  </div>
-                  <span className="text-sm text-white">
-                    ({subjectData.totalScheduled}/{subjectData.lessonsPerWeek})
-                  </span>
+                  <div className="font-bold text-white">{subjectData.subject.name}</div>
+                  <span className="text-sm text-white">({subjectData.totalScheduled}/{subjectData.lessonsPerWeek})</span>
                 </div>
               </DraggableItem>
             );

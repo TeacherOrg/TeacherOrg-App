@@ -25,11 +25,22 @@ const ClickablePolarAngleTick = ({ x, y, payload, setSelectedFachbereich }) => {
   );
 };
 
-const ClickableXAxisTick = ({ x, y, payload, setSelectedFachbereich }) => {
+const ClickableXAxisTick = ({ x, y, payload, setSelectedItem, isSubject, subjects }) => {
+  const handleClick = () => {
+    if (isSubject) {
+      const subjectId = subjects.find(s => s.name === payload.value)?.id;
+      if (subjectId) {
+        setSelectedItem(subjectId);
+      }
+    } else {
+      setSelectedItem(payload.value);
+    }
+  };
+
   return (
     <g transform={`translate(${x},${y})`}>
       <text 
-        onClick={() => setSelectedFachbereich(payload.value)}
+        onClick={handleClick}
         style={{ cursor: 'pointer' }}
         className="hover:fill-white hover:font-bold"
       >
@@ -53,26 +64,28 @@ const MultilineXAxisTick = ({ x, y, payload }) => {
   );
 };
 
-const Leistungscharts = ({ performances, students, selectedStudents, showClassAverage, selectedSubject, activeClassId, onDataChange }) => {
+const Leistungscharts = ({ performances, students, subjects, selectedStudents, showClassAverage, selectedSubject, setSelectedSubject, activeClassId, onDataChange }) => {
   const [enlargedChart, setEnlargedChart] = useState(null);
   const [selectedFachbereich, setSelectedFachbereich] = useState(null);
-  const { lineData, fachbereichData, fachbereichDetailData, getStudentColor } = useLeistungsChartData({
+  const { lineData, subjectData, fachbereichData, fachbereichDetailData, getStudentColor } = useLeistungsChartData({
     performances,
     students,
+    subjects,
     selectedSubject,
     selectedStudents,
     showClassAverage,
     selectedFachbereich
   });
 
-  const shouldUseBarChart = fachbereichData.length < 3 && fachbereichData.length > 0;
+  const isAllSubjects = selectedSubject === 'all';
+  const shouldUseBarChartForFachbereich = fachbereichData.length < 3 && fachbereichData.length > 0;
 
   const canRenderChart = (data) => {
     if (!Array.isArray(data) || data.length === 0) return false;
     return data.every(item => item && typeof item === 'object' && item.name);
   };
 
-  const renderChartContent = (chartType, data, yDomain, showReverse = false, isDetail = false) => {
+  const renderChartContent = (chartType, data, yDomain, showReverse = false, isDetail = false, isSubjectChart = false) => {
     const isBarChart = chartType === 'bar';
     const isRadarChart = chartType === 'radar';
     const isLineChart = chartType === 'line';
@@ -113,7 +126,7 @@ const Leistungscharts = ({ performances, students, selectedStudents, showClassAv
             <XAxis
               dataKey="name"
               stroke="hsl(var(--muted-foreground))"
-              tick={(props) => isDetail ? <MultilineXAxisTick {...props} /> : <ClickableXAxisTick {...props} setSelectedFachbereich={setSelectedFachbereich} />}
+              tick={(props) => isDetail ? <MultilineXAxisTick {...props} /> : <ClickableXAxisTick {...props} setSelectedItem={isSubjectChart ? setSelectedSubject : setSelectedFachbereich} isSubject={isSubjectChart} subjects={subjects} />}
               tickMargin={isDetail ? 10 : undefined}
               height={isDetail ? 50 : undefined}
             />
@@ -197,7 +210,7 @@ const Leistungscharts = ({ performances, students, selectedStudents, showClassAv
         ) : (
           <LineChart data={data} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-            {enlargedChart === 'verlauf' ? (
+            {enlargedChart === 'left' ? (
               <>
                 <ReferenceArea y1={1} y2={4.5} fill="rgba(255, 99, 71, 0.1)" fillOpacity={0.3} />
                 <ReferenceArea y1={4.5} y2={5} fill="rgba(255, 255, 0, 0.1)" fillOpacity={0.3} />
@@ -256,15 +269,22 @@ const Leistungscharts = ({ performances, students, selectedStudents, showClassAv
       <Card className="bg-white dark:bg-slate-800 text-black dark:text-white border-slate-200 dark:border-slate-700">
         <CardHeader>
           <CardTitle className="flex items-center justify-between">
-            Leistungsverlauf
-            <Button variant="ghost" size="sm" onClick={() => setEnlargedChart('verlauf')} className="text-slate-400 hover:text-white">
+            {isAllSubjects ? 'Notenschnitte der Fächer' : 'Leistungsverlauf'}
+            <Button variant="ghost" size="sm" onClick={() => setEnlargedChart('left')} className="text-slate-400 hover:text-white">
               Vergrößern
             </Button>
           </CardTitle>
         </CardHeader>
         <CardContent>
           <div style={{ width: '100%', height: 300 }}>
-            {renderChartContent('line', lineData, [1, 6], true)}
+            {renderChartContent(
+              isAllSubjects ? 'bar' : 'line',
+              isAllSubjects ? subjectData : lineData,
+              [1, 6],
+              true,
+              false,
+              isAllSubjects
+            )}
           </div>
         </CardContent>
       </Card>
@@ -287,7 +307,7 @@ const Leistungscharts = ({ performances, students, selectedStudents, showClassAv
           <div style={{ width: '100%', height: 300 }}>
             {selectedFachbereich 
               ? renderChartContent('bar', fachbereichDetailData, [1, 6], true, true) 
-              : renderChartContent(shouldUseBarChart ? 'bar' : 'radar', fachbereichData, [1, 6], true)}
+              : renderChartContent(shouldUseBarChartForFachbereich ? 'bar' : 'radar', fachbereichData, [1, 6], true)}
           </div>
         </CardContent>
       </Card>
@@ -296,7 +316,7 @@ const Leistungscharts = ({ performances, students, selectedStudents, showClassAv
           <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 w-full h-full max-w-[95vw] max-h-[95vh] flex flex-col">
             <div className="flex justify-between items-start mb-4">
               <h3 className="text-2xl font-bold text-white">
-                {enlargedChart === 'verlauf' && 'Leistungsverlauf'}
+                {enlargedChart === 'left' && (isAllSubjects ? 'Notenschnitte der Fächer' : 'Leistungsverlauf')}
                 {enlargedChart === 'fachbereich' && 'Fachbereiche'}
               </h3>
               <Button
@@ -308,8 +328,15 @@ const Leistungscharts = ({ performances, students, selectedStudents, showClassAv
               </Button>
             </div>
             <div className="flex-1 min-h-0">
-              {enlargedChart === 'verlauf' && renderChartContent('line', lineData, [1, 6], true)}
-              {enlargedChart === 'fachbereich' && renderChartContent(shouldUseBarChart ? 'bar' : 'radar', fachbereichData, [1, 6], true)}
+              {enlargedChart === 'left' && renderChartContent(
+                isAllSubjects ? 'bar' : 'line',
+                isAllSubjects ? subjectData : lineData,
+                [1, 6],
+                true,
+                false,
+                isAllSubjects
+              )}
+              {enlargedChart === 'fachbereich' && renderChartContent(shouldUseBarChartForFachbereich ? 'bar' : 'radar', fachbereichData, [1, 6], true)}
             </div>
           </div>
         </div>

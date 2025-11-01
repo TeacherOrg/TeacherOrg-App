@@ -74,16 +74,16 @@ export const DAILY_THEMES = {
 export const getThemeGradient = (theme, baseColor, darkenAmount = -20, isDark = false) => {
   if (!DAILY_THEMES[theme]) {
     console.warn(`Invalid theme: ${theme}. Using default.`);
-    return createGradient(baseColor, darkenAmount);
+    return createGradient(baseColor, darkenAmount); // Übernommen aus colorUtils
   }
 
   const themeConfig = DAILY_THEMES[theme];
   const colors = isDark ? (themeConfig.dark || themeConfig) : themeConfig;
   const adjustedBase = adjustColor(baseColor, darkenAmount);
-  // Verwende primäre und sekundäre Farben direkt ohne Transparenz für stärkere Sichtbarkeit
-  const gradient = `linear-gradient(${colors.gradientDirection}, ${colors.primary}, ${colors.secondary}, ${adjustedBase}30)`;
+  const direction = themeConfig.gradientDirection || '135deg'; // Korrekte Direction aus colorUtils
+  let gradient = createGradient(colors.primary, darkenAmount, direction); // Nutze createGradient für Verlauf
+  gradient += `, ${adjustedBase}30`; // Leichte Anpassung für Transparenz
   
-  // Debugging: Logge den generierten Gradient
   console.debug(`Generated gradient for theme ${theme}: ${gradient}`);
   return gradient;
 };

@@ -850,4 +850,3 @@ export default function UeberfachlichTable({
     </>
   );
 }
-

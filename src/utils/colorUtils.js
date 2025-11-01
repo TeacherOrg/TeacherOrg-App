@@ -215,3 +215,17 @@ export const getComplementaryColor = (color) => {
     return '#3b82f6';
   }
 };
+
+/**
+ * NEU: Gibt theme-aware Farbe zurück (passt an light/dark an)
+ * @param {string} baseColor - Basis-Hex-Farbe (z.B. '#3b82f6' für blue-600)
+ * @param {boolean} isDarkMode - Ob dark mode aktiv ist
+ * @param {number} [adjustAmount= -10] - Anpassung für dark mode
+ * @returns {string} Theme-angepasste Hex-Farbe
+ */
+export const getThemeAwareColor = (baseColor, isDarkMode, adjustAmount = -10) => {
+  if (!isValidHexColor(baseColor)) {
+    return baseColor;
+  }
+  return isDarkMode ? adjustColor(baseColor, adjustAmount) : baseColor;
+};

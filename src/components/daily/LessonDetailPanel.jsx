@@ -240,7 +240,7 @@ export default function LessonDetailPanel({
         {/* Content */}
         <div className="flex-1 overflow-y-auto bg-white/95 dark:bg-slate-800/95 backdrop-blur-sm">
           {displayLesson.steps && displayLesson.steps.length > 0 ? (
-            <div className="p-6">
+            <div className="p-4 md:p-6"> {/* Reduziert auf p-4, md:p-6 für Responsive */}
               {/* Progress indicator */}
               <div className="mb-6 p-4 bg-slate-50 dark:bg-slate-700 rounded-xl">
                 <div className="flex justify-between items-center mb-2">
@@ -304,11 +304,11 @@ export default function LessonDetailPanel({
               </div>
 
               {/* Steps table with Emojis */}
-              <div className="overflow-x-auto">
-                <table className="w-full">
+              <div className="overflow-x-auto max-w-full w-full">
+                <table className="w-full table-auto lesson-detail-table">
                   <thead>
                     <tr className="border-b-2 border-slate-200 dark:border-slate-600">
-                      <th className="p-3 w-12"></th>
+                      <th className="p-3"></th>
                       <th className={`${customization.fontSize.content} text-left p-3 text-slate-700 dark:text-slate-300 font-semibold`}>
                         <span className="mr-1">⏱️</span>Zeit
                       </th>
@@ -346,12 +346,12 @@ export default function LessonDetailPanel({
                                   : 'hover:bg-slate-50 dark:hover:bg-slate-800/30'
                           }`}
                         >
-                          <td className="p-3 text-center">
+                          <td className="p-3 text-center break-words">
                             <button onClick={() => handleStepToggle(step.id)} className="cursor-pointer">
                               {isCompleted ? <CheckCircle2 className="w-5 h-5 text-green-500" /> : <Circle className="w-5 h-5 text-slate-400" />}
                             </button>
                           </td>
-                          <td className="p-3">
+                          <td className="p-3 break-words">
                             <div className="flex items-center gap-2">
                               {isCurrent && (
                                 <div className="w-2 h-2 bg-yellow-500 rounded-full animate-pulse" />
@@ -361,7 +361,7 @@ export default function LessonDetailPanel({
                               </span>
                             </div>
                           </td>
-                          <td className="p-3">
+                          <td className="p-3 break-words">
                             <div className="flex items-center gap-2">
                               <WorkFormIcon className="w-4 h-4 text-slate-500" />
                               <span className={`${customization.fontSize.content} ${isCurrent ? 'font-bold' : ''}`}>
@@ -369,12 +369,12 @@ export default function LessonDetailPanel({
                               </span>
                             </div>
                           </td>
-                          <td className="p-3">
+                          <td className="p-3 break-words">
                             <span className={`${customization.fontSize.content} ${isCurrent ? 'font-bold' : ''}`}>
                               {step.activity || '-'}
                             </span>
                           </td>
-                          <td className="p-3">
+                          <td className="p-3 break-words">
                             <span className={`${customization.fontSize.content} ${isCurrent ? 'font-bold' : ''}`}>
                               {step.material || '-'}
                             </span>

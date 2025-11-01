@@ -2,7 +2,7 @@ import { useCallback } from 'react';
 import { Lesson, YearlyLesson } from '@/api/entities';
 import pb from '@/api/pb';
 import { findFreeSlot } from '@/utils/slotUtils'; // Importiere die Funktion, falls nicht bereits vorhanden
-const useLessonHandlers = (editingLesson, currentYear, allLessons, yearlyLessons, timeSlots, currentWeek, queryClientLocal, subjects, optimisticUpdateAllLessons, optimisticUpdateYearlyLessons, addAllerleiLesson, removeAllLesson, setAllLessons, setYearlyLessons, activeClassId, refetch) => { const reassignYearlyLessonLinks = useCallback(async (subjectName, currentLessons, yearlyLessonsParam = yearlyLessons) => {
+const useLessonHandlers = (editingLesson, currentYear, allLessons, yearlyLessons, timeSlots, currentWeek, queryClientLocal, subjects, optimisticUpdateAllLessons, optimisticUpdateYearlyLessons, addAllerleiLesson, removeAllLesson, setAllLessons, setYearlyLessons, activeClassId, refetch, setIsModalOpen) => { const reassignYearlyLessonLinks = useCallback(async (subjectName, currentLessons, yearlyLessonsParam = yearlyLessons) => {
     const dayOrder = { monday: 1, tuesday: 2, wednesday: 3, thursday: 4, friday: 5 };
     const lessonsForSubject = currentLessons
       .filter(l =>
@@ -565,7 +565,7 @@ const useLessonHandlers = (editingLesson, currentYear, allLessons, yearlyLessons
       queryClientLocal.invalidateQueries(['timetableData', currentYear, currentWeek]);
       queryClientLocal.invalidateQueries(['yearlyData', currentYear]);
     }
-    }, [editingLesson, currentYear, allLessons, yearlyLessons, timeSlots, currentWeek, queryClientLocal, subjects, optimisticUpdateAllLessons, optimisticUpdateYearlyLessons, addAllerleiLesson, removeAllLesson, setAllLessons, setYearlyLessons, activeClassId, refetch]); const handleDeleteLesson = useCallback(async (lessonId) => {
+    }, [editingLesson, currentYear, allLessons, yearlyLessons, timeSlots, currentWeek, queryClientLocal, subjects, optimisticUpdateAllLessons, optimisticUpdateYearlyLessons, addAllerleiLesson, removeAllLesson, setAllLessons, setYearlyLessons, activeClassId, refetch, setIsModalOpen]); const handleDeleteLesson = useCallback(async (lessonId) => {
     const lessonToDelete = allLessons.find(l => l.id === lessonId);
     if (!lessonToDelete) return;
     let subjectsToReassign = new Set();

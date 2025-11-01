@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { Lesson, YearlyLesson, Subject, Holiday, Setting, Class, DailyNote, Announcement, Chore, ChoreAssignment, Student } from "@/api/entities";
+import { Lesson, YearlyLesson, Subject, Holiday, Setting, Class, Announcement, Chore, ChoreAssignment, Student } from "@/api/entities";
 import { Button } from "@/components/ui/button";
 import { ChevronLeft, ChevronRight, Maximize, Settings, Calendar, Clock, Users, Home, Zap } from "lucide-react";
 import { motion } from "framer-motion";
@@ -114,6 +114,7 @@ export default function DailyView({ currentDate, onDateChange }) {
   const [isLoading, setIsLoading] = useState(true);
   const [showCustomization, setShowCustomization] = useState(false);
   const audioRef = useRef(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
   
   // Data states
   const [allLessons, setAllLessons] = useState([]);
@@ -191,7 +192,7 @@ export default function DailyView({ currentDate, onDateChange }) {
             },
             showOverview: loaded.show_overview,
             showClock: loaded.show_clock,
-            auto_focus_current_lesson: loaded.auto_focus_current_lesson,
+            autoFocusCurrentLesson: loaded.auto_focus_current_lesson,
             compactMode: loaded.compact_mode,
             audio: {
               enabled: loaded.audio_enabled,
@@ -212,6 +213,16 @@ export default function DailyView({ currentDate, onDateChange }) {
       setCurrentTime(new Date());
     }, 1000);
     return () => clearInterval(timer);
+  }, []);
+
+  // Fullscreen detection
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
   }, []);
 
   // Save customization settings to localStorage
@@ -567,12 +578,17 @@ export default function DailyView({ currentDate, onDateChange }) {
   };
 
   const mainGridStyle = useMemo(() => {
-    const columns = [
-      customization.showOverview ? 'minmax(0, 1fr)' : '',
-      '2fr'
-    ].filter(Boolean).join(' ');
+    if (!customization.showOverview) {
+      return {
+        gridTemplateColumns: '1fr',
+      };
+    }
 
-    return { gridTemplateColumns: columns };
+    return {
+      gridTemplateColumns: '1.5fr 4fr',
+      gap: '1rem',
+      height: '100%',
+    };
   }, [customization.showOverview]);
 
   if (isLoading) {
@@ -599,36 +615,39 @@ export default function DailyView({ currentDate, onDateChange }) {
       {/* Announcements Ticker */}
       <AnnouncementsTicker announcements={announcements} />
       
-      {/* Settings & Fullscreen buttons top-right */}
-      <div className="absolute top-4 right-4 z-50 flex items-center gap-2">
-        <Button
-          variant="outline"
-          size="icon"
-          onClick={() => setShowCustomization(!showCustomization)}
-          className="rounded-xl"
-        >
-          <Settings className="w-4 h-4" />
-        </Button>
-        
-        <Button
-          variant="outline"
-          size="icon"
-          onClick={toggleFullscreen}
-          className="rounded-xl"
-        >
-          <Maximize className="w-4 h-4" />
-        </Button>
-      </div>
+      {/* Settings & Fullscreen buttons – nur im normalen Modus */}
+      {!isFullscreen && (
+        <div className="absolute top-4 left-4 z-50 flex items-center gap-2"> {/* left-4 statt right-4 */}
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={() => setShowCustomization(!showCustomization)}
+            className="rounded-xl"
+          >
+            <Settings className="w-4 h-4" />
+          </Button>
+          
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={toggleFullscreen}
+            className="rounded-xl"
+          >
+            <Maximize className="w-4 h-4" />
+          </Button>
+        </div>
+      )}
 
       {/* Main Content Area */}
       <div 
-        className="p-4 h-full w-full grid gap-4"
-        style={mainGridStyle}
+        className={`p-4 h-full w-full grid gap-4 ${isFullscreen ? 'p-0' : ''}`}
+        style={{ ...mainGridStyle, maxWidth: '100%', overflowX: 'hidden' }}
       >
         {/* Lesson Overview Panel */}
         {customization.showOverview && (
           <motion.div 
             className="h-full overflow-hidden"
+            style={{ maxWidth: '100%' }}
             drag
             dragConstraints={{ left: -100, right: 100, top: -100, bottom: 100 }}
             whileDrag={{ scale: 0.95 }}
@@ -647,7 +666,7 @@ export default function DailyView({ currentDate, onDateChange }) {
         )}
 
         {/* Main Central Panel */}
-        <div className="h-full overflow-hidden">
+        <div className="h-full overflow-hidden" style={{ maxWidth: '100%' }}>
           {showChoresView ? (
             <ChoresDisplay
               assignments={todaysAssignments}
@@ -668,8 +687,8 @@ export default function DailyView({ currentDate, onDateChange }) {
               onStepCompleteChange={handleStepCompleteChange}
               manualStepIndex={manualStepIndex}
               onManualStepChange={handleManualStepChange}
-              theme={customization.theme || 'default'} // Neu hinzufügen
-              isDark={isDark} // Neu hinzufügen
+              theme={customization.theme || 'default'}
+              isDark={isDark}
             />
           ) : (
              <div className="flex items-center justify-center h-full text-center bg-white/50 dark:bg-slate-800/50 rounded-2xl">
@@ -686,21 +705,6 @@ export default function DailyView({ currentDate, onDateChange }) {
           )}
         </div>
       </div>
-
-      {/* Clock Panel */}
-      {customization.showClock && (
-        <motion.div 
-          className="absolute top-24 right-4 z-30 w-[220px] h-[120px]"
-          drag
-          dragConstraints={{ left: -100, right: 100, top: -100, bottom: 100 }}
-          whileDrag={{ scale: 0.95 }}
-        >
-           <ClockPanel
-              currentTime={currentTime}
-              customization={customization}
-            />
-        </motion.div>
-      )}
 
       {/* Customization Panel */}
       {showCustomization && (

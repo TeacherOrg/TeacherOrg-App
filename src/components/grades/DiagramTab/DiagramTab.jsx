@@ -73,9 +73,11 @@ const DiagramTab = ({ students, performances, ueberfachlich, subjects, allCompet
         <Leistungscharts
           performances={performances}
           students={students}
+          subjects={subjects}
           selectedStudents={selectedStudents}
           showClassAverage={showClassAverage}
           selectedSubject={selectedSubject}
+          setSelectedSubject={setSelectedSubject}
           activeClassId={activeClassId}
           onDataChange={onDataChange}
         />

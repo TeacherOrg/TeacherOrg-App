@@ -124,6 +124,55 @@
   overflow: hidden;
 }
 
+/* Pulsierende Rahmen-Animation */
+@keyframes pulse {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.05);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.pulse-border {
+  animation: pulse 2s infinite;
+}
+
+/* Neue Animationen für DailyView */
+@keyframes bounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-5px); }
+}
+
+.bounce-animation {
+  animation: bounce 0.5s ease-in-out;
+}
+
+@keyframes glow-pulse {
+  0% { box-shadow: 0 0 5px rgba(255, 255, 255, 0.2); }
+  50% { box-shadow: 0 0 15px rgba(255, 255, 255, 0.5); }
+  100% { box-shadow: 0 0 5px rgba(255, 255, 255, 0.2); }
+}
+
+.glow-pulse {
+  animation: glow-pulse 2s infinite;
+}
+
+/* Global resets */
+html, body, #root {
+  width: 100vw;
+  overflow-x: hidden; /* Globales Verstecken von horizontalem Scroll */
+}
+
+/* Für alle Panels */
+.panel {
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
 /* ===== RESPONSIVE YEARLY OVERVIEW STYLES ===== */
 @layer components {
   .yearly-main-grid {
@@ -614,26 +663,6 @@
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
   }
 
-  /* Neue Animationen für DailyView */
-  @keyframes bounce {
-    0%, 100% { transform: translateY(0); }
-    50% { transform: translateY(-5px); }
-  }
-
-  .bounce-animation {
-    animation: bounce 0.5s ease-in-out;
-  }
-
-  @keyframes glow-pulse {
-    0% { box-shadow: 0 0 5px rgba(255, 255, 255, 0.2); }
-    50% { box-shadow: 0 0 15px rgba(255, 255, 255, 0.5); }
-    100% { box-shadow: 0 0 5px rgba(255, 255, 255, 0.2); }
-  }
-
-  .glow-pulse {
-    animation: glow-pulse 2s infinite;
-  }
-
   /* Themen-spezifische Klassen für schnelle Anwendung */
   @layer components {
     .theme-spring {
@@ -708,6 +737,9 @@
     max-width: 100vw;
     justify-content: center; /* Zentriert den inneren Wrapper */
     align-items: flex-start;
+    max-width: 100vw; /* Begrenzt alles */
+    overflow-x: hidden; /* Kein horizontales Scrollen */
+    padding: 1rem; /* Innerer Abstand, um Ränder zu vermeiden */
   }
 
   .timetable-grid-wrapper {
@@ -797,20 +829,171 @@
       font-size: 1rem;
     }
   }
+
+  /* Updated button styles for consistency in light/dark */
+  .button-primary {
+    @apply bg-primary text-primary-foreground hover:bg-primary/90;
+  }
+
+  .button-secondary {
+    @apply bg-secondary text-secondary-foreground hover:bg-secondary/90;
+  }
+
+  .button-ghost {
+    @apply hover:bg-accent hover:text-accent-foreground;
+  }
+
+  /* Modal styles */
+  .modal-content {
+    @apply bg-background border-border text-foreground;
+  }
+
+  /* Table styles */
+  .table-container {
+    @apply bg-card border-border;
+  }
+
+  .table-row {
+    @apply hover:bg-muted/50;
+  }
+
+  .table-cell {
+    @apply text-foreground;
+  }
+
+  /* Für die Grid in DailyView */
+  .main-grid {
+    display: grid;
+    width: 100%;
+    max-width: 100%; /* Verhindert Stretching */
+    box-sizing: border-box; /* Inkludiert Padding/Border in Breite */
+  }
+
+  /* Responsive: Bei kleinen Screens stacken */
+  @media (max-width: 1024px) {
+    .main-grid {
+      grid-template-columns: 1fr !important; /* Stack vertical */
+      grid-template-rows: auto 1fr;
+    }
+    .lesson-overview-panel {
+      max-height: 40vh; /* Begrenzt Höhe, um Scrollen zu ermöglichen */
+      overflow-y: auto;
+    }
+  }
+
+  /* Media Queries für kleine Screens */
+  @media (max-width: 768px) {
+    .timetable-content {
+      padding: 0.5rem; /* Reduziert Padding */
+    }
+    .floating-elements {
+      scale: 0.9; /* Verkleinert leicht */
+    }
+  }
+
+  /* Responsive Tabelle für LessonDetailPanel */
+  .responsive-table {
+    @apply w-full;
+  }
+
+  @media (max-width: 768px) {
+    .responsive-table thead {
+      display: none; /* Header verstecken auf Mobile */
+    }
+
+    .responsive-table tbody tr {
+      display: block; /* Zeilen zu Blöcken machen */
+      margin-bottom: 1rem;
+      border: 1px solid theme('colors.slate.200');
+      border-radius: 0.5rem;
+      padding: 0.5rem;
+    }
+
+    .responsive-table tbody td {
+      display: flex; /* Zellen zu Flex-Items */
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid theme('colors.slate.100');
+      padding: 0.5rem 0;
+      text-align: right; /* Rechtsbündig für Werte */
+      overflow: hidden; /* Verhindert inneres Scrollen */
+      text-overflow: ellipsis; /* Schneidet Text ab */
+      white-space: normal; /* Erlaubt Umbrüche */
+      word-break: break-all; /* Bricht lange Wörter */
+    }
+
+    .responsive-table tbody td:before {
+      content: attr(data-label); /* Pseudo-Header aus data-label */
+      font-weight: bold;
+      text-align: left;
+      flex: 1;
+      margin-right: 1rem; /* Abstand zum Wert */
+    }
+
+    .responsive-table tbody td:last-child {
+      border-bottom: none;
+    }
+  }
+
+  .responsive-table td, .responsive-table th {
+    white-space: normal; /* Erlaubt Umbrüche (bereits vorhanden) */
+    word-break: break-word; /* Bricht lange Wörter (bereits vorhanden) */
+    overflow: hidden; /* Schneidet ab */
+    text-overflow: ellipsis; /* Fügt ... hinzu */
+    padding: 0.5rem; /* Reduziert Padding für Engpässe */
+  }
+
+  /* Prozentuale Breiten anpassen, falls nötig */
+  .responsive-table th:nth-child(1), .responsive-table td:nth-child(1) { width: 5%; }
+  .responsive-table th:nth-child(2), .responsive-table td:nth-child(2) { width: 15%; }
+  .responsive-table th:nth-child(3), .responsive-table td:nth-child(3) { width: 20%; }
+  .responsive-table th:nth-child(4), .responsive-table td:nth-child(4) { width: 40%; }
+  .responsive-table th:nth-child(5), .responsive-table td:nth-child(5) { width: 20%; }
 }
-/* Pulsierende Rahmen-Animation */
-@keyframes pulse {
-  0% {
-    box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.7); /* Blau, passend zu Ihrer Standardfarbe */
-  }
-  50% {
-    box-shadow: 0 0 0 8px rgba(59, 130, 246, 0.3);
-  }
-  100% {
-    box-shadow: 0 0 0 0 rgba(59, 130, 246, 0);
+
+/* In LessonDetailPanel or global */
+.lesson-detail-table {
+  table-layout: fixed; /* Erzwingt feste Layout, Breiten passen sich an */
+  min-width: 0; /* Erlaubt Schrumpfen in engen Containern */
+}
+
+.lesson-detail-table td,
+.lesson-detail-table th {
+  white-space: normal !important;
+  word-break: break-word;
+  overflow-wrap: break-word;
+  hyphens: auto; /* Optional: Silbentrennung */
+  padding: 0.75rem 0.5rem; /* Etwas enger */
+  font-size: 0.875rem; /* Kleinere Schrift für Enge */
+  max-width: 0; /* Zwingt Zellen, sich anzupassen und zu wrappen */
+}
+
+.lesson-detail-table th {
+  font-weight: 600;
+  font-size: 0.8rem;
+}
+
+@media (max-width: 1024px) {
+  .lesson-detail-table td,
+  .lesson-detail-table th {
+    padding: 0.5rem 0.25rem;
+    font-size: 0.8rem;
   }
 }
 
-.pulse-border {
-  animation: pulse 1.5s ease-in-out infinite;
+@media (max-width: 900px) { /* Erweitert: Für enge Detail-Panels (z.B. bei 1.5fr) */
+  .lesson-detail-table td,
+  .lesson-detail-table th {
+    padding: 0.3rem 0.1rem;
+    font-size: 0.7rem;
+  }
+}
+
+@media (max-width: 768px) {
+  .main-grid {
+    grid-template-columns: 1fr !important; /* Stacken */
+  }
+  .lesson-detail-table {
+    font-size: 0.75rem;
+  }
 }
