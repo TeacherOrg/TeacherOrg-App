@@ -172,7 +172,7 @@ export default function Layout({ children, currentPageName }) {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-white dark:bg-slate-900 flex items-center justify-center">
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-slate-100 to-slate-200 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 flex items-center justify-center transition-colors duration-300">
         <CalendarLoader />
       </div>
     );
@@ -185,7 +185,7 @@ export default function Layout({ children, currentPageName }) {
 
   if (sidebarError) {
     return (
-      <div className="min-h-screen bg-white dark:bg-slate-900 flex items-center justify-center">
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-slate-100 to-slate-200 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 flex items-center justify-center transition-colors duration-300">
         <p className="text-red-500">{sidebarError}</p>
       </div>
     );
@@ -195,7 +195,7 @@ export default function Layout({ children, currentPageName }) {
     <>
       <style>{ScrollbarStyles}</style>
       <SidebarProvider>
-        <div className="min-h-screen flex w-full bg-slate-100 dark:bg-slate-900 transition-colors duration-300">
+        <div className="min-h-screen flex w-full bg-gradient-to-br from-slate-50 via-slate-100 to-slate-200 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 transition-colors duration-300">
           {!isFullscreen || location.pathname !== createPageUrl("Timetable") ? (
             <Sidebar 
               className={`
@@ -303,7 +303,7 @@ export default function Layout({ children, currentPageName }) {
             </Sidebar>
           ) : null}
 
-          <main className="flex-1 flex flex-col relative bg-slate-100 dark:bg-slate-900">
+          <main className="flex-1 flex flex-col relative bg-transparent">
             {!isFullscreen || location.pathname !== createPageUrl("Timetable") ? (
               <header className="px-6 py-4 md:hidden shadow-sm transition-colors duration-300 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700">
                 <div className="flex items-center justify-between">

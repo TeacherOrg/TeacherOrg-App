@@ -17,10 +17,17 @@ const UpdateModal = ({ isOpen, onClose, version }) => {
       category: 'Änderungen',
       subcategories: [
         {
+          subcategory: 'Allgemein',
+          items: [
+            { text: 'OliGay', type: 'fixed' },
+            { text: 'Neue Darkmodefarbe', type: 'fixed' },
+          ],
+        },
+        {
           subcategory: 'Wochenansicht',
           items: [
             { text: 'Diverse Verbesserungen (Grösseneinstellungen, Effizienz, Drag und Drop)', type: 'fixed' },
-            { text: 'Halbklassenlektion werden korrekt kopiert', type: 'fixed' },
+            { text: 'Halbklassenlektion werden korrekt kopiert und angezeigt', type: 'fixed' },
           ],
         },
         {
@@ -33,13 +40,14 @@ const UpdateModal = ({ isOpen, onClose, version }) => {
           subcategory: 'Jahresansicht',
           items: [
             { text: 'Optische Anpassungen', type: 'fixed' },
-            { text: 'Tabellenskalierung noch nicht optimal', type: 'not-fixed' },
           ],
         },
         {
           subcategory: 'Leistungsansicht',
           items: [
             { text: 'Überfachliche Kompetenzen Bugfix', type: 'fixed' },
+            { text: 'Neues Balkendiagram für Übersicht.', type: 'fixed' },
+            { text: 'Karte mit ungenügenden Schülern mit spezifischen Fachbereichen', type: 'fixed' },
           ],
         },
       ],
@@ -52,7 +60,6 @@ const UpdateModal = ({ isOpen, onClose, version }) => {
           items: [
             { text: 'Jahrestabelle optimieren', type: 'not-fixed' },
             { text: 'Allerleilektionsmerging einfügen', type: 'not-fixed' },
-            { text: 'Halbklassenlektionslogik', type: 'not-fixed' },
             { text: 'Sofortige Titelübernahme LessonCard in Jahresansicht', type: 'not-fixed' },
           ],
         },

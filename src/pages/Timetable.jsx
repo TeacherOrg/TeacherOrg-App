@@ -436,7 +436,7 @@ function InnerTimetablePage() {
   }, [refetch, setRenderKey]);
 
   return (
-    <div className="timetable-page-container flex flex-col h-screen overflow-hidden bg-slate-50 dark:bg-slate-900">
+    <div className="timetable-page-container flex flex-col h-screen overflow-hidden bg-gradient-to-br from-slate-50 via-slate-100 to-slate-200 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 transition-colors duration-300">
       <div className="timetable-header-container">
         <TimetableHeader
           currentView={currentView}

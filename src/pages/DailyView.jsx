@@ -603,7 +603,7 @@ export default function DailyView({ currentDate, onDateChange }) {
     <motion.div 
       className={`h-screen w-screen overflow-hidden relative text-slate-800 dark:text-slate-200 font-[Poppins] ${
         customization.background.type === 'gradient' ? `bg-gradient-to-br ${customization.background.value}` :
-        (customization.background.type === 'solid' || customization.background.type === 'image' ? '' : 'bg-slate-100 dark:bg-slate-900')
+        (customization.background.type === 'solid' || customization.background.type === 'image' ? '' : 'bg-gradient-to-br from-slate-50 via-slate-100 to-slate-200 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950')
       }`}
       style={customization.background.type !== 'gradient' ? getBackgroundStyle() : {}}
       initial={{ opacity: 0 }}

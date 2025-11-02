@@ -579,7 +579,7 @@ export default function Chores() {
     weekEndDate.setDate(weekEndDate.getDate() + 4);
 
     return (
-        <div className="min-h-screen bg-gray-50 dark:bg-slate-900 p-6 flex flex-col transition-colors duration-300">
+        <div className="min-h-screen bg-gradient-to-br from-slate-50 via-slate-100 to-slate-200 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 p-6 flex flex-col transition-colors duration-300">
             <div className="flex flex-wrap gap-4 items-center mb-6">
                 <Select value={activeClassId || ''} onValueChange={setActiveClassId} disabled={isLoading || classes.length === 0}>
                     <SelectTrigger className="bg-white dark:bg-slate-800 border-gray-300 dark:border-slate-700 rounded-xl text-gray-800 dark:text-white placeholder:text-gray-400 dark:placeholder:text-slate-400 w-48">

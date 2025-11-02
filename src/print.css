@@ -1,0 +1,345 @@
+/* Stelle sicher, dass Hintergrundfarben und Linien gedruckt werden */
+* {
+  -webkit-print-color-adjust: exact !important;
+  color-adjust: exact !important;
+  print-color-adjust: exact !important;
+  box-sizing: border-box !important;
+}
+
+body {
+  background: #fff !important;
+  color: #000 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+/* Verstecke ALLES außer dem Grid und dem Print-Titel */
+* {
+  display: none !important;
+}
+
+.timetable-grid-with-print,
+.timetable-grid-container,
+.timetable-grid-container > *,
+.print-title {
+  display: block !important;  /* Nur Grid und Titel sichtbar */
+}
+
+.timetable-grid-container > div {
+  display: table-cell !important;  /* Für Grid-as-Table */
+}
+
+/* Verstecke spezifisch nicht-druckbare UI (erweitert für deine Beschreibung) */
+.timetable-page-container > *:not(.timetable-content),
+.timetable-content > *:not(.timetable-grid-wrapper),
+.timetable-grid-wrapper > *:not(.timetable-grid-with-print),
+.timetable-header-container,  /* Header mit App-Name/Datum? */
+.app-name,  /* Falls App-Name eine Klasse hat; passe bei Bedarf */
+.date,  /* Alle Datum-Elemente */
+.nav-button,  /* Buttons für Tag/Woche/Jahr */
+.button,  /* Alle Buttons */
+.Button,  /* Shadcn-Buttons */
+.nav-bar,  /* Falls es eine Nav-Leiste gibt */
+.timeline,  /* Für "Timegrid der Leiste" – falls Timeline-Klasse */
+.timegrid,  /* Alternative für "Timegrid" */
+.floating-quick-actions,
+.quick-actions-panel,
+.print-button-container,
+.no-print,
+.SelectTrigger,
+nav,
+header,
+footer,
+.sidebar,
+.any-other-non-grid-class {  /* Füge bei Bedarf mehr Klassen hinzu, z.B. aus deinem DOM */
+  display: none !important;
+  visibility: hidden !important;
+}
+
+/* Speziell für DayHeader: Verstecke Datum, behalte nur Tag-Namen (angenommen, Datum hat eine Sub-Klasse) */
+.timetable-grid-container .sticky.top-0 .date,  /* Passe Selector an, falls Datum eine Klasse hat */
+.timetable-grid-container .sticky.top-0 [class*="date"] {
+  display: none !important;
+}
+
+/* Timetable Page: volle Breite, kein Overflow-Hiding */
+.timetable-page-container {
+  height: auto !important;
+  overflow: visible !important;
+  padding: 0 !important;
+  background: #fff !important;
+  display: block !important;  /* Sichtbar, aber minimiert */
+}
+
+.timetable-content,
+.timetable-grid-wrapper {
+  overflow: visible !important;
+  max-width: 100% !important;
+  width: 100% !important;
+  margin: 0 auto !important;
+  padding: 0 !important;
+  display: block !important;
+}
+
+/* Grid: entferne Rundungen/Schatten und erlaube volle Breite */
+.timetable-grid-container {
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  background: #fff !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  -webkit-print-color-adjust: exact !important;
+  transform: none !important;
+  zoom: 1 !important;
+  display: table !important;  /* Fallback zu table für besseren Print-Support */
+  border-collapse: collapse !important;
+}
+
+/* Sticky-Elemente machen in Druck statisch */
+.timetable-grid-container .sticky,
+.timetable-grid-container [class*="sticky-"],
+.sticky-week-column,
+.sticky-subject-header,
+.sticky-corner-cell,
+.sticky-top {
+  position: static !important;
+  top: auto !important;
+  left: auto !important;
+  z-index: auto !important;
+  border: 0.5mm solid #000 !important;  /* Dickere Linien für Print */
+}
+
+/* Vermeide Seitenumbrüche innerhalb des Grids */
+.timetable-grid-container,
+.timetable-grid-container > div,
+.timetable-grid-container td,
+.timetable-grid-container th,
+.timetable-grid-container .lesson-card,
+.timetable-grid-container .pool-item {
+  break-inside: avoid !important;
+  page-break-inside: avoid !important;
+  -webkit-column-break-inside: avoid !important;
+}
+
+/* Stelle sicher, dass Feiertags- und Lektionen-Hintergründe sichtbar sind */
+.timetable-grid-container .lesson-card,
+.timetable-grid-container .group,
+.timetable-grid-container [class*="bg-"] {
+  background-clip: padding-box !important;
+  -webkit-print-color-adjust: exact !important;
+}
+
+/* Optional: leichte Skalierung, falls Grid zu breit ist — reduziert auf 95% */
+.timetable-grid-container {
+  transform-origin: top center;
+  transform: scale(0.95);
+}
+
+/* Entferne Hover-Overlays und Interaktive Styles */
+.group-hover\:opacity-100,
+.group-hover\:border-blue-400,
+.group:hover .group-hover\:opacity-100 {
+  opacity: 1 !important;
+}
+
+/* Druck-Fonts und Kontrast */
+body, .timetable-grid-container {
+  font-family: "Inter", sans-serif !important;
+  color: #111 !important;
+}
+
+/* Grid-Linien erzwingen: Alle Zellen bekommen dickere Borders, auch mit Inhalt */
+.timetable-grid-container > * {
+  border: 0.5mm solid #000 !important;  /* Dickere Linien (physikalisch für Print) */
+  border-style: solid !important;  /* Explizit solid */
+}
+
+/* Speziell für Rows und Columns: Horizontale/Vertikale Linien sichern */
+.timetable-grid-container .border-b,
+.timetable-grid-container .border-r {
+  border-bottom: 0.5mm solid #000 !important;
+  border-right: 0.5mm solid #000 !important;
+}
+
+/* Leere Zellen (z. B. occupied oder holidays) nicht ignorieren */
+.timetable-grid-container .relative {
+  border: 0.5mm solid #000 !important;
+  background: #fff !important;  /* Weißer Hintergrund für Klarheit */
+}
+
+/* Fallback für fehlende Borders: Leichter Shadow als Linien-Simulation */
+.timetable-grid-container > * {
+  box-shadow: inset 0 0 0 0.5mm #000 !important;  /* Innerer Shadow als Backup für Linien */
+}
+
+/* Stelle sicher, dass Linien nicht von Inhalten überdeckt werden */
+.timetable-grid-container .lesson-card,
+.timetable-grid-container .relative > div {
+  position: relative !important;
+  z-index: 1 !important;  /* Inhalt über Linien, aber Linien bleiben sichtbar */
+  background-clip: content-box !important;  /* Verhindert Überdeckung von Borders */
+}
+
+/* Fixe Größen erzwingen */
+.timetable-grid-container {
+  --cell-height: 20mm !important;
+  --cell-width: 30mm !important;
+  grid-template-columns: 30mm repeat(5, var(--cell-width)) !important;
+  grid-template-rows: auto repeat(var(--num-slots), var(--cell-height)) !important;
+  table-layout: fixed !important;
+}
+
+/* Jede Zelle fix */
+.timetable-grid-container > * {
+  min-height: var(--cell-height) !important;
+  height: var(--cell-height) !important;
+  min-width: var(--cell-width) !important;
+  width: var(--cell-width) !important;
+}
+
+/* Für Doppellektionen: Exakte doppelte Höhe */
+.timetable-grid-container [style*="gridRow: span 2"] {
+  min-height: calc(var(--cell-height) * 2) !important;
+  height: calc(var(--cell-height) * 2) !important;
+}
+
+/* TimeSlot und Header anpassen */
+.timetable-grid-container .sticky.left-0,
+.timetable-grid-container .bg-white.dark\:bg-slate-800.sticky.top-0 {
+  width: 30mm !important;
+  height: auto !important;  /* Header bleibt auto */
+  border: 0.5mm solid #000 !important;
+}
+
+/* LessonCards minimalistisch, aber farbig erhalten (kein Override für Background-Color) */
+.lesson-card {
+  border-radius: 0 !important;  /* Keine Rundungen */
+  background-image: none !important;  /* Keine Gradients/Verläufe */
+  box-shadow: none !important;  /* Keine Schatten */
+  padding: 4px !important;  /* Minimales Padding */
+  font-size: 10pt !important;
+  color: #000 !important;
+  border: none !important;  /* Keine extra Border auf Card, um Grid-Linien nicht zu überdecken */
+  height: 100% !important;
+  width: 100% !important;
+  overflow: hidden !important;
+  -webkit-print-color-adjust: exact !important;  /* Farben erzwingen */
+}
+
+/* Entferne interaktive Elemente in Cards */
+.lesson-card button,
+.lesson-card .group-hover\:* {
+  display: none !important;
+}
+
+/* Holidays minimalistisch */
+.timetable-grid-container .relative[data-holiday] {
+  background: #e0e0e0 !important;  /* Flach grau, aber farbig */
+  font-size: 8pt !important;
+}
+
+/* Print-Titel: Nur im Print sichtbar, zentriert oben */
+.print-title {
+  display: block !important;
+  text-align: center !important;
+  font-size: 16pt !important;
+  font-weight: bold !important;
+  margin: 10mm 0 5mm 0 !important;  /* Abstand oben/unten */
+  color: #000 !important;
+}
+
+/* Ergänzungen/Überarbeitungen zur bestehenden Print-CSS */
+
+/* Verstecke zusätzliche Elemente explizit (erweitert deine Liste) */
+.print-button-container,
+.print-button,
+.timetable-pool-container,  /* Pool komplett verstecken */
+.timetable-inner > *:not(.timetable-grid-wrapper),  /* Alles außer Grid */
+.timetable-content > *:not(.timetable-grid-wrapper),
+.Button:not(.print-button),  /* Alle Shadcn-Buttons außer dem Print (der eh versteckt wird) */
+[data-radix-collection-item],  /* Radix/Shadcn-Selects/Triggers */
+.any-interactive-element {  /* Füge bei Bedarf mehr */
+  display: none !important;
+}
+
+/* Grid zu Table umwandeln: Vollständiger Fallback für Print */
+.timetable-grid-container {
+  display: table !important;
+  border-collapse: collapse !important;  /* Borders mergen, keine Lücken */
+  table-layout: fixed !important;  /* Feste Breiten, verhindert Stretching */
+  width: 100% !important;
+  max-width: none !important;  /* Vollbreite im Print */
+  transform: scale(1) !important;  /* Keine Skalierung, um Borders scharf zu halten */
+}
+
+.timetable-grid-container > * {
+  display: table-cell !important;  /* Alle direkten Kinder zu Cells */
+  border: 0.5mm solid #000 !important;  /* Dickere, schwarze Borders für alle */
+  padding: 2mm !important;  /* Minimales Inneres Padding für Inhalt */
+  vertical-align: top !important;  /* Inhalt oben ausrichten */
+}
+
+/* Rows simulieren (für Grid-Rows) */
+.timetable-grid-container > div:nth-child(n+7) {  /* Ab Row 2 (nach Header) */
+  display: table-row !important;  /* Gruppiere zu Rows */
+}
+
+/* Borders für leere/occupied/holiday Zellen erzwingen */
+.timetable-grid-container .relative,
+.timetable-grid-container .relative[data-holiday],
+.timetable-grid-container .occupied {  /* Füge .occupied hinzu, falls du das in JSX setzt */
+  border: 0.5mm solid #000 !important;
+  background: #fff !important;  /* Weiß für Klarheit, überdeckt nichts */
+  height: var(--cell-height) !important;  /* Fixe Höhe, verhindert Kollaps */
+}
+
+/* Double-Lessons: Borders anpassen, damit keine Lücken */
+.timetable-grid-container [style*="gridRow: span 2"],
+.timetable-grid-container .is-double-lesson {  /* Füge Klasse in JSX hinzu */
+  border-bottom: 0.5mm solid #000 !important;  /* Bottom-Border auch bei Span */
+  height: calc(var(--cell-height) * 2) !important;
+}
+
+/* Header und Time-Slots: Dickere Borders */
+.timetable-grid-container .sticky.top-0,
+.timetable-grid-container .sticky.left-0 {
+  border: 0.5mm solid #000 !important;
+  font-weight: bold !important;  /* Für besseren Kontrast */
+}
+
+/* Vermeide Seitenumbrüche in Rows/Zellen */
+.timetable-grid-container,
+.timetable-grid-container > div {
+  page-break-inside: avoid !important;
+  break-inside: avoid-column !important;
+}
+
+/* Farben/Hintergründe im Print erzwingen (für Lessons/Holidays) */
+.timetable-grid-container .lesson-card,
+.timetable-grid-container [class*="bg-"] {
+  -webkit-print-color-adjust: exact !important;
+  print-color-adjust: exact !important;
+  background-color: inherit !important;  /* Behält Farbe */
+}
+
+/* Print-Titel: Besser positionieren */
+.print-title {
+  display: block !important;
+  margin: 5mm 0 3mm 0 !important;  /* Kleinerer Abstand */
+  page-break-after: avoid !important;  /* Kein Umbruch direkt danach */
+}
+
+/* @media print: Globale Page-Setup (Margins, Size) */
+@media print {
+  @page {
+    size: A4 landscape;  /* Querformat für breiten Stundenplan */
+    margin: 10mm 5mm 10mm 5mm;  /* Weniger seitlich für mehr Platz */
+  }
+  body {
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+  .timetable-page-container {
+    height: auto !important;  /* Vollhöhe */
+  }
+}

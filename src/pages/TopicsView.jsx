@@ -51,7 +51,7 @@ const TopicsView = () => {
   };
 
   return (
-    <div className="p-6 bg-slate-50 dark:bg-slate-900 min-h-screen">
+    <div className="p-6 bg-gradient-to-br from-slate-50 via-slate-100 to-slate-200 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 min-h-screen transition-colors duration-300">
       <h1 className="text-2xl font-bold mb-6 text-slate-800 dark:text-white">Themenansicht</h1>
       <div className="space-y-8">
         {subjects?.map((subject) => {

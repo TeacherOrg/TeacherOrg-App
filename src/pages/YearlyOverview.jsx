@@ -776,7 +776,7 @@ const handleLessonClick = useCallback(async (lesson, slot) => {
   const activeClassName = useMemo(() => classes.find(c => c.id === activeClassId)?.name || '', [classes, activeClassId]);
 
   return (
-    <div className="h-screen flex flex-col bg-slate-50 dark:bg-slate-900 overflow-hidden">
+    <div className="h-screen flex flex-col bg-gradient-to-br from-slate-50 via-slate-100 to-slate-200 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 overflow-hidden transition-colors duration-300">
       <div className="flex-shrink-0 z-30 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-slate-200 dark:border-slate-700 shadow-sm sticky top-0">
         <div className="p-6 pb-4 max-w-none mx-auto">
           <motion.div

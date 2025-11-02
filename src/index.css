@@ -691,6 +691,10 @@ html, body, #root {
     max-width: 100%; /* Verhindert Überlauf */
     z-index: 10; /* Unter Pool */
     padding-right: 16px; /* Freiraum rechts, um Abschneiden zu vermeiden */
+    border: 0.5mm solid #000;  /* Globale Border für Grid */
+  }
+  @media print {
+    /* Redirect zu Print-CSS, falls nötig */
   }
 
   .dark .timetable-grid-container {
@@ -996,4 +1000,44 @@ html, body, #root {
   .lesson-detail-table {
     font-size: 0.75rem;
   }
+}
+
+/* TimetableGrid: Druck-Button unterhalb des Grid zentrieren */
+.print-button-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin-top: 0.5rem; /* kleiner Abstand unterhalb des Stundenplans */
+  padding-bottom: 0.25rem;
+  width: 100%;
+  z-index: 15;
+}
+
+/* Leichtes visuelles Styling für den Button (ersetzt nicht das Variant Styling) */
+.print-button {
+  min-width: 120px;
+  padding: 0.4rem 0.75rem;
+  border-radius: 0.5rem;
+  /* Fallback-Farben, Button-Variant steuert das meiste */
+  background: transparent;
+  color: var(--foreground);
+  box-shadow: none;
+}
+
+/* Responsive: auf sehr kleinen Screens etwas enger */
+@media (max-width: 480px) {
+  .print-button-container {
+    margin-top: 0.35rem;
+    padding-bottom: 0.15rem;
+  }
+  .print-button {
+    min-width: 100px;
+    padding: 0.3rem 0.6rem;
+    font-size: 0.95rem;
+  }
+}
+
+/* Print-Titel: Standardmäßig versteckt */
+.print-title {
+  display: none;
 }
