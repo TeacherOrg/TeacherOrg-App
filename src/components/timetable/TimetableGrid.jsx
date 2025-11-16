@@ -9,18 +9,54 @@ import LessonCard from "./LessonCard";
 import { useDraggable } from "@dnd-kit/core";
 
 const getHolidayDisplay = (holiday) => {
-  if (!holiday) return { emoji: '', color: '' };
+  if (!holiday) return { emoji: '', gradient: '', pattern: '' };
   switch (holiday.type) {
-    case 'vacation': 
-      if (holiday.name.includes('Sommer')) return { emoji: '☀️', color: 'bg-yellow-800/60' };
-      if (holiday.name.includes('Herbst')) return { emoji: '🍂', color: 'bg-orange-800/60' };
-      if (holiday.name.includes('Weihnacht')) return { emoji: '🎄', color: 'bg-green-800/60' };
-      if (holiday.name.includes('Sport')) return { emoji: '⛷️', color: 'bg-blue-800/60' };
-      if (holiday.name.includes('Frühling')) return { emoji: '🌸', color: 'bg-pink-800/60' };
-      return { emoji: '🏖️', color: 'bg-cyan-800/60' };
-    case 'holiday': return { emoji: '🎉', color: 'bg-purple-800/60' };
-    case 'training': return { emoji: '📚', color: 'bg-indigo-800/60' };
-    default: return { emoji: '📅', color: 'bg-gray-800/60' };
+      case 'vacation': 
+          if (holiday.name.includes('Sommer')) return { 
+            emoji: '☀️', 
+            gradient: 'linear-gradient(135deg, #fbbf24 0%, #f59e0b 50%, #fb923c 100%)',
+            pattern: 'radial-gradient(circle at 20% 80%, rgba(251, 191, 36, 0.3) 0%, transparent 50%), radial-gradient(circle at 80% 20%, rgba(245, 158, 11, 0.3) 0%, transparent 50%)'
+          };
+          if (holiday.name.includes('Herbst')) return { 
+            emoji: '🍂', 
+            gradient: 'linear-gradient(135deg, #f97316 0%, #ea580c 50%, #dc2626 100%)',
+            pattern: 'repeating-linear-gradient(45deg, transparent, transparent 10px, rgba(249, 115, 22, 0.1) 10px, rgba(249, 115, 22, 0.1) 20px)'
+          };
+          if (holiday.name.includes('Weihnacht')) return { 
+            emoji: '🎄', 
+            gradient: 'linear-gradient(135deg, #059669 0%, #047857 50%, #065f46 100%)',
+            pattern: 'radial-gradient(circle at 20% 30%, rgba(255, 255, 255, 0.12) 2px, transparent 2px), radial-gradient(circle at 60% 70%, rgba(255, 255, 255, 0.08) 3px, transparent 3px), radial-gradient(circle at 80% 20%, rgba(255, 255, 255, 0.15) 2px, transparent 2px), radial-gradient(circle at 35% 80%, rgba(255, 255, 255, 0.1) 2px, transparent 2px), radial-gradient(circle at 50% 40%, rgba(255, 255, 255, 0.1) 2.5px, transparent 2.5px), radial-gradient(circle at 15% 60%, rgba(255, 255, 255, 0.09) 2px, transparent 2px), radial-gradient(circle at 70% 50%, rgba(255, 255, 255, 0.11) 2px, transparent 2px), radial-gradient(circle at 40% 15%, rgba(255, 255, 255, 0.13) 2.5px, transparent 2.5px), radial-gradient(circle at 85% 65%, rgba(255, 255, 255, 0.1) 2px, transparent 2px), radial-gradient(circle at 25% 90%, rgba(255, 255, 255, 0.08) 3px, transparent 3px), radial-gradient(circle at 90% 85%, rgba(255, 255, 255, 0.12) 2px, transparent 2px), radial-gradient(circle at 45% 55%, rgba(255, 255, 255, 0.09) 2.5px, transparent 2.5px)'
+          };
+          if (holiday.name.includes('Sport')) return { 
+            emoji: '⛷️', 
+            gradient: 'linear-gradient(135deg, #0ea5e9 0%, #0284c7 50%, #0369a1 100%)',
+            pattern: 'linear-gradient(45deg, rgba(255, 255, 255, 0.1) 25%, transparent 25%, transparent 75%, rgba(255, 255, 255, 0.1) 75%)'
+          };
+          if (holiday.name.includes('Frühling')) return { 
+            emoji: '🌷', 
+            gradient: 'linear-gradient(135deg, #a78bfa 0%, #8b5cf6 50%, #7c3aed 100%)',
+            pattern: 'radial-gradient(circle at 30% 30%, rgba(167, 139, 250, 0.3) 0%, transparent 50%), radial-gradient(circle at 70% 70%, rgba(139, 92, 246, 0.2) 0%, transparent 50%)'
+          };
+          return { 
+            emoji: '🏖️', 
+            gradient: 'linear-gradient(135deg, #06b6d4 0%, #0891b2 50%, #0e7490 100%)',
+            pattern: 'repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.1) 0px, transparent 2px, transparent 10px)'
+          };
+      case 'holiday': return { 
+        emoji: '🎉', 
+        gradient: 'linear-gradient(135deg, #a855f7 0%, #9333ea 50%, #7e22ce 100%)',
+        pattern: 'radial-gradient(circle at 50% 50%, rgba(168, 85, 247, 0.3) 0%, transparent 70%)'
+      };
+      case 'training': return { 
+        emoji: '📚', 
+        gradient: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 50%, #4338ca 100%)',
+        pattern: 'repeating-linear-gradient(0deg, transparent, transparent 15px, rgba(99, 102, 241, 0.15) 15px, rgba(99, 102, 241, 0.15) 30px)'
+      };
+      default: return { 
+        emoji: '📅', 
+        gradient: 'linear-gradient(135deg, #64748b 0%, #475569 50%, #334155 100%)',
+        pattern: ''
+      };
   }
 };
 
@@ -64,7 +100,7 @@ const SlotCell = ({ dayIndex, rowNum, holiday, holidayDisplay, isOccupied, lesso
 
   return (
     <div
-      className={`relative border-r ${dayIndex < DAYS.length - 1 ? 'border-r-slate-300 dark:border-r-slate-700' : 'border-r-transparent'} border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 group ${holiday ? holidayDisplay.color : ''} text-left min-w-0 overflow-hidden ${isLastRow || lesson?.is_double_lesson ? 'border-b-0' : 'border-b'}`}
+      className={`relative border-r ${dayIndex < DAYS.length - 1 ? 'border-r-slate-300 dark:border-r-slate-700' : 'border-r-transparent'} border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 group text-left min-w-0 overflow-hidden ${isLastRow || lesson?.is_double_lesson ? 'border-b-0' : 'border-b'}`}
       style={{
         gridRow: rowNum,
         gridColumn: dayIndex + 2,
@@ -74,6 +110,10 @@ const SlotCell = ({ dayIndex, rowNum, holiday, holidayDisplay, isOccupied, lesso
           minHeight: `calc(var(--cell-height, 80px) * 2 - 1px)`,
           borderBottom: 'none',
           overflow: 'hidden',
+        } : {}),
+        ...(holiday ? {
+          background: holidayDisplay.gradient,
+          backgroundImage: holidayDisplay.pattern,
         } : {})
       }}
     >

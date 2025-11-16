@@ -19,27 +19,21 @@ const UpdateModal = ({ isOpen, onClose, version }) => {
         {
           subcategory: 'Allgemein',
           items: [
-            { text: 'OliGay', type: 'fixed' },
-            { text: 'Neue Darkmodefarbe', type: 'fixed' },
-          ],
-        },
-        {
-          subcategory: 'Wochenansicht',
-          items: [
-            { text: 'Diverse Verbesserungen (Grösseneinstellungen, Effizienz, Drag und Drop)', type: 'fixed' },
-            { text: 'Halbklassenlektion werden korrekt kopiert und angezeigt', type: 'fixed' },
-          ],
-        },
-        {
-          subcategory: 'Lektionsmodal',
-          items: [
-            { text: 'Scrollbar für Erweiterungen', type: 'fixed' },
+            { text: 'OliOmegaGay', type: 'fixed' },
           ],
         },
         {
           subcategory: 'Jahresansicht',
           items: [
             { text: 'Fixe Fachzeile', type: 'fixed' },
+            { text: 'Fachzeile mit Fachfarben', type: 'fixed' },
+            { text: 'Skalierungsanpassungen', type: 'fixed' },
+          ],
+        },
+        {
+          subcategory: 'Themenansicht',
+          items: [
+            { text: 'Themenzuweisung bestehender Lektionen', type: 'fixed' },
           ],
         },
         {

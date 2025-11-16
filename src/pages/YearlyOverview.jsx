@@ -20,6 +20,7 @@ import { adjustColor } from '@/utils/colorUtils';
 import { useLessonStore } from '@/store';
 import pb from '@/api/pb';
 import { Plus } from "lucide-react";
+import toast from 'react-hot-toast';
 
 const ACADEMIC_WEEKS = 52;
 
@@ -144,63 +145,71 @@ function InnerYearlyOverviewPage() {
 
   // Füge hier ein:
   const handleSelectLesson = useCallback((slot) => {
-    if (!slot || typeof slot.week_number === 'undefined' || !slot.subject || typeof slot.lesson_number === 'undefined') {
-      console.error('Invalid slot for selection:', slot);
-      return;
-    }
+    if (!slot?.week_number || !slot.subject || slot.lesson_number == null) return;
+
     const key = `${slot.week_number}-${slot.subject}-${slot.lesson_number}`;
+
     setSelectedLessons(prev => {
-      const safePrev = prev.filter(k => typeof k === 'string');
-      if (safePrev.includes(key)) {
-        return safePrev.filter(k => k !== key);
+      const exists = prev.includes(key);
+      if (exists) {
+        // toast.success("Auswahl entfernt");
+        return prev.filter(k => k !== key);
+      } else {
+        // toast.success("Slot ausgewählt");
+        return [...prev, key];
       }
-      return [...safePrev, key];
     });
   }, []);
 
   const handleAssignAndBack = async () => {
-    const topicId = searchParams.get('topic');
-    if (!topicId) {
-      console.error('No topicId provided for assign');
+    if (selectedLessons.length === 0) {
+      toast.error("Bitte wähle mindestens eine Lektion/Slot aus");
       return;
     }
+    const assignTopicId = searchParams.get("topic");
+    if (!assignTopicId) return;
 
+    const subjectObj = subjects.find(
+      (s) => s.name.toLowerCase() === assignSubject?.toLowerCase()
+    );
+
+    const updates = selectedLessons.map(async (key) => {
+      const [week, subjName, number] = key.split("-");
+      const weekNum = parseInt(week);
+      const lessonNum = parseInt(number);
+
+      const existingLesson = lessonsForYear.find(
+        (l) =>
+          l.week_number === weekNum &&
+          l.subject === subjectObj?.id &&
+          l.lesson_number === lessonNum
+      );
+
+      if (existingLesson) {
+        await YearlyLesson.update(existingLesson.id, { topic_id: assignTopicId });
+      } else {
+        // Leerer Slot → neue Lektion anlegen
+        await YearlyLesson.create({
+          week_number: weekNum,
+          lesson_number: lessonNum,
+          subject: subjectObj?.id,
+          school_year: currentYear,
+          topic_id: assignTopicId,
+          user_id: pb.authStore.model?.id,
+          class_id: activeClassId || subjectObj?.class_id,
+          name: "Neue Lektion",
+        });
+      }
+    });
+
+    await Promise.all(updates);
+    // Draft-Status entfernen falls vorhanden
     try {
-      const updates = selectedLessons.map(key => {
-        const [week, subject, number] = key.split('-');
-        const lesson = lessonsForYear.find(l => l.week_number == week && l.subject === subject && l.lesson_number == number);
-        if (lesson) {
-          return YearlyLesson.update(lesson.id, { topic_id: topicId });
-        } else {
-          const subjectObj = subjects.find(s => s.name.toLowerCase() === subject.toLowerCase());
-          if (!subjectObj) {
-            console.error('No subject found for:', subject);
-            return Promise.resolve();
-          }
-          return YearlyLesson.create({
-            week_number: parseInt(week),
-            lesson_number: parseInt(number),
-            subject: subjectObj.id,
-            school_year: currentYear,
-            topic_id: topicId,
-            user_id: pb.authStore.model.id,
-            class_id: activeClassId,
-            name: 'Neue Lektion'
-          });
-        }
-      });
+      await Topic.update(assignTopicId, { /* is_draft: false – falls du das Feld hast */ });
+    } catch (_) {}
 
-      await Promise.all(updates);
-      await Topic.update(topicId, { is_draft: false });
-      // Save topicId to localStorage for modal to load
-      const draft = JSON.parse(localStorage.getItem('draftTopic')) || {};
-      draft.topicId = topicId;
-      localStorage.setItem('draftTopic', JSON.stringify(draft));
-      navigate(-1); // Back to modal
-    } catch (error) {
-      console.error('Error assigning lessons:', error);
-      alert('Fehler beim Zuweisen der Lektionen: ' + (error.data?.message || 'Unbekannter Fehler'));
-    }
+    navigate(-1);
+    toast.success("Lektionen erfolgreich zugewiesen!");
   };
 
   const queryClientLocal = useQueryClient();
@@ -209,11 +218,11 @@ function InnerYearlyOverviewPage() {
     queryKey: ['yearlyData', currentYear],
     queryFn: async () => {
       const [lessonsData, topicsData, subjectsData, classesData, holidaysData] = await Promise.all([
-        YearlyLesson.list({ user_id: pb.authStore.model.id }),
-        Topic.list({ 'class_id.user_id': pb.authStore.model.id }),
-        Subject.list({ 'class_id.user_id': pb.authStore.model.id }),
-        Class.list({ user_id: pb.authStore.model.id }),
-        Holiday.list({ user_id: pb.authStore.model.id })
+        YearlyLesson.list({ user_id: pb.authStore.model?.id }),
+        Topic.list({ 'class_id.user_id': pb.authStore.model?.id }),
+        Subject.list({ 'class_id.user_id': pb.authStore.model?.id }),
+        Class.list({ user_id: pb.authStore.model?.id }),
+        Holiday.list({ user_id: pb.authStore.model?.id })
       ]);
       return { lessonsData, topicsData, subjectsData, classesData, holidaysData };
     },
@@ -301,280 +310,324 @@ function InnerYearlyOverviewPage() {
   }, [subjects, activeClassId]);
 
   const displayedSubjects = useMemo(() => {
-    if (activeClassId == null) {
-      // Alle Klassen → alle Fächer, sortiert nach Klassenname + Fachname
+    if (isAssignMode && assignSubject) {
+      const subj = subjects.find(
+        (s) => s.name.toLowerCase() === assignSubject.toLowerCase()
+      );
+      return subj ? [subj] : [];
+    }
+
+    // Normaler Code für Nicht-Assign-Modus
+    if (!activeClassId) {
       const allSubjects = [];
       const sortedClasses = [...classes].sort((a, b) => a.name.localeCompare(b.name));
-      sortedClasses.forEach(cls => {
+      sortedClasses.forEach((cls) => {
         const classSubjects = subjects
-          .filter(s => s.class_id === cls.id)
+          .filter((s) => s.class_id === cls.id)
           .sort((a, b) => a.name.localeCompare(b.name));
         allSubjects.push(...classSubjects);
       });
       return allSubjects;
     }
 
-    // Einzelne Klasse
-    return subjects.filter(s => s.class_id === activeClassId);
-  }, [subjects, activeClassId, classes]);
+    return subjects.filter((s) => s.class_id === activeClassId);
+  }, [isAssignMode, assignSubject, subjects, activeClassId, classes]);
 
   const activeClassName = useMemo(() => classes.find(c => c.id === activeClassId)?.name || '', [classes, activeClassId]);
 
   const activeClassDisplayName = activeClassId === null ? 'Alle Klassen' : activeClassName;
 
   const lessonsForYear = useMemo(() => {
-    let filtered = yearlyLessons.filter(lesson => Number(lesson.school_year) === currentYear || !lesson.school_year);
+    let filtered = yearlyLessons.filter(
+      (lesson) => Number(lesson.school_year) === currentYear || !lesson.school_year
+    );
+
     if (isAssignMode && assignSubject) {
-      const subject = subjects.find(s => s.name.toLowerCase() === assignSubject.toLowerCase());
-      if (subject) {
-        filtered = filtered.filter(lesson => lesson.subject === subject.id && !lesson.topic_id);
+      const subjectObj = subjects.find(
+        (s) => s.name.toLowerCase() === assignSubject.toLowerCase()
+      );
+      if (subjectObj) {
+        // ALLE Lektionen des Fachs anzeigen (nicht nur freie)
+        filtered = filtered.filter((lesson) => lesson.subject === subjectObj.id);
       } else {
-        console.error('No subject found for assignSubject:', assignSubject);
         filtered = [];
       }
     }
+
     return filtered;
   }, [yearlyLessons, currentYear, isAssignMode, assignSubject, subjects]);
 
-  const handleLessonClick = useCallback(async (lesson, slot) => {
-    if (isAssignMode) {
-      const id = lesson?.id || `${slot.week_number}-${slot.subject}-${slot.lesson_number}`;
-      setSelectedLessons(prev => {
-        if (prev.includes(id)) {
-          return prev.filter(l => l !== id);
-        }
-        return [...prev, id];
-      });
-      return;
-    }
-
-    if (activeTopicId) {
-      if (lesson && lesson.id) {
-        const newTopicId = lesson.topic_id === activeTopicId ? null : activeTopicId;
-        let lessonsToUpdate = lesson.mergedLessons || [lesson];
-        let tempUpdatedPrev = yearlyLessons.map(p => {
-          const toUpdate = lessonsToUpdate.find(l => l.id === p.id);
-          if (toUpdate) {
-            return { ...p, topic_id: newTopicId };
-          }
-          return p;
-        });
-
-        const gapPromises = [];
-        if (newTopicId) {
-          const weekLessons = tempUpdatedPrev
-            .filter(l => l.week_number === lesson.week_number && l.subject === lesson.subject && l.topic_id === newTopicId)
-            .sort((a, b) => Number(a.lesson_number) - Number(b.lesson_number));
-
-          if (weekLessons.length > 1) {
-            const minNum = Math.min(...weekLessons.map(l => Number(l.lesson_number)));
-            const maxNum = Math.max(...weekLessons.map(l => Number(l.lesson_number)));
-
-            for (let num = minNum; num <= maxNum; num++) {
-              if (!weekLessons.some(l => Number(l.lesson_number) === num)) {
-                const gapSlot = { week_number: lesson.week_number, subject: lesson.subject, lesson_number: num, school_year: currentYear };
-                const gapLesson = {
-                  id: `temp-gap-${Date.now() + num}`,
-                  ...gapSlot,
-                  topic_id: newTopicId,
-                  notes: '',
-                  is_double_lesson: false,
-                  second_yearly_lesson_id: null
-                };
-                tempUpdatedPrev = [...tempUpdatedPrev, gapLesson];
-
-                const createPromise = YearlyLesson.create({
-                  ...gapSlot,
-                  topic_id: newTopicId,
-                  notes: '',
-                  is_double_lesson: false,
-                  second_yearly_lesson_id: null,
-                  name: 'Neue Lektion',
-                  description: '',
-                  user_id: pb.authStore.model.id,
-                  class_id: activeClassId, // Sicherstellen, dass class_id gesetzt ist
-                  subject: subjects.find(s => s.name === gapSlot.subject)?.id
-                }).then(gapCreated => {
-                  optimisticUpdateYearlyLessons(gapLesson, false, true);
-                  optimisticUpdateYearlyLessons(gapCreated, true);
-                }).catch(err => {
-                  console.error("Error creating gap lesson:", err);
-                  optimisticUpdateYearlyLessons(gapLesson, false, true);
-                });
-
-                gapPromises.push(createPromise);
-              }
-            }
-          }
-        }
-
-        setYearlyLessons(tempUpdatedPrev);
-
-        try {
-          await Promise.all(
-            lessonsToUpdate.map(mergedLesson =>
-              YearlyLesson.update(mergedLesson.id, { topic_id: newTopicId })
-            )
-          );
-          await Promise.all(gapPromises);
-          await refetch();
-        } catch (error) {
-          console.error("Error updating block lesson topics:", error);
-          setYearlyLessons(yearlyLessons);
-        }
-      } else if (slot) {
-        if (!activeClassId) {
-          console.error('Error: No activeClassId set for creating new lesson');
-          alert('Bitte wählen Sie eine Klasse aus, bevor Sie eine neue Lektion erstellen.');
-          return;
-        }
-        const subjectId = subjects.find(s => s.name === slot.subject)?.id;
-        console.log('Debug: Subject mapping in handleLessonClick', {
-          slotSubject: slot.subject,
-          subjectId,
-          slot,
-          availableSubjects: subjects.map(s => ({ id: s.id, name: s.name }))
-        });
-        if (!subjectId) {
-          console.error('Error: No valid subject ID found for', slot.subject);
-          alert('Ungültiges Fach. Bitte wählen Sie ein gültiges Fach aus.');
+  const handleLessonClick = useCallback(
+    async (lesson, slot) => {
+      if (isAssignMode) {
+        if (lesson?.topic_id) {
+          toast.error("Diese Lektion ist bereits einem anderen Thema zugewiesen");
           return;
         }
 
-        const newLesson = {
-          id: `temp-${Date.now()}`,
-          ...slot,
-          topic_id: activeTopicId,
-          school_year: currentYear,
-          notes: '',
-          is_double_lesson: false,
-          second_yearly_lesson_id: null,
-          class_id: activeClassId // Hinzufügen von class_id
+        // WICHTIG: immer den Namen benutzen → konsistent!
+        const subjectName = lesson 
+          ? subjects.find(s => s.id === lesson.subject)?.name || 'Unbekannt'
+          : slot.subject;   // slot.subject ist immer der Name
+
+        const selectSlot = {
+          week_number: lesson?.week_number || slot.week_number,
+          subject: subjectName,
+          lesson_number: lesson?.lesson_number || slot.lesson_number,
         };
-        optimisticUpdateYearlyLessons(newLesson, true);
 
-        const gapPromises = [];
+        handleSelectLesson(selectSlot);
+        return;
+      }
 
-        try {
-          const createdLesson = await YearlyLesson.create({
-            ...slot,
-            topic_id: activeTopicId,
-            school_year: currentYear,
-            name: 'Neue Lektion',
-            description: '',
-            user_id: pb.authStore.model.id,
-            class_id: activeClassId, // Sicherstellen, dass class_id gesetzt ist
-            subject: subjectId,
-            notes: '',
-            is_double_lesson: false,
-            second_yearly_lesson_id: null,
-            is_exam: false,
-            is_half_class: false,
-            is_allerlei: false,
-            allerlei_subjects: []
+      if (activeTopicId) {
+        if (lesson && lesson.id) {
+          const newTopicId = lesson.topic_id === activeTopicId ? null : activeTopicId;
+          let lessonsToUpdate = lesson.mergedLessons || [lesson];
+          let tempUpdatedPrev = yearlyLessons.map(p => {
+            const toUpdate = lessonsToUpdate.find(l => l.id === p.id);
+            if (toUpdate) {
+              return { ...p, topic_id: newTopicId };
+            }
+            return p;
           });
-          optimisticUpdateYearlyLessons(newLesson, false, true);
-          optimisticUpdateYearlyLessons({ ...createdLesson, lesson_number: Number(createdLesson.lesson_number) }, true);
 
-          let tempUpdatedPrev = [...yearlyLessons, { ...createdLesson, lesson_number: Number(createdLesson.lesson_number) }];
+          const gapPromises = [];
+          if (newTopicId) {
+            const weekLessons = tempUpdatedPrev
+              .filter(l => l.week_number === lesson.week_number && l.subject === lesson.subject && l.topic_id === newTopicId)
+              .sort((a, b) => Number(a.lesson_number) - Number(b.lesson_number));
 
-          const weekLessons = tempUpdatedPrev
-            .filter(l => l.week_number === slot.week_number && l.subject === slot.subject && l.topic_id === activeTopicId)
-            .sort((a, b) => Number(a.lesson_number) - Number(b.lesson_number));
+            if (weekLessons.length > 1) {
+              const minNum = Math.min(...weekLessons.map(l => Number(l.lesson_number)));
+              const maxNum = Math.max(...weekLessons.map(l => Number(l.lesson_number)));
 
-          if (weekLessons.length > 1) {
-            const minNum = Math.min(...weekLessons.map(l => Number(l.lesson_number)));
-            const maxNum = Math.max(...weekLessons.map(l => Number(l.lesson_number)));
+              for (let num = minNum; num <= maxNum; num++) {
+                if (!weekLessons.some(l => Number(l.lesson_number) === num)) {
+                  const gapSlot = { week_number: lesson.week_number, subject: lesson.subject, lesson_number: num, school_year: currentYear };
+                  const gapLesson = {
+                    id: `temp-gap-${Date.now() + num}`,
+                    ...gapSlot,
+                    topic_id: newTopicId,
+                    notes: '',
+                    is_double_lesson: false,
+                    second_yearly_lesson_id: null
+                  };
+                  tempUpdatedPrev = [...tempUpdatedPrev, gapLesson];
 
-            for (let num = minNum; num <= maxNum; num++) {
-              if (!weekLessons.some(l => Number(l.lesson_number) === num)) {
-                const gapSlot = { week_number: slot.week_number, subject: slot.subject, lesson_number: num, school_year: currentYear };
-                const gapLesson = {
-                  id: `temp-gap-${Date.now() + num}`,
-                  ...gapSlot,
-                  topic_id: activeTopicId,
-                  notes: '',
-                  is_double_lesson: false,
-                  second_yearly_lesson_id: null
-                };
-                tempUpdatedPrev = [...tempUpdatedPrev, gapLesson];
+                  const createPromise = YearlyLesson.create({
+                    ...gapSlot,
+                    topic_id: newTopicId,
+                    notes: '',
+                    is_double_lesson: false,
+                    second_yearly_lesson_id: null,
+                    name: 'Neue Lektion',
+                    description: '',
+                    user_id: pb.authStore.model.id,
+                    class_id: activeClassId, // Sicherstellen, dass class_id gesetzt ist
+                    subject: subjects.find(s => s.name === gapSlot.subject)?.id
+                  }).then(gapCreated => {
+                    optimisticUpdateYearlyLessons(gapLesson, false, true);
+                    optimisticUpdateYearlyLessons(gapCreated, true);
+                  }).catch(err => {
+                    console.error("Error creating gap lesson:", err);
+                    optimisticUpdateYearlyLessons(gapLesson, false, true);
+                  });
 
-                const createPromise = YearlyLesson.create({
-                  ...gapSlot,
-                  topic_id: activeTopicId,
-                  notes: '',
-                  is_double_lesson: false,
-                  second_yearly_lesson_id: null,
-                  name: 'Neue Lektion',
-                  description: '',
-                  user_id: pb.authStore.model.id,
-                  class_id: activeClassId, // Sicherstellen, dass class_id gesetzt ist
-                  subject: subjectId
-                }).then(gapCreated => {
-                  optimisticUpdateYearlyLessons(gapLesson, false, true);
-                  optimisticUpdateYearlyLessons(gapCreated, true);
-                }).catch(err => {
-                  console.error("Error creating gap lesson:", err);
-                  optimisticUpdateYearlyLessons(gapLesson, false, true);
-                });
-
-                gapPromises.push(createPromise);
+                  gapPromises.push(createPromise);
+                }
               }
             }
           }
 
           setYearlyLessons(tempUpdatedPrev);
-          await Promise.all(gapPromises);
-          await refetch();
-        } catch (error) {
-          console.error("Error creating lesson:", error);
-          optimisticUpdateYearlyLessons(newLesson, false, true);
-        }
-      }
-    } else {
-      if (lesson && lesson.topic_id && ((lesson.mergedLessons && lesson.mergedLessons.length > 1) || lesson.is_double_lesson)) {
-        let topicLessons = [];
-        if (lesson.is_double_lesson && (!lesson.mergedLessons || lesson.mergedLessons.length <= 1)) {
-          const secondLesson = yearlyLessons.find(l => l.id === lesson.second_yearly_lesson_id);
-          topicLessons = [lesson];
-          if (secondLesson) {
-            topicLessons.push(secondLesson);
+
+          try {
+            await Promise.all(
+              lessonsToUpdate.map(mergedLesson =>
+                YearlyLesson.update(mergedLesson.id, { topic_id: newTopicId })
+              )
+            );
+            await Promise.all(gapPromises);
+            await refetch();
+          } catch (error) {
+            console.error("Error updating block lesson topics:", error);
+            setYearlyLessons(yearlyLessons);
           }
-        } else {
-          topicLessons = lesson.mergedLessons;
+        } else if (slot) {
+          if (!activeClassId) {
+            console.error('Error: No activeClassId set for creating new lesson');
+            alert('Bitte wählen Sie eine Klasse aus, bevor Sie eine neue Lektion erstellen.');
+            return;
+          }
+          const subjectId = subjects.find(s => s.name === slot.subject)?.id;
+          console.log('Debug: Subject mapping in handleLessonClick', {
+            slotSubject: slot.subject,
+            subjectId,
+            slot,
+            availableSubjects: subjects.map(s => ({ id: s.id, name: s.name }))
+          });
+          if (!subjectId) {
+            console.error('Error: No valid subject ID found for', slot.subject);
+            alert('Ungültiges Fach. Bitte wählen Sie ein gültiges Fach aus.');
+            return;
+          }
+
+          const newLesson = {
+            id: `temp-${Date.now()}`,
+            ...slot,
+            topic_id: activeTopicId,
+            school_year: currentYear,
+            notes: '',
+            is_double_lesson: false,
+            second_yearly_lesson_id: null,
+            class_id: activeClassId // Hinzufügen von class_id
+          };
+          optimisticUpdateYearlyLessons(newLesson, true);
+
+          const gapPromises = [];
+
+          try {
+            const createdLesson = await YearlyLesson.create({
+              ...slot,
+              topic_id: activeTopicId,
+              school_year: currentYear,
+              name: 'Neue Lektion',
+              description: '',
+              user_id: pb.authStore.model.id,
+              class_id: activeClassId, // Sicherstellen, dass class_id gesetzt ist
+              subject: subjectId,
+              notes: '',
+              is_double_lesson: false,
+              second_yearly_lesson_id: null,
+              is_exam: false,
+              is_half_class: false,
+              is_allerlei: false,
+              allerlei_subjects: []
+            });
+            optimisticUpdateYearlyLessons(newLesson, false, true);
+            optimisticUpdateYearlyLessons({ ...createdLesson, lesson_number: Number(createdLesson.lesson_number) }, true);
+
+            let tempUpdatedPrev = [...yearlyLessons, { ...createdLesson, lesson_number: Number(createdLesson.lesson_number) }];
+
+            const weekLessons = tempUpdatedPrev
+              .filter(l => l.week_number === slot.week_number && l.subject === slot.subject && l.topic_id === activeTopicId)
+              .sort((a, b) => Number(a.lesson_number) - Number(b.lesson_number));
+
+            if (weekLessons.length > 1) {
+              const minNum = Math.min(...weekLessons.map(l => Number(l.lesson_number)));
+              const maxNum = Math.max(...weekLessons.map(l => Number(l.lesson_number)));
+
+              for (let num = minNum; num <= maxNum; num++) {
+                if (!weekLessons.some(l => Number(l.lesson_number) === num)) {
+                  const gapSlot = { week_number: slot.week_number, subject: slot.subject, lesson_number: num, school_year: currentYear };
+                  const gapLesson = {
+                    id: `temp-gap-${Date.now() + num}`,
+                    ...gapSlot,
+                    topic_id: activeTopicId,
+                    notes: '',
+                    is_double_lesson: false,
+                    second_yearly_lesson_id: null
+                  };
+                  tempUpdatedPrev = [...tempUpdatedPrev, gapLesson];
+
+                  const createPromise = YearlyLesson.create({
+                    ...gapSlot,
+                    topic_id: activeTopicId,
+                    notes: '',
+                    is_double_lesson: false,
+                    second_yearly_lesson_id: null,
+                    name: 'Neue Lektion',
+                    description: '',
+                    user_id: pb.authStore.model.id,
+                    class_id: activeClassId, // Sicherstellen, dass class_id gesetzt ist
+                    subject: subjectId
+                  }).then(gapCreated => {
+                    optimisticUpdateYearlyLessons(gapLesson, false, true);
+                    optimisticUpdateYearlyLessons(gapCreated, true);
+                  }).catch(err => {
+                    console.error("Error creating gap lesson:", err);
+                    optimisticUpdateYearlyLessons(gapLesson, false, true);
+                  });
+
+                  gapPromises.push(createPromise);
+                }
+              }
+            }
+
+            setYearlyLessons(tempUpdatedPrev);
+            await Promise.all(gapPromises);
+            await refetch();
+          } catch (error) {
+            console.error("Error creating lesson:", error);
+            optimisticUpdateYearlyLessons(newLesson, false, true);
+          }
         }
-
-        const topic = topicsById.get(lesson.topic_id);
-        setSelectedTopicLessons(topicLessons);
-        setSelectedTopicInfo({
-          topic: topic,
-          subject: lesson.subject,
-          week: lesson.week_number
-        });
-        setIsTopicLessonsModalOpen(true);
-        return;
-      }
-
-      if (lesson && lesson.id) {
-        const fullLesson = yearlyLessons.find(l => l.id === lesson.id);
-        setEditingLesson(fullLesson);
-        setNewLessonSlot(null);
       } else {
-        if (!activeClassId) {
-          console.error('Error: No activeClassId set for creating new lesson');
-          alert('Bitte wählen Sie eine Klasse aus, bevor Sie eine neue Lektion erstellen.');
+        if (lesson && lesson.topic_id && ((lesson.mergedLessons && lesson.mergedLessons.length > 1) || lesson.is_double_lesson)) {
+          let topicLessons = [];
+          if (lesson.is_double_lesson && (!lesson.mergedLessons || lesson.mergedLessons.length <= 1)) {
+            const secondLesson = yearlyLessons.find(l => l.id === lesson.second_yearly_lesson_id);
+            topicLessons = [lesson];
+            if (secondLesson) {
+              topicLessons.push(secondLesson);
+            }
+          } else {
+            topicLessons = lesson.mergedLessons;
+          }
+
+          const topic = topicsById.get(lesson.topic_id);
+          setSelectedTopicLessons(topicLessons);
+          setSelectedTopicInfo({
+            topic: topic,
+            subject: lesson.subject,
+            week: lesson.week_number
+          });
+          setIsTopicLessonsModalOpen(true);
           return;
         }
-        setEditingLesson(null);
-        setNewLessonSlot({ 
-          ...slot, 
-          school_year: currentYear,
-          class_id: activeClassId // Hinzufügen von class_id
-        });
+
+        if (lesson && lesson.id) {
+          const fullLesson = yearlyLessons.find(l => l.id === lesson.id);
+          setEditingLesson(fullLesson);
+          setNewLessonSlot(null);
+        } else {
+          if (!activeClassId) {
+            console.error('Error: No activeClassId set for creating new lesson');
+            alert('Bitte wählen Sie eine Klasse aus, bevor Sie eine neue Lektion erstellen.');
+            return;
+          }
+          setEditingLesson(null);
+          setNewLessonSlot({ 
+            ...slot, 
+            school_year: currentYear,
+            class_id: activeClassId // Hinzufügen von class_id
+          });
+        }
+        setIsLessonModalOpen(true);
       }
-      setIsLessonModalOpen(true);
-    }
-  }, [activeTopicId, currentYear, topicsById, yearlyLessons, activeClassId, subjects, refetch, setYearlyLessons, optimisticUpdateYearlyLessons, setSelectedTopicLessons, setSelectedTopicInfo, setIsTopicLessonsModalOpen, setEditingLesson, setNewLessonSlot, setIsLessonModalOpen, isAssignMode]);
+    },
+    [
+      isAssignMode,
+      handleSelectLesson,
+      toast,
+      activeTopicId,
+      currentYear,
+      topicsById,
+      yearlyLessons,
+      activeClassId,
+      subjects,
+      refetch,
+      setYearlyLessons,
+      optimisticUpdateYearlyLessons,
+      setSelectedTopicLessons,
+      setSelectedTopicInfo,
+      setIsTopicLessonsModalOpen,
+      setEditingLesson,
+      setNewLessonSlot,
+      setIsLessonModalOpen,
+    ]
+  );
 
   const handleSaveLesson = useCallback(async (lessonData, lessonContext) => {
     const originalLesson = lessonContext || editingLesson;
@@ -894,10 +947,31 @@ function InnerYearlyOverviewPage() {
             ) : (
               <>
                 {isAssignMode && (
-                  <div className="p-4">
-                    <Button onClick={handleAssignAndBack} className="mb-4">
-                      Zuweisen & Zurück
-                    </Button>
+                  <div className="fixed top-24 left-1/2 -translate-x-1/2 z-50 bg-white dark:bg-slate-800 rounded-lg shadow-2xl px-8 py-5 border border-green-500/50 max-w-lg">
+                    <div className="text-center">
+                      <p className="text-xl font-bold mb-2">
+                        Lektionen zuweisen an Thema:
+                      </p>
+                      <p className="text-2xl font-extrabold mb-3" style={{ 
+                        color: topics.find(t => t.id === searchParams.get('topic'))?.color || '#3b82f6' 
+                      }}>
+                        {topics.find(t => t.id === searchParams.get('topic'))?.name || 'Draft-Thema'}
+                      </p>
+                      <p className="text-sm text-slate-600 dark:text-slate-400 mb-4">
+                        Klicke auf freie Lektionen oder leere Slots · {selectedLessons.length} ausgewählt
+                      </p>
+                      <Button 
+                        onClick={handleAssignAndBack}
+                        size="lg"
+                        className="bg-green-600 hover:bg-green-700 text-white font-semibold"
+                        disabled={selectedLessons.length === 0}
+                      >
+                        {selectedLessons.length === 0 
+                          ? 'Nichts ausgewählt' 
+                          : `Zuweisen & Zurück (${selectedLessons.length})`
+                        }
+                      </Button>
+                    </div>
                   </div>
                 )}
                 {displayedSubjects.length === 0 ? (

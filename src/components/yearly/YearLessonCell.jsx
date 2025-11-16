@@ -9,16 +9,6 @@ import {
 
 /**
  * YearLessonCell - Einzelne Lektionszelle im Jahresplan
- * @param {Object} lesson - Lektionsdaten
- * @param {Function} onClick - Click-Handler
- * @param {string} activeTopicId - Aktives Thema ID
- * @param {string} defaultColor - Standard-Farbe
- * @param {boolean} isDoubleLesson - Doppelstunde?
- * @param {boolean} isTopicBlock - Themenblock?
- * @param {Function} onMouseEnter - Hover-Enter Handler
- * @param {Function} onMouseLeave - Hover-Leave Handler
- * @param {Array} allYearlyLessons - Alle Jahreslektions
- * @param {string} densityMode - Dichte-Modus ('compact'|'standard'|'spacious')
  */
 function YearLessonCell({ 
   lesson, 
@@ -32,15 +22,18 @@ function YearLessonCell({
   allYearlyLessons = [],
   densityMode = 'standard'
 }) {
-  const handleClick = () => {
-    onClick(lesson, !lesson ? {
-      week_number: lesson?.week_number,
-      subject: lesson?.subject?.name || lesson?.subject || 'Unbekannt',
-      lesson_number: lesson?.lesson_number
-    } : null);
+  // Endgültig korrekte handleClick
+  const handleClick = (e) => {
+    // Nur stopPropagation, wenn onClick wirklich eine Funktion ist (normaler Modus)
+    // Im Assign-Modus ist onClick meist undefined → Click darf weiterbubbeln zur äußeren div
+    if (typeof onClick === 'function') {
+      e.stopPropagation();
+      onClick();
+    }
+    // sonst: nichts tun → Bubbling erlaubt → äußere div in YearlyGrid toggelt die Auswahl
   };
 
-  // MODERNE DENSITY-KONFIGURATION
+  // DENSITY-KONFIGURATION (unverändert)
   const densityConfig = {
     compact: { 
       padding: '0.25rem', 
@@ -67,26 +60,20 @@ function YearLessonCell({
 
   const config = densityConfig[densityMode] || densityConfig.standard;
   
-  // CLEAN: Color Utils verwenden
   const bgColor = lesson?.color || defaultColor;
   const isTopicActive = activeTopicId === lesson?.topic_id;
   const hasContent = lesson?.steps?.length > 0 || (lesson?.notes && String(lesson?.notes).trim());
-  const textColor = getTextColor(bgColor); // ← Utils-Magie!
+  const textColor = getTextColor(bgColor);
 
-  // Text-Truncation mit konfigurierbarer Länge
   const truncateText = (text, maxLength) => {
     if (!text || text.length <= maxLength) return text;
     return text.substring(0, maxLength).trim() + '...';
   };
 
-  /**
-   * Rendert den Anzeigetext basierend auf Lektionstyp
-   */
   const getDisplayText = () => {
     if (!lesson) return null;
     
     if (isTopicBlock) {
-      // Topic Block: Nur Thema anzeigen
       return (
         <div className="flex flex-col items-center">
           <div 
@@ -100,7 +87,6 @@ function YearLessonCell({
     }
 
     if (isDoubleLesson) {
-      // Double Lesson: Nur Haupttitel anzeigen
       return (
         <div className="flex flex-col items-center">
           <div 
@@ -113,13 +99,8 @@ function YearLessonCell({
       );
     }
 
-    // Standard Lesson - Sauber und einfach
     let lessonTitle = lesson.name !== 'Neue Lektion' ? lesson.name : 'Lektion';
-
-    if (lesson.is_copy) {
-      lessonTitle += ' (K)';
-    }
-
+    if (lesson.is_copy) lessonTitle += ' (K)';
     const displayTitle = truncateText(lessonTitle, config.maxTextLength);
 
     return (
@@ -134,9 +115,6 @@ function YearLessonCell({
     );
   };
 
-  /**
-   * Rendert leere Zelle mit Plus-Icon
-   */
   const getEmptyCellContent = () => {
     return (
       <div className={`flex items-center justify-center h-full ${config.padding}`}>
@@ -147,7 +125,7 @@ function YearLessonCell({
     );
   };
 
-  // LEERE ZELLE - Unverändert
+  // LEERE ZELLE
   if (!lesson) {
     return (
       <motion.div
@@ -161,7 +139,7 @@ function YearLessonCell({
     );
   }
 
-  // MODERNES ZELLEN-DESIGN - MIT UTILS
+  // NORMALE ZELLE
   const baseClasses = `w-full h-full cursor-pointer transition-all duration-200 flex items-center justify-center overflow-hidden rounded-lg relative group ${config.padding}`;
   const activeClasses = isTopicActive ? 'ring-2 ring-blue-300/30 shadow-lg' : 'shadow-sm';
   const densityBorder = densityMode === 'compact' ? 'border border-white/20' : '';
@@ -174,21 +152,17 @@ function YearLessonCell({
       whileTap={{ scale: 0.98 }}
       className={`${baseClasses} ${activeClasses} ${densityBorder}`}
       style={{
-        // ELEGANT: Utils für perfekten Gradient-Effekt
-        background: createGradient(bgColor, -20), // ← Automatischer Overlay-Stil!
-        border: `2px solid ${adjustColor(bgColor, -10)}`, // ← Konsistenter Border
-        color: textColor // ← Intelligente Textfarbe
+        background: createGradient(bgColor, -20),
+        border: `2px solid ${adjustColor(bgColor, -10)}`,
+        color: textColor
       }}
       onClick={handleClick}
       onMouseEnter={hasContent && typeof onMouseEnter === 'function' ? onMouseEnter : undefined}
       onMouseLeave={hasContent && typeof onMouseLeave === 'function' ? onMouseLeave : undefined}
     >
-      {/* Subtiles Hover-Overlay - verstärkt den Gradient */}
       <div 
         className="absolute inset-0 opacity-0 group-hover:opacity-10 transition-opacity rounded-lg"
-        style={{
-          background: createGradient(bgColor, -30) // ← Noch subtiler Hover-Effekt
-        }}
+        style={{ background: createGradient(bgColor, -30) }}
       />
       
       {lesson.is_half_class && (
@@ -202,12 +176,10 @@ function YearLessonCell({
         </div>
       )}
       
-      {/* Content - Sauber und zentriert */}
       <div className="relative z-10 text-center flex items-center justify-center h-full">
         {getDisplayText()}
       </div>
 
-      {/* Hover-Details Indicator - nur bei Inhalt */}
       {hasContent && (
         <div className="absolute bottom-0 right-0 w-2 h-2 bg-white/20 rounded-tl-lg opacity-0 group-hover:opacity-100 transition-opacity" />
       )}
@@ -215,7 +187,6 @@ function YearLessonCell({
   );
 }
 
-// Memoization für Performance
 YearLessonCell.displayName = 'YearLessonCell';
 
 export default React.memo(YearLessonCell, (prevProps, nextProps) => {

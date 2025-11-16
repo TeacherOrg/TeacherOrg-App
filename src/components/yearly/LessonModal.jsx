@@ -22,44 +22,118 @@ const WORK_FORMS = [
 ];
 const generateId = () => Math.random().toString(36).substr(2, 9);
 
-const StepRow = ({ step, onUpdate, onRemove }) => (
-  <div className="grid grid-cols-[60px_140px_1fr_1fr_auto] gap-2 items-center">
-    <Input
-      type="number"
-      value={step.time || ''}
-      onChange={e => onUpdate('time', e.target.value ? Number(e.target.value) : null)}
-      placeholder="Zeit"
-      className="text-center bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white"
-      min="0"
-      max={90}
-    />
-    <Select value={step.workForm || ''} onValueChange={val => onUpdate('workForm', val)}>
-      <SelectTrigger className="bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white">
-        <SelectValue placeholder="Form" />
-      </SelectTrigger>
-      <SelectContent>
-        {WORK_FORMS.map(form => (
-          <SelectItem key={form.value} value={form.value}>{form.label}</SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
-    <Input
-      value={step.activity || ''}
-      onChange={e => onUpdate('activity', e.target.value)}
-      placeholder="Aktivität / Was wird gemacht"
-      className="bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white"
-    />
-    <Input
-      value={step.material || ''}
-      onChange={e => onUpdate('material', e.target.value)}
-      placeholder="Material"
-      className="bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white"
-    />
-    <Button variant="ghost" size="icon" onClick={onRemove} className="text-red-500 hover:text-red-700 hover:bg-red-100 dark:hover:bg-red-900/30">
-      <Trash2 className="w-4 h-4" />
-    </Button>
-  </div>
-);
+const MaterialQuickAdd = ({ step, onUpdate, topicMaterials = [], topicColor }) => {
+  if (!topicMaterials.length) return null;
+
+  const currentMaterials = step.material 
+    ? step.material.split(',').map(m => m.trim().toLowerCase()) 
+    : [];
+
+  const toggleMaterial = (mat) => {
+    const lowerMat = mat.toLowerCase();
+    if (currentMaterials.includes(lowerMat)) {
+      // entfernen
+      const newList = step.material
+        .split(',')
+        .map(m => m.trim())
+        .filter(m => m.toLowerCase() !== lowerMat)
+        .join(', ');
+      onUpdate('material', newList.replace(/^,\s|,$/g, '').trim());
+    } else {
+      // hinzufügen
+      const newValue = step.material ? `${step.material}, ${mat}` : mat;
+      onUpdate('material', newValue);
+    }
+  };
+
+  return (
+    <div className="flex flex-wrap gap-2 mt-2">
+      {topicMaterials.map((mat) => {
+        const isSelected = currentMaterials.includes(mat.toLowerCase());
+        return (
+          <button
+            key={mat}
+            type="button"
+            onClick={() => toggleMaterial(mat)}
+            className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all duration-200 shadow-sm
+              ${isSelected 
+                ? 'text-white shadow-md scale-105' 
+                : 'text-white/80 border border-white/30 hover:scale-105 hover:shadow-md'
+              }`}
+            style={{
+              backgroundColor: isSelected ? topicColor : topicColor + '40',
+            }}
+          >
+            {mat}
+          </button>
+        );
+      })}
+    </div>
+  );
+};
+
+const StepRow = ({ step, onUpdate, onRemove, topicMaterials = [], topicColor }) => {
+  const materialIsEmpty = !step.material?.trim();
+
+  return (
+    <div className="grid grid-cols-[60px_140px_1fr_1fr_auto] gap-2 items-start">
+      {/* Zeit */}
+      <Input
+        type="number"
+        value={step.time || ''}
+        onChange={e => onUpdate('time', e.target.value ? Number(e.target.value) : null)}
+        placeholder="Zeit"
+        className="text-center bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600"
+        min="0"
+      />
+
+      {/* Arbeitsform */}
+      <Select value={step.workForm || ''} onValueChange={val => onUpdate('workForm', val)}>
+        <SelectTrigger className="bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600">
+          <SelectValue placeholder="Form" />
+        </SelectTrigger>
+        <SelectContent>
+          {WORK_FORMS.map(form => (
+            <SelectItem key={form.value} value={form.value}>{form.label}</SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+
+      {/* Aktivität */}
+      <Input
+        value={step.activity || ''}
+        onChange={e => onUpdate('activity', e.target.value)}
+        placeholder="Aktivität / Was wird gemacht"
+        className="bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600"
+      />
+
+      {/* Material + QuickAdd */}
+      <div className="space-y-1">
+        <Input
+          value={step.material || ''}
+          onChange={e => onUpdate('material', e.target.value)}
+          placeholder="Material"
+          className="bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600"
+        />
+        
+        {/* Immer anzeigen, wenn Topic-Materialien existieren */}
+        {topicMaterials.length > 0 && (
+          <MaterialQuickAdd
+            step={step}
+            onUpdate={(field, value) => onUpdate(field, value)}
+            topicMaterials={topicMaterials}
+            topicColor={topicColor}
+          />
+        )}
+      </div>
+
+      {/* Löschen */}
+      <Button variant="ghost" size="icon" onClick={onRemove} className="text-red-500 hover:text-red-700 hover:bg-red-100 dark:hover:bg-red-900/30">
+        <Trash2 className="w-4 h-4" />
+      </Button>
+    </div>
+  );
+};
 
 export default function LessonModal({ 
   isOpen, 
@@ -236,7 +310,13 @@ export default function LessonModal({
   };
 
   const handleAddPrimaryStep = () => {
-    setPrimarySteps([...primarySteps, { id: generateId(), time: null, workForm: '', activity: '', material: '' }]);
+    setPrimarySteps([...primarySteps, {
+      id: generateId(),
+      time: null,
+      workForm: '',
+      activity: '',
+      material: '' // Changed from topicMaterialsString to empty string
+    }]);
   };
 
   const handleUpdateSecondStep = (id, field, value) => {
@@ -248,7 +328,13 @@ export default function LessonModal({
   };
 
   const handleAddSecondStep = () => {
-    setSecondSteps([...secondSteps, { id: `second-${generateId()}`, time: null, workForm: '', activity: '', material: '' }]);
+    setSecondSteps([...secondSteps, {
+      id: `second-${generateId()}`,
+      time: null,
+      workForm: '',
+      activity: '',
+      material: '' // Changed from topicMaterialsString to empty string
+    }]);
   };
 
   const cleanStepsData = (stepsArray) => {
@@ -396,6 +482,15 @@ export default function LessonModal({
     return 'Keine aufeinanderfolgende Lektion verfügbar.';
   }, [secondYearlyLessonId, allYearlyLessons, displayLesson, formData.second_name]);
 
+  const currentTopic = useMemo(() => {
+    if (!formData.topic_id || formData.topic_id === 'no_topic') return null;
+    return subjectTopics.find(t => t.id === formData.topic_id);
+  }, [formData.topic_id, subjectTopics]);
+
+  const topicMaterials = currentTopic?.materials || [];
+  const topicMaterialsString = topicMaterials.join(', ');
+  const topicColor = currentTopic?.color || subjectColor || '#3b82f6';
+
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent 
@@ -514,6 +609,8 @@ export default function LessonModal({
                   step={step}
                   onUpdate={(field, value) => handleUpdatePrimaryStep(step.id, field, value)}
                   onRemove={() => handleRemovePrimaryStep(step.id)}
+                  topicMaterials={currentTopic?.materials || []}
+                  topicColor={topicColor}
                 />
               ))}
               <Button type="button" variant="outline" onClick={handleAddPrimaryStep} className="w-full mt-2 border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white bg-white dark:bg-slate-700 hover:bg-slate-100 dark:hover:bg-slate-600">
@@ -533,6 +630,8 @@ export default function LessonModal({
                     step={step}
                     onUpdate={(field, value) => handleUpdateSecondStep(step.id, field, value)}
                     onRemove={() => handleRemoveSecondStep(step.id)}
+                    topicMaterials={currentTopic?.materials || []}
+                    topicColor={topicColor}
                   />
                 ))}
                 <Button type="button" variant="outline" onClick={handleAddSecondStep} className="w-full mt-2 border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white bg-white dark:bg-slate-700 hover:bg-slate-100 dark:hover:bg-slate-600">

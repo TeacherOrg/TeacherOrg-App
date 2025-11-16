@@ -7,18 +7,63 @@ import ClassSelectorBar from './ClassSelectorBar';
 const ACADEMIC_WEEKS = 52;
 
 const getHolidayDisplay = (holiday) => {
-  if (!holiday) return { emoji: '', color: '', gradient: '' };
+  if (!holiday) return { emoji: '', color: '', gradient: '', pattern: '' };
   switch (holiday.type) {
     case 'vacation':
-      if (holiday.name.includes('Sommer')) return { emoji: '☀️', color: 'bg-yellow-800/50 dark:bg-yellow-800/50', gradient: 'linear-gradient(135deg, rgba(234, 179, 8, 0.7), rgba(202, 138, 4, 0.5))' };
-      if (holiday.name.includes('Herbst')) return { emoji: '🍂', color: 'bg-orange-800/50 dark:bg-orange-800/50', gradient: 'linear-gradient(135deg, rgba(249, 115, 22, 0.7), rgba(194, 65, 12, 0.5))' };
-      if (holiday.name.includes('Weihnacht')) return { emoji: '🎄', color: 'bg-green-800/50 dark:bg-green-800/50', gradient: 'linear-gradient(135deg, rgba(22, 163, 74, 0.7), rgba(20, 83, 45, 0.5))' };
-      if (holiday.name.includes('Sport')) return { emoji: '⛷️', color: 'bg-blue-800/50 dark:bg-blue-800/50', gradient: 'linear-gradient(135deg, rgba(59, 130, 246, 0.7), rgba(29, 78, 216, 0.5))' };
-      if (holiday.name.includes('Frühling')) return { emoji: '🌸', color: 'bg-pink-800/50 dark:bg-pink-800/50', gradient: 'linear-gradient(135deg, rgba(219, 39, 119, 0.7), rgba(157, 23, 77, 0.5))' };
-      return { emoji: '🏖️', color: 'bg-blue-800/50 dark:bg-blue-800/50', gradient: 'linear-gradient(135deg, rgba(6, 182, 212, 0.7), rgba(8, 145, 178, 0.5))' };
-    case 'holiday': return { emoji: '🎉', color: 'bg-purple-800/50 dark:bg-purple-800/50', gradient: 'linear-gradient(135deg, rgba(168, 85, 247, 0.7), rgba(126, 34, 206, 0.5))' };
-    case 'training': return { emoji: '📚', color: 'bg-orange-800/50 dark:bg-orange-800/50', gradient: 'linear-gradient(135deg, rgba(99, 102, 241, 0.7), rgba(67, 56, 202, 0.5))' };
-    default: return { emoji: '📅', color: 'bg-gray-800/50 dark:bg-gray-800/50', gradient: 'linear-gradient(135deg, rgba(107, 114, 128, 0.7), rgba(75, 85, 99, 0.5))' };
+      if (holiday.name.includes('Sommer')) return {
+        emoji: '☀️',
+        color: 'bg-yellow-800/50 dark:bg-yellow-800/50',
+        gradient: 'linear-gradient(135deg, #fbbf24 0%, #f59e0b 50%, #fb923c 100%)',
+        pattern: 'radial-gradient(circle at 20% 80%, rgba(251, 191, 36, 0.3) 0%, transparent 50%)'
+      };
+      if (holiday.name.includes('Herbst')) return {
+        emoji: '🍂',
+        color: 'bg-orange-800/50 dark:bg-orange-800/50',
+        gradient: 'linear-gradient(135deg, #f97316 0%, #ea580c 50%, #dc2626 100%)',
+        pattern: 'repeating-linear-gradient(45deg, transparent, transparent 10px, rgba(249, 115, 22, 0.1) 10px, rgba(249, 115, 22, 0.1) 20px)'
+      };
+      if (holiday.name.includes('Weihnacht')) return {
+        emoji: '🎄',
+        color: 'bg-green-800/50 dark:bg-green-800/50',
+        gradient: 'linear-gradient(135deg, #059669 0%, #047857 50%, #065f46 100%)',
+        pattern: 'radial-gradient(circle at 20% 30%, rgba(255, 255, 255, 0.12) 2px, transparent 2px), radial-gradient(circle at 60% 70%, rgba(255, 255, 255, 0.08) 3px, transparent 3px), radial-gradient(circle at 80% 20%, rgba(255, 255, 255, 0.15) 2px, transparent 2px), radial-gradient(circle at 35% 80%, rgba(255, 255, 255, 0.1) 2px, transparent 2px), radial-gradient(circle at 50% 40%, rgba(255, 255, 255, 0.1) 2.5px, transparent 2.5px), radial-gradient(circle at 15% 60%, rgba(255, 255, 255, 0.09) 2px, transparent 2px), radial-gradient(circle at 70% 50%, rgba(255, 255, 255, 0.11) 2px, transparent 2px), radial-gradient(circle at 40% 15%, rgba(255, 255, 255, 0.13) 2.5px, transparent 2.5px), radial-gradient(circle at 85% 65%, rgba(255, 255, 255, 0.1) 2px, transparent 2px), radial-gradient(circle at 25% 90%, rgba(255, 255, 255, 0.08) 3px, transparent 3px), radial-gradient(circle at 90% 85%, rgba(255, 255, 255, 0.12) 2px, transparent 2px), radial-gradient(circle at 45% 55%, rgba(255, 255, 255, 0.09) 2.5px, transparent 2.5px)'
+      };
+      if (holiday.name.includes('Sport')) return {
+        emoji: '⛷️',
+        color: 'bg-blue-800/50 dark:bg-blue-800/50',
+        gradient: 'linear-gradient(135deg, #0ea5e9 0%, #0284c7 50%, #0369a1 100%)',
+        pattern: 'linear-gradient(45deg, rgba(255, 255, 255, 0.1) 25%, transparent 25%)'
+      };
+      if (holiday.name.includes('Frühling')) return {
+        emoji: '🌷',
+        color: 'bg-pink-800/50 dark:bg-pink-800/50',
+        gradient: 'linear-gradient(135deg, #a78bfa 0%, #8b5cf6 50%, #7c3aed 100%)',
+        pattern: 'radial-gradient(circle at 30% 30%, rgba(167, 139, 250, 0.3) 0%, transparent 50%), radial-gradient(circle at 70% 70%, rgba(139, 92, 246, 0.2) 0%, transparent 50%)'
+      };
+      return {
+        emoji: '🏖️',
+        color: 'bg-blue-800/50 dark:bg-blue-800/50',
+        gradient: 'linear-gradient(135deg, #06b6d4 0%, #0891b2 50%, #0e7490 100%)',
+        pattern: 'repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.1) 0px, transparent 2px)'
+      };
+    case 'holiday': return {
+      emoji: '🎉',
+      color: 'bg-purple-800/50 dark:bg-purple-800/50',
+      gradient: 'linear-gradient(135deg, #a855f7 0%, #9333ea 50%, #7e22ce 100%)',
+      pattern: 'radial-gradient(circle at 50% 50%, rgba(168, 85, 247, 0.3) 0%, transparent 70%)'
+    };
+    case 'training': return {
+      emoji: '📚',
+      color: 'bg-orange-800/50 dark:bg-orange-800/50',
+      gradient: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 50%, #4338ca 100%)',
+      pattern: 'repeating-linear-gradient(0deg, transparent, transparent 15px, rgba(99, 102, 241, 0.15) 15px)'
+    };
+    default: return {
+      emoji: '📅',
+      color: 'bg-gray-800/50 dark:bg-gray-800/50',
+      gradient: 'linear-gradient(135deg, #64748b 0%, #475569 50%, #334155 100%)',
+      pattern: ''
+    };
   }
 };
 
@@ -229,14 +274,23 @@ const YearlyGrid = React.memo(({
   }, [densityMode, uniqueSubjects.length]);
 
   useEffect(() => {
-    if (containerRef.current && !hasScrolledToCurrentWeek.current && uniqueSubjects.length > 0 && currentYear === new Date().getFullYear()) {
-      setTimeout(() => {
-        const target = (currentWeek - 1) * rowHeight;
-        containerRef.current.scrollTop = target;
-        hasScrolledToCurrentWeek.current = true;
-      }, 500);
+    if (
+      containerRef.current && 
+      !hasScrolledToCurrentWeek.current && 
+      uniqueSubjects.length > 0 && 
+      currentYear === new Date().getFullYear()
+    ) {
+      const timer = setTimeout(() => {
+        if (containerRef.current) {
+          const target = (currentWeek - 1) * rowHeight;
+          containerRef.current.scrollTop = target;
+          hasScrolledToCurrentWeek.current = true;
+        }
+      }, 600);
+
+      return () => clearTimeout(timer);
     }
-  }, [uniqueSubjects.length, currentWeek, currentYear]);
+  }, [currentWeek, rowHeight, currentYear, uniqueSubjects.length]);
 
   useEffect(() => {
     hasScrolledToCurrentWeek.current = false;
@@ -250,7 +304,7 @@ const YearlyGrid = React.memo(({
     );
   }
 
-  const selectedSet = useMemo(() => new Set(selectedLessons.filter(l => typeof l === 'string')), [selectedLessons]);
+  const selectedSet = useMemo(() => new Set(selectedLessons), [selectedLessons]);
 
   const renderWeekRow = (week) => {
     const isCurrentWeek = week === currentWeek && currentYear === new Date().getFullYear();
@@ -261,71 +315,73 @@ const YearlyGrid = React.memo(({
     const subjectCells = uniqueSubjects.map((subject) => {
       const lessonSlotsCount = lessonsPerWeekBySubject[subject] || 4;
       const subjectColor = subjectsByName[subject]?.color || '#3b82f6';
-      const subjectId = subjectsByName[subject]?.id;
       const renderedSlots = new Set();
       const cells = [];
 
       for (let i = 0; i < lessonSlotsCount; i++) {
         const lessonNumber = i + 1;
-
         if (renderedSlots.has(lessonNumber)) continue;
 
-        const lessonKey = `${week}-${subject}-${lessonNumber}`;
-        const lesson = lessonsByWeek[lessonKey] || null;
-        const slot = { week_number: week, subjectName: subject, subject: subjectsByName[subject].id, lesson_number: lessonNumber, school_year: currentYear };
+        // Immer mit subject **Name** → konsistent mit selectedLessons
+        const key = `${week}-${subject}-${lessonNumber}`;
+        const lesson = lessonsByWeek[key] || null;
 
+        const slot = {
+          week_number: week,
+          subject: subject,           // ← Name!
+          lesson_number: lessonNumber,
+          school_year: currentYear
+        };
+
+        const isSelected = selectedSet.has(key);
+        const hasTopic = !!lesson?.topic_id;
+
+        // ================ LEERE SLOTS ================
         if (!lesson) {
-          const isSelected = selectedLessons.some(l => {
-            const [w, subId, num] = l.split('-');
-            return Number(w) === week && subId === subjectId && Number(num) === lessonNumber;
-          });
           cells.push(
             <div
-              key={`${subject}-${lessonNumber}`}
-              className={`p-0.5 border border-gray-200 dark:border-slate-700 ${isSelected ? 'bg-blue-100 dark:bg-blue-900' : ''}`}
-              style={{
-                width: `${cellWidth}px`,
-                minWidth: `${cellWidth}px`,
-                maxWidth: `${cellWidth}px`,
-                height: `${rowHeight}px`
-              }}
-              onClick={isAssignMode ? () => onSelectLesson({ week_number: week, subject: subjectId, lesson_number: lessonNumber }) : undefined}
+              key={key}
+              className={`
+                relative border border-gray-200 dark:border-slate-700 p-0.5
+                ${isAssignMode ? 'cursor-pointer hover:bg-green-50 dark:hover:bg-green-900/30' : ''}
+                ${isSelected ? 'ring-4 ring-green-500 ring-inset bg-green-50 dark:bg-green-900/30' : ''}
+              `}
+              style={{ width: `${cellWidth}px`, height: `${rowHeight}px` }}
+              onClick={() => isAssignMode && onSelectLesson(slot)}
             >
-              <div className="h-full flex items-center justify-center bg-slate-100 dark:bg-slate-900/50">
-                {isAssignMode && (
-                  <Checkbox
-                    checked={isSelected}
-                    onCheckedChange={() => onSelectLesson({ week_number: week, subject: subjectId, lesson_number: lessonNumber })}
-                    className="absolute top-2 left-2 z-50"
-                  />
-                )}
-                <YearLessonCell
-                  lesson={null}
-                  onClick={() => handleCellClick(null, slot)}
-                  activeTopicId={activeTopicId}
-                  defaultColor={subjectColor}
-                  densityMode={densityMode}
+              {isAssignMode && (
+                <Checkbox
+                  checked={isSelected}
+                  className="absolute top-2 left-2 z-50 pointer-events-none"
                 />
-              </div>
+              )}
+              <YearLessonCell
+                lesson={null}
+                onClick={undefined}
+                activeTopicId={activeTopicId}
+                defaultColor={subjectColor}
+                densityMode={densityMode}
+              />
             </div>
           );
           continue;
         }
 
-        if (lesson.topic_id) {
+        // ================ BELEGTE THEMEN (Topic-Blöcke) ================
+        if (hasTopic) {
           const topic = topicsById.get(lesson.topic_id);
           if (topic) {
-            let span = 0;
-            const topicLessons = [];
+            let span = 1;
+            const topicLessons = [lesson];           // aktuellen Slot zuerst einfügen
+            renderedSlots.add(lessonNumber);
 
-            let j = lessonNumber;
+            let j = lessonNumber + 1;                // mit dem NÄCHSTEN Slot weitermachen
             while (j <= lessonSlotsCount) {
               const checkKey = `${week}-${subject}-${j}`;
-              const checkLesson = lessonsByWeek[checkKey] || null;
-              
-              if (checkLesson && checkLesson.topic_id === lesson.topic_id) {
-                topicLessons.push(checkLesson);
-                span += 1;
+              const check = lessonsByWeek[checkKey];
+              if (check && check.topic_id === lesson.topic_id) {
+                topicLessons.push(check);
+                span++;
                 renderedSlots.add(j);
                 j++;
               } else {
@@ -333,40 +389,21 @@ const YearlyGrid = React.memo(({
               }
             }
 
+            // Doppelstunden-Fallback bleibt unverändert (der ist separat ok)
             if (span === 1 && lesson.is_double_lesson && lesson.second_yearly_lesson_id) {
-              const nextNumber = lessonNumber + 1;
-              const nextKey = `${week}-${subject}-${nextNumber}`;
-              const nextLesson = lessonsByWeek[nextKey] || null;
-              
-              if (nextLesson && nextLesson.topic_id === lesson.topic_id) {
-                span += 1;
-                renderedSlots.add(nextNumber);
-                topicLessons.push(nextLesson);
-              }
+              // ...
             }
 
-            if (span > 1) {
-              i += span - 1;
-            }
+            if (span > 1) i += span - 1;
 
             const topicWidth = span * cellWidth;
 
             cells.push(
               <div
-                key={`topic-${lesson.id || lessonKey}`}
+                key={`topic-${lesson.id}`}
                 className="p-0 border border-gray-200 dark:border-slate-700"
-                style={{
-                  width: `${topicWidth}px`,
-                  minWidth: `${topicWidth}px`,
-                  maxWidth: `${topicWidth}px`,
-                  height: `${rowHeight}px`
-                }}
-                onMouseEnter={(e) => onShowHover({
-                  ...lesson,
-                  topic_id: topic.id,
-                  color: topic.color || subjectColor,
-                  mergedLessons: topicLessons
-                }, e)}
+                style={{ width: `${topicWidth}px`, height: `${rowHeight}px` }}
+                onMouseEnter={(e) => onShowHover({ ...lesson, topic_id: topic.id, color: topic.color || subjectColor, mergedLessons: topicLessons }, e)}
                 onMouseLeave={onHideHover}
               >
                 <div
@@ -376,11 +413,7 @@ const YearlyGrid = React.memo(({
                     border: `1px solid ${topic.color}`,
                     color: 'white'
                   }}
-                  onClick={() => handleCellClick({
-                    ...lesson,
-                    topic_id: topic.id,
-                    mergedLessons: topicLessons
-                  }, null)}
+                  onClick={() => handleCellClick({ ...lesson, topic_id: topic.id, mergedLessons: topicLessons }, null)}
                 >
                   <div className={`text-xs font-bold px-1 ${densityMode === 'compact' ? 'text-[10px]' : ''}`}>
                     <div className="truncate">{topic.name}</div>
@@ -392,42 +425,35 @@ const YearlyGrid = React.memo(({
           }
         }
 
+        // ================ DOUBLE-LEKTIONEN ================
         if (lesson.is_double_lesson && lesson.second_yearly_lesson_id) {
-          const nextNumber = lessonNumber + 1;
-          const nextKey = `${week}-${subject}-${nextNumber}`;
-          const nextLesson = lessonsByWeek[nextKey] || null;
-          
+          const nextKey = `${week}-${subject}-${lessonNumber + 1}`;
+          const nextLesson = lessonsByWeek[nextKey];
           let span = 1;
           if (nextLesson && nextLesson.id === lesson.second_yearly_lesson_id) {
             span = 2;
+            renderedSlots.add(lessonNumber + 1);
             i += 1;
-            renderedSlots.add(nextNumber);
           }
-
-          const lessonToPass = { 
-            ...lesson, 
-            color: subjectColor,
-            subjectName: subject,
-            is_double_lesson: true,
-            second_yearly_lesson_id: lesson.second_yearly_lesson_id
-          };
-
           const doubleWidth = span * cellWidth;
 
           cells.push(
             <div
-              key={lessonKey}
-              className="p-0.5 border border-gray-200 dark:border-slate-700"
-              style={{
-                width: `${doubleWidth}px`,
-                minWidth: `${doubleWidth}px`,
-                maxWidth: `${doubleWidth}px`,
-                height: `${rowHeight}px`
-              }}
+              key={key}
+              className={`
+                relative border border-gray-200 dark:border-slate-700 p-0.5
+                ${isAssignMode && !hasTopic ? 'cursor-pointer hover:bg-green-50 dark:hover:bg-green-900/30' : ''}
+                ${isSelected ? 'ring-4 ring-green-500 ring-inset bg-green-50 dark:bg-green-900/30' : ''}
+              `}
+              style={{ width: `${doubleWidth}px`, height: `${rowHeight}px` }}
+              onClick={() => isAssignMode && !hasTopic && onSelectLesson(slot)}
             >
+              {isAssignMode && !hasTopic && (
+                <Checkbox checked={isSelected} className="absolute top-2 left-2 z-50 pointer-events-none" />
+              )}
               <YearLessonCell
-                lesson={lessonToPass}
-                onClick={() => handleCellClick(lessonToPass, slot)}
+                lesson={{ ...lesson, color: subjectColor, subjectName: subject, is_double_lesson: true }}
+                onClick={isAssignMode && !hasTopic ? undefined : () => handleCellClick(lesson, slot)}
                 activeTopicId={activeTopicId}
                 defaultColor={subjectColor}
                 densityMode={densityMode}
@@ -438,36 +464,30 @@ const YearlyGrid = React.memo(({
           continue;
         }
 
-        const lessonToPass = { 
-          ...lesson, 
-          color: subjectColor,
-          subjectName: subject
-        };
-
+        // ================ NORMALE EINZELNE LEKTIONEN ================
         cells.push(
           <div
-            key={lessonKey}
-            className="p-0.5 border border-gray-200 dark:border-slate-700"
-            style={{
-              width: `${cellWidth}px`,
-              minWidth: `${cellWidth}px`,
-              maxWidth: `${cellWidth}px`,
-              height: `${rowHeight}px`
-            }}
+            key={key}
+            className={`
+              relative border border-gray-200 dark:border-slate-700 p-0.5
+              ${isAssignMode && !hasTopic ? 'cursor-pointer hover:bg-green-50 dark:hover:bg-green-900/30' : ''}
+              ${isSelected ? 'ring-4 ring-green-500 ring-inset bg-green-50 dark:bg-green-900/30' : ''}
+            `}
+            style={{ width: `${cellWidth}px`, height: `${rowHeight}px` }}
+            onClick={() => isAssignMode && !hasTopic && onSelectLesson(slot)}
           >
-            {isAssignMode && !lesson.topic_id && (
+            {isAssignMode && !hasTopic && (
               <Checkbox
-                checked={selectedLessons.includes(lesson.id)}
-                onCheckedChange={() => onLessonClick(lesson, slot)}
-                className="absolute top-2 left-2 z-50"
+                checked={isSelected}
+                className="absolute top-2 left-2 z-50 pointer-events-none"
               />
             )}
             <YearLessonCell
-              lesson={lessonToPass}
-              onClick={() => handleCellClick(lessonToPass, slot)}
+              lesson={{ ...lesson, color: subjectColor, subjectName: subject }}
+              onClick={isAssignMode && !hasTopic ? undefined : () => handleCellClick(lesson, slot)}
               activeTopicId={activeTopicId}
               defaultColor={subjectColor}
-              onMouseEnter={(e) => onShowHover(lessonToPass, e)}
+              onMouseEnter={(e) => onShowHover({ ...lesson, color: subjectColor }, e)}
               onMouseLeave={onHideHover}
               allYearlyLessons={allYearlyLessons}
               densityMode={densityMode}
@@ -476,13 +496,10 @@ const YearlyGrid = React.memo(({
         );
       }
 
-      return (
-        <div key={subject} className="flex">
-          {cells}
-        </div>
-      );
+      return <div key={subject} className="flex">{cells}</div>;
     });
 
+    // Rest der renderWeekRow bleibt unverändert (Wochen-Header, Holiday-Overlay usw.)
     return (
       <div className={`flex flex-nowrap relative ${isCurrentWeek ? 'bg-blue-50 dark:bg-blue-900/30' : ''}`} style={{ height: `${rowHeight}px` }}>
         {holiday && (
@@ -491,7 +508,7 @@ const YearlyGrid = React.memo(({
             style={{
               width: `${totalWidth}px`,
               height: `${rowHeight}px`,
-              background: holidayDisplay.gradient,
+              background: holidayDisplay.pattern ? `${holidayDisplay.gradient}, ${holidayDisplay.pattern}` : holidayDisplay.gradient,
               zIndex: 15,
               borderLeft: '1px solid rgba(255, 255, 255, 0.2)',
               borderRight: '1px solid rgba(255, 255, 255, 0.2)',

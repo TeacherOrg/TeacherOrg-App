@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { X, Trash2, Palette, Image, BookOpen, Save as SaveIcon, GraduationCap, Search, Plus } from "lucide-react";
+import { X, Trash2, Palette, Package, Image, BookOpen, Save as SaveIcon, GraduationCap, Search, Plus } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { motion } from "framer-motion";
 import { SketchPicker } from 'react-color';
@@ -29,6 +29,24 @@ import { getLehrplanData } from '@/components/curriculum/lehrplanData';
 const PRESET_COLORS = [
   '#ef4444', '#f97316', '#eab308', '#84cc16', '#22c55e', '#10b981',
   '#0ea5e9', '#3b82f6', '#8b5cf6', '#d946ef', '#ec4899', '#64748b'
+];
+
+const COMMON_MATERIALS = [
+  "Dossier",
+  "Arbeitsheft",
+  "Schreibheft",
+  "Buch",
+  "Zirkel",
+  "Geodreieck",
+  "Taschenrechner",
+  "Lineal",
+  "IPad",
+  "Laptop",
+  "Heft",
+  "Stift",
+  "Farben",
+  "Schere"
+  // hier kannst du jederzeit weitere ergänzen
 ];
 
 const getCurrentWeek = () => {
@@ -84,6 +102,11 @@ export default function TopicModal({ isOpen, onClose, onSave, onDelete, topic, s
   const [showColorPicker, setShowColorPicker] = useState(false);
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+
+  // Neue States für den Material-Tab
+  const [selectedCommon, setSelectedCommon] = useState([]);
+  const [customMaterials, setCustomMaterials] = useState([]);
+  const [newMaterialName, setNewMaterialName] = useState("");
 
   const handleImageChange = (e) => {
     const file = e.target.files[0];
@@ -226,8 +249,13 @@ export default function TopicModal({ isOpen, onClose, onSave, onDelete, topic, s
       
       setCompetencySearch('');
       setCompetencyCycleFilter('all');
+
+      // NEU: immer neu laden wenn zurückgekehrt (z. B. aus Assign-Modus)
+      if (topic?.id || loadedTopic?.id) {
+        loadTopicLessons();
+      }
     }
-  }, [isOpen, topic, subjectColor, subject]);
+  }, [isOpen, topic, loadedTopic?.id, subjectColor, subject]);
 
   const loadTopicLessons = async () => {
     if (!topic?.id) return;
@@ -391,7 +419,8 @@ export default function TopicModal({ isOpen, onClose, onSave, onDelete, topic, s
       goals: formData.goals || '',
       department: formData.department || '',
       estimated_lessons: formData.estimated_lessons || 0,
-      lehrplan_kompetenz_ids: selectedCompetencies
+      lehrplan_kompetenz_ids: selectedCompetencies,
+      materials: allMaterials // ← neu
     };
 
     try {
@@ -471,6 +500,9 @@ export default function TopicModal({ isOpen, onClose, onSave, onDelete, topic, s
     navigate('/topics?tab=curriculum&select=true');
   };
 
+  // Gesamte Materialliste für Speichern & Anzeige
+  const allMaterials = [...selectedCommon, ...customMaterials];
+
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-[90vw] md:max-w-3xl max-h-[90vh] w-full overflow-y-auto bg-slate-900 border-slate-700 text-white p-4 md:p-6">
@@ -497,7 +529,7 @@ export default function TopicModal({ isOpen, onClose, onSave, onDelete, topic, s
             className="space-y-4"
           >
             <Tabs defaultValue="general" className="w-full">
-              <TabsList className="grid w-full grid-cols-5 bg-slate-800">
+              <TabsList className="grid w-full grid-cols-6 bg-slate-800">
                 <TabsTrigger value="general">Allgemein</TabsTrigger>
                 <TabsTrigger value="content">Inhalt</TabsTrigger>
                 <TabsTrigger value="competencies" className="relative">
@@ -509,6 +541,13 @@ export default function TopicModal({ isOpen, onClose, onSave, onDelete, topic, s
                   )}
                 </TabsTrigger>
                 <TabsTrigger value="lessons">Lektionen</TabsTrigger>
+                <TabsTrigger value="material">
+                  <Package className="w-4 h-4 mr-2" />
+                  Material
+                  {allMaterials.length > 0 && (
+                    <Badge className="ml-2 text-xs px-1.5 py-0.5">{allMaterials.length}</Badge>
+                  )}
+                </TabsTrigger>
                 <TabsTrigger value="media">Medien</TabsTrigger>
               </TabsList>
 
@@ -618,20 +657,7 @@ export default function TopicModal({ isOpen, onClose, onSave, onDelete, topic, s
                     className="h-24 md:h-32 bg-slate-800 border-slate-600 text-sm md:text-base"
                   />
                 </div>
-
-                <div className="border border-slate-700 bg-slate-800 rounded-lg p-4">
-                  <h3 className="text-xs md:text-sm font-semibold text-slate-300 mb-2">Vorschau</h3>
-                  <div
-                    className="rounded-lg p-4 text-white"
-                    style={{ backgroundColor: formData.color || subjectColor || '#3b82f6' }}
-                  >
-                    <h4 className="font-bold text-base">{formData.name || 'Thema Titel'}</h4>
-                    <p className="text-sm opacity-80 mt-1">{formData.description || 'Keine Beschreibung'}</p>
-                    {formData.goals && (
-                      <p className="text-xs opacity-70 mt-2">Ziel: {formData.goals.substring(0, 100)}{formData.goals.length > 100 ? '...' : ''}</p>
-                    )}
-                  </div>
-                </div>
+                {/* ← Vorschau-Block komplett gelöscht */}
               </TabsContent>
 
               <TabsContent value="competencies" className="space-y-4">
@@ -831,6 +857,86 @@ export default function TopicModal({ isOpen, onClose, onSave, onDelete, topic, s
                   <p className="text-xs text-blue-300">
                     Tipp: Lektionen können direkt in der Jahresübersicht diesem Thema zugewiesen werden, indem Sie das Thema aktivieren und auf die gewünschten Zeitslots klicken.
                   </p>
+                </div>
+              </TabsContent>
+
+              {/* ─── NEUER MATERIAL-TAB ─── */}
+              <TabsContent value="material" className="space-y-6">
+                <div>
+                  <Label className="text-base font-semibold flex items-center gap-2">
+                    <Package className="w-5 h-5" />
+                    Materialpool für dieses Thema
+                  </Label>
+                  <p className="text-sm text-slate-400 mt-2">
+                    Diese Materialien erscheinen in allen Lektionen dieses Themas als vorausgewählte Optionen beim Anlegen eines Arbeitsschritts.
+                  </p>
+
+                  <div className="mt-6">
+                    <h4 className="font-medium mb-3">Häufige Materialien</h4>
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                      {COMMON_MATERIALS.map((mat) => (
+                        <div key={mat} className="flex items-center space-x-2">
+                          <Checkbox
+                            id={`common-${mat}`}
+                            checked={selectedCommon.includes(mat)}
+                            onCheckedChange={(checked) => {
+                              if (checked) {
+                                setSelectedCommon(prev => [...prev, mat]);
+                              } else {
+                                setSelectedCommon(prev => prev.filter(m => m !== mat));
+                              }
+                            }}
+                          />
+                          <label htmlFor={`common-${mat}`} className="text-sm">
+                            {mat}
+                          </label>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="mt-8">
+                    <h4 className="font-medium mb-3">Eigene Materialien</h4>
+                    <div className="flex flex-wrap gap-2 mb-4">
+                      {customMaterials.map((mat, i) => (
+                        <Badge key={i} variant="secondary" className="pl-3 pr-2 py-1 flex items-center gap-2">
+                          {mat}
+                          <X
+                            className="w-3 h-3 cursor-pointer hover:text-red-400"
+                            onClick={() => setCustomMaterials(prev => prev.filter((_, idx) => idx !== i))}
+                          />
+                        </Badge>
+                      ))}
+                      {customMaterials.length === 0 && (
+                        <p className="text-sm text-slate-500">Noch keine eigenen Materialien</p>
+                      )}
+                    </div>
+
+                    <div className="flex gap-2">
+                      <Input
+                        value={newMaterialName}
+                        onChange={e => setNewMaterialName(e.target.value)}
+                        onKeyDown={e => e.key === "Enter" && addCustom()}
+                        placeholder="z.B. Lego Steine, Whiteboard-Marker..."
+                        className="flex-1"
+                      />
+                      <Button
+                        type="button"
+                        onClick={() => {
+                          const trimmed = newMaterialName.trim();
+                          if (trimmed && !allMaterials.includes(trimmed)) {
+                            setCustomMaterials(prev => [...prev, trimmed]);
+                            setNewMaterialName("");
+                          } else if (allMaterials.includes(trimmed)) {
+                            toast.info("Dieses Material existiert bereits");
+                          }
+                        }}
+                      >
+                        <Plus className="w-4 h-4 mr-2" />
+                        Hinzufügen
+                      </Button>
+                    </div>
+                  </div>
                 </div>
               </TabsContent>
 
