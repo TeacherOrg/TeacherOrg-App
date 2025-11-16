@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { User } from "@/api/entities";
 import { createPageUrl } from '@/utils/index.js';
-import { Calendar, Users, Settings, GraduationCap, LogOut, ClipboardList, Sun, Moon, BookOpen } from "lucide-react";
+import { Calendar, Users, Settings, GraduationCap, LogOut, ClipboardList, Sun, Moon, BookOpen, Maximize } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -28,6 +28,11 @@ const navigationItems = [
     title: "Stundenplan",
     url: createPageUrl("Timetable"),
     icon: Calendar,
+  },
+  {
+    title: "Schüler",
+    url: createPageUrl("StudentsOverview"),
+    icon: Users,
   },
   {
     title: "Themenansicht",
@@ -152,6 +157,14 @@ export default function Layout({ children, currentPageName }) {
     setTheme(theme === 'dark' ? 'light' : 'dark');
   };
 
+  const toggleFullscreen = () => {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen();
+    } else {
+      document.exitFullscreen();
+    }
+  };
+
   const footerItems = [
     {
       title: "Settings",
@@ -199,7 +212,8 @@ export default function Layout({ children, currentPageName }) {
           {!isFullscreen || location.pathname !== createPageUrl("Timetable") ? (
             <Sidebar 
               className={`
-                bg-white dark:bg-slate-900/95 backdrop-blur-lg shadow-xl transition-all duration-300 border-r border-slate-200 dark:border-slate-700/80 flex flex-col
+                sidebar-transparent-inherit
+                transition-all duration-300 flex flex-col
                 ${isSidebarOpen ? 'w-64' : 'w-20'}
                 md:${isSidebarOpen ? 'w-64' : 'w-20'}
               `}
@@ -255,7 +269,7 @@ export default function Layout({ children, currentPageName }) {
               </SidebarContent>
               
               <SidebarFooter 
-                className={`mt-auto px-0 py-4 border-t border-slate-200 dark:border-slate-700/80`}
+                className={`mt-auto px-0 py-4 border-t-0`} /* remove visible top border */
               >
                 <SidebarGroup>
                   <SidebarGroupContent>
@@ -304,29 +318,6 @@ export default function Layout({ children, currentPageName }) {
           ) : null}
 
           <main className="flex-1 flex flex-col relative bg-transparent">
-            {!isFullscreen || location.pathname !== createPageUrl("Timetable") ? (
-              <header className="px-6 py-4 md:hidden shadow-sm transition-colors duration-300 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <SidebarTrigger 
-                      className="p-2 rounded-lg transition-all duration-200 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-800 dark:text-white"
-                    />
-                    <h1 className="text-xl font-bold text-slate-800 dark:text-white tracking-tight">TimeGrid</h1>
-                  </div>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={toggleTheme}
-                    className="w-8 h-8 rounded-lg text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 flex items-center justify-center"
-                  >
-                    <Sun className="h-4 w-4 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
-                    <Moon className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 h-4 w-4 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
-                    <span className="sr-only">Toggle theme</span>
-                  </Button>
-                </div>
-              </header>
-            ) : null}
-
             <div className="flex-1">
               {children}
             </div>

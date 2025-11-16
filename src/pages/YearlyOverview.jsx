@@ -300,6 +300,28 @@ function InnerYearlyOverviewPage() {
     return subjects.filter(s => s.class_id === activeClassId);
   }, [subjects, activeClassId]);
 
+  const displayedSubjects = useMemo(() => {
+    if (activeClassId == null) {
+      // Alle Klassen → alle Fächer, sortiert nach Klassenname + Fachname
+      const allSubjects = [];
+      const sortedClasses = [...classes].sort((a, b) => a.name.localeCompare(b.name));
+      sortedClasses.forEach(cls => {
+        const classSubjects = subjects
+          .filter(s => s.class_id === cls.id)
+          .sort((a, b) => a.name.localeCompare(b.name));
+        allSubjects.push(...classSubjects);
+      });
+      return allSubjects;
+    }
+
+    // Einzelne Klasse
+    return subjects.filter(s => s.class_id === activeClassId);
+  }, [subjects, activeClassId, classes]);
+
+  const activeClassName = useMemo(() => classes.find(c => c.id === activeClassId)?.name || '', [classes, activeClassId]);
+
+  const activeClassDisplayName = activeClassId === null ? 'Alle Klassen' : activeClassName;
+
   const lessonsForYear = useMemo(() => {
     let filtered = yearlyLessons.filter(lesson => Number(lesson.school_year) === currentYear || !lesson.school_year);
     if (isAssignMode && assignSubject) {
@@ -314,7 +336,7 @@ function InnerYearlyOverviewPage() {
     return filtered;
   }, [yearlyLessons, currentYear, isAssignMode, assignSubject, subjects]);
 
-const handleLessonClick = useCallback(async (lesson, slot) => {
+  const handleLessonClick = useCallback(async (lesson, slot) => {
     if (isAssignMode) {
       const id = lesson?.id || `${slot.week_number}-${slot.subject}-${slot.lesson_number}`;
       setSelectedLessons(prev => {
@@ -773,7 +795,7 @@ const handleLessonClick = useCallback(async (lesson, slot) => {
     }
   }, [yearlyLessons, activeTopicId, queryClientLocal, currentYear]);
 
-  const activeClassName = useMemo(() => classes.find(c => c.id === activeClassId)?.name || '', [classes, activeClassId]);
+  const selectedSubject = useMemo(() => subjects.find(s => s.name === activeSubjectName), [subjects, activeSubjectName]);
 
   return (
     <div className="h-screen flex flex-col bg-gradient-to-br from-slate-50 via-slate-100 to-slate-200 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 overflow-hidden transition-colors duration-300">
@@ -878,19 +900,18 @@ const handleLessonClick = useCallback(async (lesson, slot) => {
                     </Button>
                   </div>
                 )}
-                {subjectsForClass.length === 0 ? (
+                {displayedSubjects.length === 0 ? (
                   <div className="text-center text-slate-400">Keine Fächer verfügbar – Bitte fügen Sie ein Fach hinzu.</div>
                 ) : (
                   <YearlyGrid
                     lessons={lessonsForYear}
                     topics={topics}
-                    subjects={subjectsForClass}
+                    subjects={displayedSubjects}
                     academicWeeks={ACADEMIC_WEEKS}
                     onLessonClick={handleLessonClick}
                     activeClassId={activeClassId}
                     activeTopicId={activeTopicId}
                     currentYear={currentYear}
-                    activeClassName={activeClassName}
                     holidays={holidays}
                     onShowHover={handleShowHover}
                     onHideHover={handleHideHover}
@@ -899,6 +920,8 @@ const handleLessonClick = useCallback(async (lesson, slot) => {
                     isAssignMode={isAssignMode}
                     selectedLessons={selectedLessons}
                     onSelectLesson={handleSelectLesson}
+                    classes={classes}
+                    onSelectClass={setActiveClassId}
                   />
                 )}
               </>
@@ -959,8 +982,8 @@ const handleLessonClick = useCallback(async (lesson, slot) => {
         onSave={handleSaveTopic}
         onDelete={handleDeleteTopic}
         topic={editingTopic}
-        subjectColor={subjects.find(s => s.name === activeSubjectName)?.color}
-        subject={subjects.find(s => s.name === activeSubjectName)}
+        subjectColor={selectedSubject?.color}
+        subject={selectedSubject}
         topics={topics} // Ensure topics are passed for the Select in LessonModal
         autoAssignTopicId={editingTopic?.id}
       />

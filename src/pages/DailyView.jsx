@@ -2,14 +2,12 @@ import React, { useState, useEffect, useMemo, useCallback, useRef } from "react"
 import { useNavigate } from "react-router-dom";
 import { Lesson, YearlyLesson, Subject, Holiday, Setting, Class, Announcement, Chore, ChoreAssignment, Student } from "@/api/entities";
 import { Button } from "@/components/ui/button";
-import { ChevronLeft, ChevronRight, Maximize, Settings, Calendar, Clock, Users, Home, Zap } from "lucide-react";
+import { ChevronLeft, ChevronRight, Maximize, Settings, Calendar, Users, Home, Zap } from "lucide-react";
 import { motion } from "framer-motion";
 import CalendarLoader from "../components/ui/CalendarLoader";
 import LessonOverviewPanel from "../components/daily/LessonOverviewPanel";
 import LessonDetailPanel from "../components/daily/LessonDetailPanel";
-import ClockPanel from "../components/daily/ClockPanel";
 import CustomizationPanel from "../components/daily/CustomizationPanel";
-import AnnouncementsTicker from "../components/daily/AnnouncementsTicker";
 import ChoresDisplay from "../components/daily/ChoresDisplay";
 import { createPageUrl } from "@/utils";
 import { getThemeGradient } from "@/utils/colorDailyUtils";
@@ -18,10 +16,9 @@ import { CustomizationSettings } from "@/api/entities";
 import pb from "@/api/pb";
 
 // Utility functions
-function getCurrentWeek() {
-  const now = new Date();
-  const start = new Date(now.getFullYear(), 0, 1);
-  const days = Math.floor((now - start) / (24 * 60 * 60 * 1000));
+function getCurrentWeek(date) {
+  const start = new Date(date.getFullYear(), 0, 1);
+  const days = Math.floor((date - start) / (24 * 60 * 60 * 1000));
   return Math.ceil((days + start.getDay() + 1) / 7);
 }
 
@@ -129,18 +126,16 @@ export default function DailyView({ currentDate, onDateChange }) {
   const [announcements, setAnnouncements] = useState([]);
 
   // New feature states
-  const [completedSteps, setCompletedSteps] = useState(new Set());
   const [manualStepIndex, setManualStepIndex] = useState(null);
   const [showChoresView, setShowChoresView] = useState(false);
   
   // Customization settings
   const [customization, setCustomization] = useState({
-    fontSize: { title: 'text-2xl', content: 'text-lg', clock: 'text-4xl' },
+    fontSize: { title: 'text-2xl', content: 'text-lg' /* removed clock */ },
     background: { type: 'gradient', value: 'from-blue-50 to-indigo-100 dark:from-slate-900 dark:to-slate-800' },
     theme: 'default', // Fallback auf 'default'
     autoFocusCurrentLesson: true,
     showOverview: true,
-    showClock: true,
     audio: { enabled: false, volume: 0.5 }
   });
 
@@ -148,7 +143,7 @@ export default function DailyView({ currentDate, onDateChange }) {
   const [currentTime, setCurrentTime] = useState(new Date());
 
   // Calculate current week and day info
-  const currentWeek = useMemo(() => getCurrentWeek(), []);
+  const currentWeek = useMemo(() => getCurrentWeek(currentDate), [currentDate]);
   const weekInfo = useMemo(() => getWeekInfo(currentWeek, currentDate.getFullYear()), [currentWeek, currentDate]);
   const { timeSlots, breaks } = useMemo(() => generateTimeSlotsWithBreaks(settings), [settings]);
   
@@ -188,10 +183,8 @@ export default function DailyView({ currentDate, onDateChange }) {
             fontSize: {
               title: loaded.font_size_title,
               content: loaded.font_size_content,
-              clock: loaded.font_size_clock,
             },
             showOverview: loaded.show_overview,
-            showClock: loaded.show_clock,
             autoFocusCurrentLesson: loaded.auto_focus_current_lesson,
             compactMode: loaded.compact_mode,
             audio: {
@@ -240,9 +233,7 @@ export default function DailyView({ currentDate, onDateChange }) {
           background_value: customization.background.value,
           font_size_title: customization.fontSize.title,
           font_size_content: customization.fontSize.content,
-          font_size_clock: customization.fontSize.clock,
           show_overview: customization.showOverview,
-          show_clock: customization.showClock,
           auto_focus_current_lesson: customization.autoFocusCurrentLesson,
           compact_mode: customization.compactMode,
           audio_enabled: customization.audio.enabled,
@@ -511,31 +502,18 @@ export default function DailyView({ currentDate, onDateChange }) {
 
   // Auto-focus current lesson/item if enabled
   useEffect(() => {
-    if (customization.autoFocusCurrentLesson && currentItem && currentItem.type === 'lesson' && currentItem !== selectedItem) {
+    if (currentItem && currentItem.type === 'lesson' && currentItem !== selectedItem) {
       setSelectedItem(currentItem);
     }
-  }, [currentItem, customization.autoFocusCurrentLesson, selectedItem]);
+  }, [currentItem, selectedItem]);
   
   const handleItemSelect = useCallback((item) => {
       if(item.type === 'lesson') {
         setSelectedItem(item);
-        setCompletedSteps(new Set());
         setManualStepIndex(null);
       }
   }, []);
 
-  const handleStepCompleteChange = useCallback((stepId) => {
-      setCompletedSteps(prev => {
-          const newSet = new Set(prev);
-          if (newSet.has(stepId)) {
-              newSet.delete(stepId);
-          } else {
-              newSet.add(stepId);
-          }
-          return newSet;
-      });
-  }, []);
-  
   const handleManualStepChange = useCallback((index) => {
       setManualStepIndex(index);
   }, []);
@@ -585,8 +563,8 @@ export default function DailyView({ currentDate, onDateChange }) {
     }
 
     return {
-      gridTemplateColumns: '1.5fr 4fr',
-      gap: '1rem',
+      gridTemplateColumns: 'minmax(0, 0.7fr) minmax(0, 2fr)', // Ändere zu 1fr 2fr, um das rechte Panel schmaler zu machen
+      gap: '0.5rem', // Reduziere gap, um Panels näher zusammenzubringen
       height: '100%',
     };
   }, [customization.showOverview]);
@@ -610,47 +588,39 @@ export default function DailyView({ currentDate, onDateChange }) {
       animate={{ opacity: 1 }}
       transition={{ duration: 1 }}
     >
+      {/* Temporary top-right buttons for settings and fullscreen */}
+      <div className="absolute top-4 right-4 z-50 flex gap-2 pointer-events-auto">
+        <Button
+          variant="outline"
+          size="icon"
+          onClick={() => setShowCustomization(true)}
+          className="rounded-xl"
+        >
+          <Settings className="w-4 h-4" />
+        </Button>
+        <Button
+          variant="outline"
+          size="icon"
+          onClick={toggleFullscreen}
+          className="rounded-xl"
+        >
+          <Maximize className="w-4 h-4" />
+        </Button>
+      </div>
+      
       <audio ref={audioRef} src="/audio/end_of_lesson.ogg" preload="auto" />
       
-      {/* Announcements Ticker */}
-      <AnnouncementsTicker announcements={announcements} />
-      
-      {/* Settings & Fullscreen buttons – nur im normalen Modus */}
-      {!isFullscreen && (
-        <div className="absolute top-4 left-4 z-50 flex items-center gap-2"> {/* left-4 statt right-4 */}
-          <Button
-            variant="outline"
-            size="icon"
-            onClick={() => setShowCustomization(!showCustomization)}
-            className="rounded-xl"
-          >
-            <Settings className="w-4 h-4" />
-          </Button>
-          
-          <Button
-            variant="outline"
-            size="icon"
-            onClick={toggleFullscreen}
-            className="rounded-xl"
-          >
-            <Maximize className="w-4 h-4" />
-          </Button>
-        </div>
-      )}
-
       {/* Main Content Area */}
       <div 
-        className={`p-4 h-full w-full grid gap-4 ${isFullscreen ? 'p-0' : ''}`}
-        style={{ ...mainGridStyle, maxWidth: '100%', overflowX: 'hidden' }}
+        className={`h-full w-full grid grid-cols-1 lg:grid-cols-[minmax(350px,25%)_1fr] gap-4 overflow-hidden ${
+          isFullscreen ? 'p-0' : 'p-4'
+        }`}
       >
         {/* Lesson Overview Panel */}
         {customization.showOverview && (
           <motion.div 
-            className="h-full overflow-hidden"
-            style={{ maxWidth: '100%' }}
-            drag
-            dragConstraints={{ left: -100, right: 100, top: -100, bottom: 100 }}
-            whileDrag={{ scale: 0.95 }}
+            className="h-full overflow-hidden min-w-0" /* allow shrinking */
+            style={{ maxWidth: '350px' }} /* Setze maximale Breite für große Bildschirme (ca. 50% weniger als vorherige implizite Max) */
           >
             <LessonOverviewPanel
               items={lessonsForDate}
@@ -666,7 +636,7 @@ export default function DailyView({ currentDate, onDateChange }) {
         )}
 
         {/* Main Central Panel */}
-        <div className="h-full overflow-hidden" style={{ maxWidth: '100%' }}>
+        <div className="h-full overflow-y-auto overflow-x-hidden p-1 md:p-2 min-w-0 flex flex-col" style={{ maxWidth: '100%' }}> {/* Entferne overflowX: 'auto', um Scrollen zu vermeiden; Panel passt sich an */}
           {showChoresView ? (
             <ChoresDisplay
               assignments={todaysAssignments}
@@ -683,15 +653,13 @@ export default function DailyView({ currentDate, onDateChange }) {
               customization={customization}
               currentTime={currentTime}
               selectedDate={currentDate}
-              completedSteps={completedSteps}
-              onStepCompleteChange={handleStepCompleteChange}
               manualStepIndex={manualStepIndex}
               onManualStepChange={handleManualStepChange}
               theme={customization.theme || 'default'}
               isDark={isDark}
             />
           ) : (
-             <div className="flex items-center justify-center h-full text-center bg-white/50 dark:bg-slate-800/50 rounded-2xl">
+            <div className="flex items-center justify-center h-full text-center bg-white/50 dark:bg-slate-800/50 rounded-2xl">
               <div>
                 <div className="text-6xl mb-4">👈</div>
                 <h2 className={`${customization.fontSize.title} font-bold text-slate-600 dark:text-slate-400 mb-2 font-[Inter]`}>

@@ -12,82 +12,67 @@ import { toast } from 'react-hot-toast';
  * @param {number} week - Target week number
  * @param {number} [preferredPeriod=1] - Preferred starting period
  * @param {boolean} [isDoubleLesson=false] - Whether the lesson is a double lesson
- * @returns {Object|null} - {day_of_week, period_slot} or null if no slot found
+ * @returns {Object|null} - {day, period} or null if no slot found
  */
-export const findFreeSlot = (allLessons, preferredDay, timeSlots, week, preferredPeriod = 1, isDoubleLesson = false) => {
-  const validDays = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'];
+export const findFreeSlot = (...args) => {
+  const allLessons = args[0];
+  let timeSlots, currentWeek, preferredDay, preferredPeriod = 1, isDoubleLesson = false;
 
-  // Validate inputs
-  if (!validDays.includes(preferredDay)) {
-    console.error(`Invalid preferredDay: ${preferredDay}`);
-    toast.error('Ungültiger Tag angegeben.');
-    return null;
+  if (Array.isArray(args[1])) {
+    timeSlots = args[1];
+    currentWeek = args[2];
+  } else {
+    preferredDay = args[1];
+    timeSlots = args[2];
+    currentWeek = args[3];
+    preferredPeriod = args[4] || 1;
+    isDoubleLesson = !!args[5];
   }
+
+  const days = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'];
+
   if (!Array.isArray(timeSlots) || timeSlots.length === 0) {
-    console.error('Invalid timeSlots: Must be a non-empty array');
-    toast.error('Keine gültigen Zeitfenster verfügbar.');
+    console.warn('findFreeSlot: timeSlots empty or invalid – returning null');
     return null;
   }
 
-  // Check if slot is occupied (single or double lesson)
-  const isSlotOccupied = (day, period) => {
-    return allLessons.some(l => 
-      l.day_of_week === day && 
-      l.period_slot === period && 
-      l.week_number === week && 
+  const isSlotOccupied = (day, period) =>
+    allLessons.some(l =>
+      l.day_of_week === day &&
+      l.period_slot === period &&
+      l.week_number === currentWeek &&
       !l.is_hidden
     );
-  };
 
-  // Check if slot is available for a double lesson (needs two consecutive periods)
   const isDoubleSlotAvailable = (day, period) => {
-    if (period >= timeSlots.length) return false; // Last period can't start a double lesson
+    if (period >= timeSlots.length) return false;
     return !isSlotOccupied(day, period) && !isSlotOccupied(day, period + 1);
   };
 
-  // First, try to find slot in preferred day starting from preferredPeriod
-  for (let p = preferredPeriod; p <= timeSlots.length; p++) {
-    if (isDoubleLesson) {
-      if (isDoubleSlotAvailable(preferredDay, p)) {
-        return { day_of_week: preferredDay, period_slot: p };
-      }
-    } else if (!isSlotOccupied(preferredDay, p)) {
-      return { day_of_week: preferredDay, period_slot: p };
-    }
-  }
-
-  // If no slot found in preferred day, try next days in order
-  const dayIndex = validDays.indexOf(preferredDay);
-  for (let d = dayIndex + 1; d < validDays.length; d++) {
-    const nextDay = validDays[d];
-    for (let p = 1; p <= timeSlots.length; p++) {
+  // Try preferred day first if provided
+  if (preferredDay && days.includes(preferredDay)) {
+    for (let p = preferredPeriod; p <= timeSlots.length; p++) {
       if (isDoubleLesson) {
-        if (isDoubleSlotAvailable(nextDay, p)) {
-          return { day_of_week: nextDay, period_slot: p };
-        }
-      } else if (!isSlotOccupied(nextDay, p)) {
-        return { day_of_week: nextDay, period_slot: p };
+        if (isDoubleSlotAvailable(preferredDay, p)) return { day: preferredDay, period: p };
+      } else if (!isSlotOccupied(preferredDay, p)) {
+        return { day: preferredDay, period: p };
       }
     }
   }
 
-  // Fallback: try earlier days if we started late in the week
-  if (dayIndex > 0) {
-    for (let d = 0; d < dayIndex; d++) {
-      const earlierDay = validDays[d];
-      for (let p = 1; p <= timeSlots.length; p++) {
-        if (isDoubleLesson) {
-          if (isDoubleSlotAvailable(earlierDay, p)) {
-            return { day_of_week: earlierDay, period_slot: p };
-          }
-        } else if (!isSlotOccupied(earlierDay, p)) {
-          return { day_of_week: earlierDay, period_slot: p };
-        }
+  // Scan all days and periods (fallback)
+  for (const day of days) {
+    for (const ts of timeSlots) {
+      const p = ts.period;
+      if (isDoubleLesson) {
+        if (isDoubleSlotAvailable(day, p)) return { day, period: p };
+      } else if (!isSlotOccupied(day, p)) {
+        return { day, period: p };
       }
     }
   }
 
-  console.warn(`No free slot found for ${preferredDay} in week ${week}${isDoubleLesson ? ' (double lesson)' : ''}`);
+  console.warn(`No free slot found for week ${currentWeek}${isDoubleLesson ? ' (double lesson)' : ''}`);
   toast.error('Kein freier Slot verfügbar – Lektion bleibt unplatziert.');
   return null;
 };

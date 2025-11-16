@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { motion } from "framer-motion";
-import { Clock, User, Users, Users2, Building, ChevronLeft, ChevronRight, Play, CheckCircle2, Circle, Coffee, ChevronsRight } from "lucide-react";
+import { Clock, User, Users, Users2, Building, ChevronLeft, ChevronRight, Play, Coffee, ChevronsRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { getThemeGradient } from "@/utils/colorDailyUtils";
 
@@ -25,8 +25,6 @@ export default function LessonDetailPanel({
   customization,
   currentTime,
   selectedDate,
-  completedSteps,
-  onStepCompleteChange,
   manualStepIndex,
   onManualStepChange,
   theme, // Neu hinzufügen
@@ -83,10 +81,16 @@ export default function LessonDetailPanel({
         return;
       }
 
-      const minutes = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
-      const seconds = Math.floor((distance % (1000 * 60)) / 1000);
+      const totalSeconds = Math.floor(distance / 1000);
+      const hours = Math.floor(totalSeconds / 3600);
+      const minutes = Math.floor((totalSeconds % 3600) / 60);
+      const seconds = totalSeconds % 60;
       
-      setTimeLeftInPause(`${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`);
+      if (hours > 0) {
+        setTimeLeftInPause(`${hours}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`);
+      } else {
+        setTimeLeftInPause(`${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`);
+      }
     }, 1000);
 
     return () => clearInterval(timer);
@@ -146,19 +150,33 @@ export default function LessonDetailPanel({
   const resetToAutoMode = () => {
     onManualStepChange(null);
   };
-  
-  const handleStepToggle = useCallback((stepId) => {
-    onStepCompleteChange(stepId);
-  }, [onStepCompleteChange]);
 
-  const totalTime = useMemo(() => {
-    return displayLesson?.steps?.reduce((total, step) => total + (parseInt(step.time) || 0), 0) || 0;
-  }, [displayLesson?.steps]);
+  const stepProgress = useMemo(() => {
+    if (!displayLesson?.steps || selectedDate.toDateString() !== new Date().toDateString()) {
+      return displayLesson.steps ? displayLesson.steps.map(() => 0) : [];
+    }
 
-  const completedTime = useMemo(() => {
-    if (currentStepIndex < 0 || !displayLesson) return 0;
-    return displayLesson.steps?.slice(0, currentStepIndex + 1).reduce((total, step) => total + (parseInt(step.time) || 0), 0) || 0;
-  }, [displayLesson?.steps, currentStepIndex]);
+    const progresses = [];
+    const lessonStart = new Date(`${new Date().toDateString()} ${displayLesson.timeSlot.start}`);
+    let elapsed = Math.max(0, (currentTime - lessonStart) / 60000);
+
+    for (const step of displayLesson.steps) {
+      const duration = parseInt(step.time) || 0;
+      if (duration === 0) {
+        progresses.push(0);
+        continue;
+      }
+      if (elapsed >= duration) {
+        progresses.push(100);
+        elapsed -= duration;
+      } else {
+        progresses.push((elapsed / duration) * 100);
+        elapsed = 0;
+      }
+    }
+
+    return progresses;
+  }, [displayLesson, currentTime, selectedDate]);
 
   // Pause View
   if (isPause) {
@@ -194,21 +212,47 @@ export default function LessonDetailPanel({
     );
   }
 
+  // Add debugging logs for overflow check (updated for new grid layout)
+  useEffect(() => {
+    if (!displayLesson) return;
+
+    const check = () => {
+      // Robuster: Nimm das äußere Panel und das innere Grid
+      const panel = document.querySelector('[class*="LessonDetailPanel"] > div > div.flex.h-full');
+      const content = document.querySelector('.flex-1.overflow-y-auto.bg-white\\/95');
+      const grid = document.querySelector('.grid-cols-\\[80px_80px_140px_1fr_200px\\]');
+
+      console.log('%cLessonDetail Overflow Check', 'font-weight:bold; color:#ec4899');
+      console.log('Viewport Breite:', window.innerWidth);
+      if (content && grid) {
+        console.log('Content wrapper Breite:', content.clientWidth, 'scrollWidth:', content.scrollWidth);
+        console.log('Grid Breite:', grid.offsetWidth, 'scrollWidth:', grid.scrollWidth);
+        console.log('Overflow?', grid.offsetWidth > content.clientWidth ? 'JA (Grid zu breit)' : 'Nein – alles gut 🎉');
+      } else {
+        console.log('Elemente nicht gefunden – wahrscheinlich noch nicht gerendert');
+      }
+    };
+
+    check();
+    window.addEventListener('resize', check);
+    return () => window.removeEventListener('resize', check);
+  }, [displayLesson]);
+
   // Lesson Detail View
   if (displayLesson) {
     const { name, emoji, color, isGradient } = getLessonDisplay(displayLesson);
 
     return (
       <div 
-        className="rounded-2xl shadow-2xl border-2 overflow-hidden h-full flex flex-col"
+        className="flex h-full flex-col overflow-hidden rounded-2xl shadow-2xl"
         style={{ 
           background: isGradient ? color : getThemeGradient(theme || 'default', color, undefined, isDark),
-          borderColor: color + '40'
+          borderColor: color + '40',
         }}
       >
         {/* Header */}
         <div 
-          className="p-4 cursor-default border-b flex justify-between items-center"
+          className="p-6 cursor-default border-b flex justify-between items-center"
           style={{ 
             background: isGradient ? color : getThemeGradient(theme || 'default', color, -10, isDark),
           }}
@@ -238,193 +282,189 @@ export default function LessonDetailPanel({
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto bg-white/95 dark:bg-slate-800/95 backdrop-blur-sm">
-          {displayLesson.steps && displayLesson.steps.length > 0 ? (
-            <div className="p-4 md:p-6"> {/* Reduziert auf p-4, md:p-6 für Responsive */}
-              {/* Progress indicator */}
-              <div className="mb-6 p-4 bg-slate-50 dark:bg-slate-700 rounded-xl">
-                <div className="flex justify-between items-center mb-2">
-                  <span className={`${customization.fontSize.content} font-medium text-slate-700 dark:text-slate-300`}>
-                    Fortschritt
-                  </span>
-                  <span className="text-sm text-slate-500 dark:text-slate-400">
-                    {completedTime} / {totalTime} Min
-                  </span>
-                </div>
-                <div className="w-full bg-slate-200 dark:bg-slate-600 rounded-full h-3">
-                  <div 
-                    className="h-3 rounded-full transition-all duration-300"
-                    style={{ 
-                      width: `${totalTime > 0 ? (completedTime / totalTime) * 100 : 0}%`,
-                      backgroundColor: color
-                    }}
-                  />
-                </div>
-                
-                {/* Step controls */}
-                <div className="flex justify-between items-center mt-3">
-                  <div className="flex gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={handlePrevStep}
-                      disabled={currentStepIndex <= -1}
-                    >
-                      <ChevronLeft className="w-4 h-4" />
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={handleNextStep}
-                      disabled={currentStepIndex >= displayLesson.steps.length - 1}
-                    >
-                      <ChevronRight className="w-4 h-4" />
-                    </Button>
-                    {manualStepControl && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={resetToAutoMode}
-                        className="text-xs"
-                      >
-                        <Play className="w-3 h-3 mr-1" />
-                        Auto
-                      </Button>
-                    )}
-                  </div>
-                  <span className="text-sm text-slate-500 dark:text-slate-400">
-                    Schritt {Math.max(0, currentStepIndex + 1)} von {displayLesson.steps.length}
-                    {manualStepControl && (
-                      <span className="ml-2 px-2 py-1 bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 text-xs rounded-full">
-                        Manuell
-                      </span>
-                    )}
-                  </span>
-                </div>
+        <div className="flex-1 overflow-y-auto bg-white/95 dark:bg-slate-900/95">
+          <div className="p-4 md:p-6">
+            {/* Step controls */}
+            <div className="flex justify-between items-center mb-4">
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handlePrevStep}
+                  disabled={currentStepIndex <= -1}
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleNextStep}
+                  disabled={currentStepIndex >= displayLesson.steps.length - 1}
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </Button>
+                {manualStepControl && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={resetToAutoMode}
+                    className="text-xs"
+                  >
+                    <Play className="w-3 h-3 mr-1" />
+                    Auto
+                  </Button>
+                )}
               </div>
-
-              {/* Steps table with Emojis */}
-              <div className="overflow-x-auto max-w-full w-full">
-                <table className="w-full table-auto lesson-detail-table">
-                  <thead>
-                    <tr className="border-b-2 border-slate-200 dark:border-slate-600">
-                      <th className="p-3"></th>
-                      <th className={`${customization.fontSize.content} text-left p-3 text-slate-700 dark:text-slate-300 font-semibold`}>
-                        <span className="mr-1">⏱️</span>Zeit
-                      </th>
-                      <th className={`${customization.fontSize.content} text-left p-3 text-slate-700 dark:text-slate-300 font-semibold`}>
-                        <span className="mr-1">👥</span>Form
-                      </th>
-                      <th className={`${customization.fontSize.content} text-left p-3 text-slate-700 dark:text-slate-300 font-semibold`}>
-                        <span className="mr-1">✏️</span>Ablauf
-                      </th>
-                      <th className={`${customization.fontSize.content} text-left p-3 text-slate-700 dark:text-slate-300 font-semibold`}>
-                        <span className="mr-1">📦</span>Material
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {displayLesson.steps.map((step, index) => {
-                      const isCurrent = index === currentStepIndex;
-                      const isCompleted = completedSteps.has(step.id);
-                      const isPast = index < currentStepIndex;
-                      const WorkFormIcon = WORK_FORM_ICONS[step.workForm] || User;
-                      
-                      return (
-                        <motion.tr
-                          key={step.id || index}
-                          initial={{ opacity: 0, y: 10 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          transition={{ delay: index * 0.1 }}
-                          className={`border-b border-slate-100 dark:border-slate-700 transition-all duration-200 ${
-                            isCurrent 
-                              ? 'bg-yellow-100 dark:bg-yellow-900/30 font-bold shadow-md' 
-                              : isPast && !isCompleted
-                                ? 'opacity-60 bg-slate-50 dark:bg-slate-800/50' 
-                                : isCompleted 
-                                  ? 'opacity-50 bg-green-50 dark:bg-green-900/20 line-through'
-                                  : 'hover:bg-slate-50 dark:hover:bg-slate-800/30'
-                          }`}
-                        >
-                          <td className="p-3 text-center break-words">
-                            <button onClick={() => handleStepToggle(step.id)} className="cursor-pointer">
-                              {isCompleted ? <CheckCircle2 className="w-5 h-5 text-green-500" /> : <Circle className="w-5 h-5 text-slate-400" />}
-                            </button>
-                          </td>
-                          <td className="p-3 break-words">
-                            <div className="flex items-center gap-2">
-                              {isCurrent && (
-                                <div className="w-2 h-2 bg-yellow-500 rounded-full animate-pulse" />
-                              )}
-                              <span className={`${customization.fontSize.content} ${isCurrent ? 'font-bold' : ''}`}>
-                                {step.time ? `${step.time} Min` : '-'}
-                              </span>
-                            </div>
-                          </td>
-                          <td className="p-3 break-words">
-                            <div className="flex items-center gap-2">
-                              <WorkFormIcon className="w-4 h-4 text-slate-500" />
-                              <span className={`${customization.fontSize.content} ${isCurrent ? 'font-bold' : ''}`}>
-                                {WORK_FORMS[step.workForm] || step.workForm || '-'}
-                              </span>
-                            </div>
-                          </td>
-                          <td className="p-3 break-words">
-                            <span className={`${customization.fontSize.content} ${isCurrent ? 'font-bold' : ''}`}>
-                              {step.activity || '-'}
-                            </span>
-                          </td>
-                          <td className="p-3 break-words">
-                            <span className={`${customization.fontSize.content} ${isCurrent ? 'font-bold' : ''}`}>
-                              {step.material || '-'}
-                            </span>
-                          </td>
-                        </motion.tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-
-              {/* Additional lesson info */}
-              {(displayLesson.is_exam || displayLesson.is_half_class || displayLesson.is_double_lesson) && (
-                <div className="mt-6 p-4 bg-slate-50 dark:bg-slate-700 rounded-xl">
-                  <h4 className={`${customization.fontSize.content} font-semibold text-slate-700 dark:text-slate-300 mb-2`}>
-                    Lektionsdetails
-                  </h4>
-                  <div className="flex flex-wrap gap-2">
-                    {displayLesson.is_double_lesson && (
-                      <span className="px-3 py-1 bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 text-sm rounded-full">
-                        Doppellektion ({displayLesson.is_double_lesson ? '90' : '45'} Min)
-                      </span>
-                    )}
-                    {displayLesson.is_exam && (
-                      <span className="px-3 py-1 bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300 text-sm rounded-full">
-                        Prüfung
-                      </span>
-                    )}
-                    {displayLesson.is_half_class && (
-                      <span className="px-3 py-1 bg-green-100 dark:bg-green-900 text-green-700 dark:text-blue-300 text-sm rounded-full">
-                        Halbklasse
-                      </span>
-                    )}
-                  </div>
-                </div>
-              )}
+              <span className="text-sm text-slate-500 dark:text-slate-400">
+                Schritt {Math.max(0, currentStepIndex + 1)} von {displayLesson.steps.length}
+                {manualStepControl && (
+                  <span className="ml-2 px-2 py-1 bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 text-xs rounded-full">
+                    Manuell
+                  </span>
+                )}
+              </span>
             </div>
-          ) : (
-            <div className="flex items-center justify-center h-full">
-              <div className="text-center">
-                <div className="text-6xl mb-4">📝</div>
-                <h3 className={`${customization.fontSize.title} font-bold text-slate-600 dark:text-slate-400 mb-2`}>
-                  Keine Schritte definiert
-                </h3>
-                <p className={`${customization.fontSize.content} text-slate-500 dark:text-slate-500`}>
-                  Für diese Lektion sind noch keine detaillierten Schritte hinterlegt.
-                </p>
+
+            {/* Mobile Card Layout */}
+            <div className="md:hidden space-y-4">
+              {displayLesson.steps.map((step, index) => {
+                const progress = stepProgress[index] || 0;
+                const isCurrent = index === currentStepIndex;
+                const isCompleted = progress === 100;
+                const WorkFormIcon = WORK_FORM_ICONS[step.workForm] || User;
+
+                return (
+                  <div key={index} className={`p-4 rounded-xl border-2 ${index === currentStepIndex ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30' : 'border-slate-200 dark:border-slate-700'}`}>
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10">
+                          <svg className="h-8 w-8 -rotate-90 transform">
+                            <circle cx="16" cy="16" r="14" stroke="#e5e7eb" strokeWidth="3" fill="none" />
+                            <circle
+                              cx="16"
+                              cy="16"
+                              r="14"
+                              stroke={isCompleted ? "#22c55e" : "#3b82f6"}
+                              strokeWidth="3"
+                              fill="none"
+                              strokeDasharray="88"
+                              strokeDashoffset={88 * (1 - progress / 100)}
+                              className="transition-all duration-500"
+                            />
+                          </svg>
+                        </div>
+                        <span className="font-semibold">{step.time} Min</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <WorkFormIcon className="h-5 w-5" />
+                        <span>{WORK_FORMS[step.workForm] || step.workForm}</span>
+                      </div>
+                    </div>
+                    <div className="text-sm"><span className="font-medium">Ablauf:</span> {step.activity || '–'}</div>
+                    <div className="text-sm"><span className="font-medium">Material:</span> {step.material || '–'}</div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* === TABELLE MIT FORCIERTER RESPONSIVEN LAYOUT === */}
+            {/* Desktop Steps – komplett responsives Grid (ersetzt die alte Tabelle) */}
+            <div className="hidden md:block desktop-steps-grid">
+              <div className="grid grid-cols-[80px_80px_140px_1fr_200px] gap-4">
+                {/* Header */}
+                <div className="text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400 py-3"></div>
+                <div className="text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400 py-3">Zeit</div>
+                <div className="text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400 py-3">Form</div>
+                <div className="text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400 py-3">Ablauf</div>
+                <div className="text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400 py-3">Material</div>
+
+                {/* Rows */}
+                {displayLesson.steps.map((step, index) => {
+                  const progress = stepProgress[index] || 0;
+                  const isCurrent = index === currentStepIndex;
+                  const isCompleted = progress === 100;
+                  const WorkFormIcon = WORK_FORM_ICONS[step.workForm] || User;
+
+                  return (
+                    <motion.div
+                      key={step.id || index}
+                      className={`grid grid-cols-subgrid col-span-5 gap-4 p-4 rounded-lg border transition-all ${
+                        isCurrent 
+                          ? 'bg-yellow-100 dark:bg-yellow-900/40 font-bold shadow-sm border-yellow-300 dark:border-yellow-700' 
+                          : isCompleted 
+                            ? 'bg-green-50 dark:bg-green-900/20 opacity-60' 
+                            : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700'
+                      }`}
+                    >
+                      {/* Progress Kreis */}
+                      <div className="flex items-center">
+                        <svg className="h-8 w-8 -rotate-90">
+                          <circle cx="16" cy="16" r="14" stroke="#e5e7eb" strokeWidth="3" fill="none" />
+                          <circle
+                            cx="16" cy="16"
+                            r="14"
+                            stroke={isCompleted ? "#22c55e" : "#3b82f6"}
+                            strokeWidth="3"
+                            fill="none"
+                            strokeDasharray="88"
+                            strokeDashoffset={88 * (1 - progress / 100)}
+                            className="transition-all duration-500"
+                          />
+                        </svg>
+                      </div>
+
+                      {/* Zeit */}
+                      <div className="text-sm flex items-center">
+                        {step.time ? `${step.time} Min` : '–'}
+                      </div>
+
+                      {/* Arbeitsform */}
+                      <div className="text-sm flex items-center gap-2">
+                        <WorkFormIcon className="h-5 w-5 text-slate-500 flex-shrink-0" />
+                        <span className="truncate">{WORK_FORMS[step.workForm] || step.workForm || '–'}</span>
+                      </div>
+
+                      {/* Ablauf – bricht um, läuft nie über */}
+                      <div className="text-sm break-words hyphens-auto">
+                        {step.activity || '–'}
+                      </div>
+
+                      {/* Material – bricht auch um */}
+                      <div className="text-sm break-words hyphens-auto">
+                        {step.material || '–'}
+                      </div>
+                    </motion.div>
+                  );
+                })}
               </div>
             </div>
-          )}
+
+            {/* Additional lesson info */}
+            {(displayLesson.is_exam || displayLesson.is_half_class || displayLesson.is_double_lesson) && (
+              <div className="mt-6 p-4 bg-slate-50 dark:bg-slate-700 rounded-xl">
+                <h4 className={`${customization.fontSize.content} font-semibold text-slate-700 dark:text-slate-300 mb-2`}>
+                  Lektionsdetails
+                </h4>
+                <div className="flex flex-wrap gap-2">
+                  {displayLesson.is_double_lesson && (
+                    <span className="px-3 py-1 bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 text-sm rounded-full">
+                      Doppellektion ({displayLesson.is_double_lesson ? '90' : '45'} Min)
+                    </span>
+                  )}
+                  {displayLesson.is_exam && (
+                    <span className="px-3 py-1 bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300 text-sm rounded-full">
+                      Prüfung
+                    </span>
+                  )}
+                  {displayLesson.is_half_class && (
+                    <span className="px-3 py-1 bg-green-100 dark:bg-green-900 text-green-700 dark:text-blue-300 text-sm rounded-full">
+                      Halbklasse
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     );

@@ -37,9 +37,9 @@ export default function GradesPage() {
       setPerformances(performancesData || []);
       setUeberfachlich(ueberfachlichData || []);
       setClasses(validClasses || []);
-      // Setze activeClassId frühzeitig
+      // Setze activeClassId frühzeitig (als string)
       if (validClasses.length > 0 && !activeClassId) {
-        setActiveClassId(validClasses[0].id);
+        setActiveClassId(String(validClasses[0].id));
       }
     } catch (error) {
       console.error("Error loading data:", error);
@@ -109,7 +109,8 @@ export default function GradesPage() {
             >
               <option disabled value="">Klasse auswählen...</option>
               {classes.map(cls => (
-                <option key={cls.id} value={cls.id}>{cls.name}</option>
+                // ensure option value is string so it matches code expecting string ids
+                <option key={cls.id} value={String(cls.id)}>{cls.name}</option>
               ))}
             </select>
           </div>

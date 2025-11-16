@@ -23,146 +23,75 @@ const SubjectSettings = ({ subjects, classes, activeClassId, setActiveClassId, r
     const [editingSubjectId, setEditingSubjectId] = useState(null);
     const [showColorPicker, setShowColorPicker] = useState(false);
     const [editingShowColorPicker, setEditingShowColorPicker] = useState(false);
-    const [showEmojiPicker, setShowEmojiPicker] = useState(false); // Neu: Für Emoji-Picker (Hinzufügen)
-    const [editingShowEmojiPicker, setEditingShowEmojiPicker] = useState(false); // Neu: Für Emoji-Picker (Bearbeiten)
+    const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+    const [editingShowEmojiPicker, setEditingShowEmojiPicker] = useState(false);
+
+    const currentUserId = pb.authStore.model?.id;
 
     const handleAddSubject = async () => {
-        if (newSubject.name.trim() && activeClassId) {
-            try {
-                await Subject.create({ ...newSubject, class_id: activeClassId });
-                setNewSubject({ name: '', color: '#3b82f6', lessons_per_week: 4, emoji: '' });
-                setShowColorPicker(false);
-                setShowEmojiPicker(false);
-                await refreshData();
-                toast.success('Fach erfolgreich hinzugefügt.');
-            } catch (error) {
-                console.error('Error adding subject:', error);
-                toast.error('Fehler beim Hinzufügen des Fachs.');
-            }
-        }
-    };
-
-    const handleUpdateSubject = async (id, field, value) => {
-        const subjectToUpdate = subjects.find(s => s.id === id);
-        if (subjectToUpdate) {
-            try {
-                await Subject.update(id, { ...subjectToUpdate, [field]: value });
-                await refreshData();
-                toast.success('Fach erfolgreich aktualisiert.');
-            } catch (error) {
-                console.error('Error updating subject:', error);
-                toast.error('Fehler beim Aktualisieren des Fachs.');
-            }
-        }
-    };
-
-    const handleDeleteSubject = async (id) => {
-        if (!window.confirm("Sind Sie sicher, dass Sie dieses Fach und alle zugehörigen Themen und Lektionen löschen möchten?")) {
+        if (!newSubject.name.trim() || !activeClassId || !currentUserId) {
+            toast.error('Name und Klasse sind erforderlich.');
             return;
         }
 
         try {
-            const subjectToDelete = subjects.find(s => s.id === id);
-            if (!subjectToDelete) {
-                throw new Error('Fach nicht gefunden.');
-            }
+            await Subject.create({ 
+                ...newSubject, 
+                class_id: activeClassId,
+                user_id: currentUserId   // ← WICHTIG: Immer setzen!
+            });
+            setNewSubject({ name: '', color: '#3b82f6', lessons_per_week: 4, emoji: '' });
+            setShowColorPicker(false);
+            setShowEmojiPicker(false);
+            await refreshData();
+            toast.success('Fach erfolgreich hinzugefügt.');
+        } catch (error) {
+            console.error('Error adding subject:', error);
+            toast.error('Fehler beim Hinzufügen des Fachs.');
+        }
+    };
 
-            console.log(`Debug: Attempting to delete subject ${id} (${subjectToDelete.name})`);
+    const handleUpdateSubject = async (id, field, value) => {
+        try {
+            await Subject.update(id, { [field]: value });
+            await refreshData();
+            toast.success('Fach aktualisiert.');
+        } catch (error) {
+            console.error('Error updating subject:', error);
+            toast.error('Fehler beim Aktualisieren.');
+        }
+    };
 
-            const currentUserId = pb.authStore.model?.id;
-            if (!currentUserId) {
-                throw new Error('Kein authentifizierter Benutzer gefunden.');
-            }
+    const handleDeleteSubject = async (id) => {
+        if (!window.confirm("Sind Sie sicher? Dies löscht ALLE Themen, Lektionen, Noten und Fachbereiche dieses Fachs unwiderruflich. Fortfahren?")) {
+            return;
+        }
 
-            const [lessons, yearlyLessons, topics, allerleiLessons, performances, fachbereiche] = await Promise.all([
-                Lesson.list({ subject: id, user_id: currentUserId }),
-                YearlyLesson.list({ subject: id, user_id: currentUserId }),
-                Topic.list({ subject: id, user_id: currentUserId }),
-                Lesson.list({ filter: `allerlei_subjects ~ '${subjectToDelete.name}' && user_id = '${currentUserId}'` }),
-                Performance.list({ subject: id, user_id: currentUserId }),
-                Fachbereich.list({ subject_id: id, user_id: currentUserId }),
+        try {
+            // 1. Alle abhängigen Records finden
+            const [yearlyLessons, topics, performances, fachbereiche] = await Promise.all([
+                YearlyLesson.list({ subject: id }),
+                Topic.list({ subject: id }),
+                Performance.list({ subject: id }),
+                Fachbereich.list({ subject_id: id }),
             ]);
 
-            console.log(`Debug: Found related records for subject ${id}:`, {
-                lessons: lessons.length,
-                yearlyLessons: yearlyLessons.length,
-                topics: topics.length,
-                allerleiLessons: allerleiLessons.length,
-                performances: performances.length,
-                fachbereiche: fachbereiche.length,
-            });
+            // 2. Alles löschen (Reihenfolge egal, weil keine harten Delete)
+            await Promise.all([
+                ...yearlyLessons.map(yl => YearlyLesson.delete(yl.id)),
+                ...topics.map(t => Topic.delete(t.id)),
+                ...performances.map(p => Performance.delete(p.id)),
+                ...fachbereiche.map(f => Fachbereich.delete(f.id)),
+            ]);
 
-            const allerleiUpdatePromises = allerleiLessons.map(async (lesson) => {
-                const lessonYearlyLessons = yearlyLessons.filter(yl => lesson.allerlei_yearly_lesson_ids.includes(yl.id));
-                const updatedAllerleiSubjects = lesson.allerlei_subjects.filter(s => s !== subjectToDelete.name);
-                const updatedAllerleiYearlyLessonIds = lesson.allerlei_yearly_lesson_ids.filter(ylId => {
-                    const yl = yearlyLessons.find(yl => yl.id === ylId);
-                    return yl && yl.subject !== id;
-                });
-
-                console.log(`Debug: Processing Allerlei lesson ${lesson.id}:`, {
-                    originalSubjects: lesson.allerlei_subjects,
-                    updatedSubjects: updatedAllerleiSubjects,
-                    originalYearlyLessonIds: lesson.allerlei_yearly_lesson_ids,
-                    updatedYearlyLessonIds: updatedAllerleiYearlyLessonIds,
-                });
-
-                if (updatedAllerleiSubjects.length === 0) {
-                    console.log(`Debug: Deleting Allerlei lesson ${lesson.id} as no subjects remain`);
-                    return Lesson.delete(lesson.id);
-                } else {
-                    console.log(`Debug: Updating Allerlei lesson ${lesson.id}`);
-                    return Lesson.update(lesson.id, {
-                        allerlei_subjects: updatedAllerleiSubjects,
-                        allerlei_yearly_lesson_ids: updatedAllerleiYearlyLessonIds,
-                    });
-                }
-            });
-
-            const deletionPromises = [
-                ...allerleiUpdatePromises,
-                ...lessons.map(lesson => {
-                    console.log(`Debug: Deleting lesson ${lesson.id}`);
-                    return Lesson.delete(lesson.id);
-                }),
-                ...performances.map(perf => {
-                    console.log(`Debug: Deleting performance ${perf.id}`);
-                    return Performance.delete(perf.id);
-                }),
-                ...fachbereiche.map(fb => {
-                    console.log(`Debug: Deleting fachbereich ${fb.id}`);
-                    return Fachbereich.delete(fb.id);
-                }),
-                ...yearlyLessons.map(yl => {
-                    console.log(`Debug: Deleting yearly_lesson ${yl.id}`);
-                    return YearlyLesson.delete(yl.id);
-                }),
-                ...topics.map(topic => {
-                    console.log(`Debug: Deleting topic ${topic.id}`);
-                    return Topic.delete(topic.id);
-                }),
-            ];
-
-            console.log(`Debug: Executing ${deletionPromises.length} deletion/update operations`);
-
-            const deletionResults = await Promise.allSettled(deletionPromises);
-            const failedDeletions = deletionResults.filter(result => result.status === 'rejected');
-            if (failedDeletions.length > 0) {
-                console.error('Failed deletions:', failedDeletions.map(f => ({
-                    reason: f.reason?.message,
-                    data: f.reason?.data,
-                })));
-                throw new Error(`Nicht alle verknüpften Daten konnten gelöscht werden. Anzahl Fehlschläge: ${failedDeletions.length}. Überprüfen Sie die Logs.`);
-            }
-
-            console.log(`Debug: Deleting subject ${id}`);
+            // 3. Fach selbst löschen
             await Subject.delete(id);
 
             await refreshData();
-            toast.success('Fach und zugehörige Daten erfolgreich gelöscht.');
+            toast.success('Fach und alle zugehörigen Daten gelöscht.');
         } catch (error) {
-            console.error('Error deleting subject and related data:', error);
-            toast.error(`Fehler beim Löschen des Fachs: ${error.message}. Bitte überprüfen Sie, ob alle verknüpften Daten gelöscht wurden.`);
+            console.error('Error deleting subject:', error);
+            toast.error('Fehler beim Löschen: ' + error.message);
         }
     };
 

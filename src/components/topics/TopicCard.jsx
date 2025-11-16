@@ -13,7 +13,9 @@ const TopicCard = ({ topic, onClick }) => {
       onClick={onClick}
     >
       <div className="p-4" style={{ color: textColor }}>
-        <h3 className="font-bold text-xl">{topic.name}</h3>
+        <h3 className="font-bold text-xl">
+          {topic.title || topic.name || '(kein Titel)'}
+        </h3>
         <p className="text-sm opacity-80">{topic.description || 'Keine Beschreibung'}</p>
       </div>
     </div>

@@ -47,20 +47,24 @@ export const normalizeAllerleiData = async (item, subjects, selectedSubject) => 
       yearlyLessons = fetched.filter(yl => yl !== null);
     }
 
-    subjectNames = [...new Set(
-      [
-        // Get subject name for primary_yearly_lesson_id directly
-        yearlyLessons.find(yl => yl.id === item.primary_yearly_lesson_id)?.expand?.subject?.name ||
-        subjects.find(s => s.id === yearlyLessons.find(yl => yl.id === item.primary_yearly_lesson_id)?.subject)?.name ||
-        'Unbekannt', // Fallback to 'Unbekannt' if no subject name is found
-        ...yearlyLessons.map(yl => yl.expand?.subject?.name || yl.subject_name)
-      ].filter(Boolean)
-    )];
+    // Always include primary even if fetch fails
+    const primaryYl = yearlyLessons.find(yl => yl.id === normalized.primary_yearly_lesson_id) || { subject: selectedSubject || 'Unbekannt' };
+    const primaryName = primaryYl.expand?.subject?.name || primaryYl.subject_name || subjects.find(s => s.id === primaryYl.subject)?.name || 'Unbekannt';
+    if (primaryName !== 'Unbekannt') subjectNames.push(primaryName);
+
+    subjectNames.push(...yearlyLessons.map(yl => yl.expand?.subject?.name || yl.subject_name || subjects.find(s => s.id === yl.subject)?.name || 'Unbekannt').filter(n => n !== 'Unbekannt' && n !== primaryName));
+    subjectNames = [...new Set(subjectNames.filter(Boolean))]; // Neu: Duplikate entfernen (sicherheitshalber)
+
     item.description = `Allerlei: ${subjectNames.join(', ')}`;  // Fix Beschriftung
 
     console.log('Debug subjectNames:', subjectNames);
   } catch (error) {
     console.error('Error in subjectNames calculation:', error, { item });
+    // Fallback to selectedSubject for primary
+    if (selectedSubject) {
+      const primaryName = subjects.find(s => s.id === selectedSubject)?.name || 'Unbekannt';
+      subjectNames.push(primaryName);
+    }
   }
 
   let colors = [];
@@ -68,6 +72,8 @@ export const normalizeAllerleiData = async (item, subjects, selectedSubject) => 
     colors = subjectNames
       .map(name => subjects.find(s => s.name === name)?.color)
       .filter(Boolean);
+
+    colors = [...new Set(colors)]; // Neu: Duplikate in Farben entfernen
 
     if (colors.length === 0 && allYlIds.length > 0 && subjects.length > 0) {
       console.warn('No colors from names, trying ID-based lookup');

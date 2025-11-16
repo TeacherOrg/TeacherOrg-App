@@ -39,15 +39,19 @@ const UpdateModal = ({ isOpen, onClose, version }) => {
         {
           subcategory: 'Jahresansicht',
           items: [
-            { text: 'Optische Anpassungen', type: 'fixed' },
+            { text: 'Fixe Fachzeile', type: 'fixed' },
           ],
         },
         {
-          subcategory: 'Leistungsansicht',
+          subcategory: 'Neue Schüleransicht',
+          items: [
+            { text: 'Zeigt Überblick der Schüler mit den Stärken und Schwächen', type: 'fixed' },
+          ],
+        },
+        {
+          subcategory: 'Lehrplankompetenzen',
           items: [
             { text: 'Überfachliche Kompetenzen Bugfix', type: 'fixed' },
-            { text: 'Neues Balkendiagram für Übersicht.', type: 'fixed' },
-            { text: 'Karte mit ungenügenden Schülern mit spezifischen Fachbereichen', type: 'fixed' },
           ],
         },
       ],

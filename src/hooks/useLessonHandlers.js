@@ -2,7 +2,7 @@ import { useCallback } from 'react';
 import { Lesson, YearlyLesson } from '@/api/entities';
 import pb from '@/api/pb';
 import { findFreeSlot } from '@/utils/slotUtils'; // Importiere die Funktion, falls nicht bereits vorhanden
-const useLessonHandlers = (editingLesson, currentYear, allLessons, yearlyLessons, timeSlots, currentWeek, queryClientLocal, subjects, optimisticUpdateAllLessons, optimisticUpdateYearlyLessons, addAllerleiLesson, removeAllLesson, setAllLessons, setYearlyLessons, activeClassId, refetch, setIsModalOpen) => { const reassignYearlyLessonLinks = useCallback(async (subjectName, currentLessons, yearlyLessonsParam = yearlyLessons) => {
+const useLessonHandlers = (editingLesson, currentYear, allLessons, yearlyLessons, timeSlots, currentWeek, queryClientLocal, subjects, optimisticUpdateAllLessons, optimisticUpdateYearlyLessons, addAllerleiLesson, removeAllLesson, setAllLessons, setYearlyLessons, activeClassId, refetch, setIsModalOpen, setEditingLesson, setInitialSubjectForModal, setCopiedLesson) => { const reassignYearlyLessonLinks = useCallback(async (subjectName, currentLessons, yearlyLessonsParam = yearlyLessons) => {
     const dayOrder = { monday: 1, tuesday: 2, wednesday: 3, thursday: 4, friday: 5 };
     const lessonsForSubject = currentLessons
       .filter(l =>

@@ -12,6 +12,7 @@ import debounce from 'lodash/debounce'; // Add lodash/debounce
 import { version } from '../package.json'; // Import version from package.json
 import UpdateModal from '@/components/ui/UpdateModal'; // Add this import
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'; // Importieren
+import { Routes, Route } from 'react-router-dom';
 
 // Erstelle eine Instanz von QueryClient
 const queryClient = new QueryClient();
@@ -59,6 +60,8 @@ function App() {
         setShowUpdateModal(true);
         localStorage.setItem('appVersion', version);
       }
+      // Kommentiere aus: View-Creation hier verursacht 403 – erstelle manuell im PB-Admin
+      // createLehrplanWahlView();
     }
   }, [user]);
 

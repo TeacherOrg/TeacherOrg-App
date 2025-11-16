@@ -73,11 +73,6 @@ const LessonCard = ({ lesson, isDragging, onEdit, onMouseEnter, onMouseLeave, on
           {allerlei_subjects.join(' | ')}
         </div>
       )}
-      {!is_allerlei && topic && ( // This block is now redundant as topic is handled above; consider removing if not needed for extra details
-        <div className="text-[10px] font-medium opacity-90 mt-1 truncate">
-          {topic.title}
-        </div>
-      )}
     </div>
   );
 };

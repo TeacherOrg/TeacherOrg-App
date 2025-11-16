@@ -99,7 +99,13 @@ function InnerTimetablePage() {
   }, [lessonsForCurrentWeek, allLessons, allerleiLessons, currentWeek]);
 
   // Call useLessonHandlers first
-  const { handleSaveLesson, handleDeleteLesson, reassignYearlyLessonLinks, updateYearlyLessonOrder } = useLessonHandlers(
+  const { 
+    handleSaveLesson, 
+    handleDeleteLesson, 
+    reassignYearlyLessonLinks, 
+    updateYearlyLessonOrder, 
+    handleCreateFromPool 
+  } = useLessonHandlers(
     editingLesson,
     currentYear,
     allLessons,
@@ -115,7 +121,11 @@ function InnerTimetablePage() {
     setAllLessons,
     setYearlyLessons,
     activeClassId,
-    refetch
+    refetch,
+    setIsModalOpen,
+    setEditingLesson,              // Neu: Für Reset nach Save/Unlink
+    setInitialSubjectForModal,     // Neu: Falls verwendet, für Initial-Subject-Reset
+    setCopiedLesson                // Neu: Für Copy-Reset
   );
 
   // Then call useDragAndDrop, passing reassignYearlyLessonLinks and updateYearlyLessonOrder
@@ -169,11 +179,28 @@ function InnerTimetablePage() {
           const secondYearlyLesson = lesson.second_yearly_lesson_id
             ? yearlyLessonsById.get(lesson.second_yearly_lesson_id)
             : null;
-          const topic = lesson.topic_id
-            ? topicsById.get(lesson.topic_id)
-            : primaryYearlyLesson?.topic_id
-              ? topicsById.get(primaryYearlyLesson.topic_id)
-              : null;
+
+          // Robust topic resolution: ID -> lookup, else try title/name matching (case-insensitive), else fallback to primaryYl.topic_id/title
+          const resolveTopic = (value) => {
+            if (!value) return null;
+            // direct ID lookup
+            if (topicsById.has(value)) return topicsById.get(value);
+            // try to find by title (exact or case-insensitive)
+            const byTitle = memoizedTopics.find(t =>
+              t.id === value ||
+              t.title === value ||
+              (typeof t.title === 'string' && typeof value === 'string' && t.title.toLowerCase() === value.toLowerCase())
+            );
+            if (byTitle) return byTitle;
+            // sometimes topic_id was stored as topic.title on yearly/lesson -> try match with yearly expand name
+            const byTopicName = memoizedTopics.find(t =>
+              (t.title && primaryYearlyLesson && typeof primaryYearlyLesson.topic_id === 'string' && t.title.toLowerCase() === String(primaryYearlyLesson.topic_id).toLowerCase())
+            );
+            if (byTopicName) return byTopicName;
+            return null;
+          };
+
+          const topic = resolveTopic(lesson.topic_id) || resolveTopic(primaryYearlyLesson?.topic_id) || null;
           let lessonDetails = {
             ...lesson,
             subject: lesson.subject,
@@ -312,13 +339,6 @@ function InnerTimetablePage() {
             (Array.isArray(l.added_yearly_lesson_ids) && l.added_yearly_lesson_ids.includes(yl.id)))
           ).length;
           const isNotAllerlei = !yl.is_allerlei;
-          console.log('Debug: Checking YearlyLesson availability for pool:', {
-            ylId: yl.id,
-            subject: subject.name,
-            week_number: yl.week_number,
-            lessonCount,
-            is_half_class: yl.is_half_class
-          });
           return matchesSubject && matchesWeek && isNotAllerlei && lessonCount < (yl.is_half_class ? 2 : 1);
         })
         .sort((a, b) => Number(a.lesson_number) - Number(b.lesson_number));
@@ -546,6 +566,7 @@ function InnerTimetablePage() {
         activeClassId={activeClassId}
         setEditingLesson={setEditingLesson}
         setIsModalOpen={setIsModalOpen}
+        currentYear={currentYear}  // Neu
       />
     </div>
   );

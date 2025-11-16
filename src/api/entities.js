@@ -2,9 +2,6 @@ import pb from '@/api/pb';
 import { prepareAllerleiForPersist } from '@/components/timetable/allerlei/AllerleiUtils';
 import { safeProcessArray } from '@/utils/safeData'; // Neu: Import für Batch
 
-// Debugging-Flag basierend auf der Umgebung
-const isDebug = false;
-
 class PbEntity {
   constructor(name) {
     this.name = name.toLowerCase();
@@ -31,7 +28,8 @@ class PbEntity {
       chore: 'class_id,user_id',
       chore_assignment: 'student_id,chore_id,class_id',
       group: 'student_ids,class_id,user_id',
-      user_preference: 'user_id,class_id'
+      user_preference: 'user_id,class_id',
+      lehrplan_kompetenz: ''
     };
 
     this.expandFields = expandMap[this.name] || '';
@@ -46,7 +44,6 @@ class PbEntity {
 
   prepareForPersist(data) {
     if (!data || typeof data !== 'object') {
-      if (isDebug) console.warn(`Invalid data in prepareForPersist for ${this.name}:`, data);
       return data;
     }
 
@@ -55,7 +52,6 @@ class PbEntity {
     // Entferne id für Create-Anfragen bei yearly_lesson
     if (this.name === 'yearly_lesson') {
       delete prepared.id;
-      if (isDebug) console.log(`Debug: Removed id from ${this.name} payload for create`);
     }
 
     // Numerische Felder konvertieren
@@ -68,15 +64,11 @@ class PbEntity {
     // Ensure is_hidden is always a boolean for lesson, default to false
     if (this.name === 'lesson') {
       prepared.is_hidden = typeof prepared.is_hidden === 'boolean' ? prepared.is_hidden : false;
-      if (isDebug) {
-        console.log(`Debug: Set is_hidden to ${prepared.is_hidden} for lesson:`, JSON.stringify(prepared, null, 2));
-      }
     }
 
     // Konvertiere topic_id zu null, wenn leer oder 'no_topic' für yearly_lesson
     if (this.name === 'yearly_lesson' && (prepared.topic_id === '' || prepared.topic_id === 'no_topic')) {
       prepared.topic_id = null;
-      if (isDebug) console.log(`Debug: Converted topic_id to null for ${this.name}`);
     }
 
     // Setze is_draft für topic
@@ -88,9 +80,6 @@ class PbEntity {
     if (this.name === 'chore_assignment' && prepared.assignment_date) {
       const date = new Date(prepared.assignment_date);
       prepared.assignment_date = date.toISOString().split('T')[0];
-      if (isDebug) {
-        console.log(`Debug: Normalized assignment_date to ${prepared.assignment_date} for chore_assignment`);
-      }
     }
 
     // Spezifische Handhabungen für user_preference
@@ -98,7 +87,6 @@ class PbEntity {
       try {
         prepared.preferences = JSON.parse(prepared.preferences);
       } catch (e) {
-        if (isDebug) console.error(`Error parsing preferences JSON for ${this.name}:`, e);
         prepared.preferences = {};
       }
     }
@@ -109,9 +97,6 @@ class PbEntity {
       if (prepared[field] !== undefined && prepared[field] !== null) {
         if (field === 'topic_id' && prepared[field] === 'no_topic') return;
         prepared[field] = String(prepared[field]).trim();
-        if (isDebug && prepared[field].length > 0 && prepared[field].length < 10) {
-          console.warn(`Suspicious ID length for ${field} in ${this.name}:`, prepared[field]);
-        }
       }
     });
 
@@ -127,43 +112,51 @@ class PbEntity {
       }
     }
 
-    if (['lesson', 'allerlei_lesson'].includes(this.name)) {
+    if (['lesson', 'allerlei_lesson', 'holiday'].includes(this.name)) {
       const currentUser = pb.authStore.model;
       if (currentUser && currentUser.id) {
         prepared.user_id = currentUser.id;
+      } else {
+        console.error('[PbEntity] Kein authentifizierter User beim Erstellen von ' + this.name);
       }
     }
 
-    // Entferne denormalisierte Felder
-    const denormFields = ['user_name', 'class_name', 'subject_name', 'topic_name', 'yearly_lesson_name', 'second_yearly_lesson_name', 'competency_name_display'];
-    denormFields.forEach(field => delete prepared[field]);
+    if (['topic', 'subject', 'yearly_lesson', 'lesson', 'holiday', 'allerlei_lesson'].includes(this.name)) {
+      if (!prepared.user_id && pb.authStore.model?.id) {
+        prepared.user_id = pb.authStore.model.id;
+      }
+    }
 
     delete prepared.$cancelKey;
 
-    if (isDebug) console.log(`Debug: Final prepared payload for ${this.name}:`, JSON.stringify(prepared, null, 2));
     return prepared;
   }
 
   normalizeData(item) {
     if (!item || typeof item !== 'object') {
-      if (isDebug) {
-        console.warn(`Invalid item in normalizeData for ${this.name}:`, item);
-      }
       return null;
     }
 
     const normalizedItem = { ...item };
 
-    // Neu: Debug-Log für name in yearly_lesson (temporär)
-    if (this.name === 'yearly_lesson' && isDebug) {
-      console.log('Debug: Normalizing yearly_lesson', {
-        id: normalizedItem.id,
-        rawName: item.name,
-        normalizedName: normalizedItem.name,
-        subject_name: normalizedItem.subject_name,
-        expandSubjectName: item.expand?.subject?.name,
-        week_number: normalizedItem.week_number
-      });
+    if (this.name === 'topic') {
+      // Immer die reine String-ID sicherstellen (auch wenn expand das Feld überschreibt)
+      normalizedItem.subject = (typeof item.subject === 'object' && item.subject?.id) 
+        ? item.subject.id 
+        : item.subject || null;
+
+      normalizedItem.subject_name = item.expand?.subject?.name 
+        || (typeof item.subject === 'object' ? item.subject?.name : null) 
+        || 'Unbekannt';
+
+      // Name & Title robust setzen
+      const topicName = item.name || item.title || 'Unbenanntes Thema';
+      normalizedItem.name = topicName;
+      normalizedItem.title = topicName;
+
+      // Optional: die anderen Felder, die du brauchst
+      normalizedItem.color = item.color || '#3b82f6';
+      normalizedItem.description = item.description || '';
     }
 
     // NEU: Normalize chore_assignment
@@ -177,19 +170,10 @@ class PbEntity {
         const date = new Date(normalizedItem.assignment_date);
         normalizedItem.assignment_date = date.toISOString().split('T')[0];
       }
-     
-      if (isDebug) {
-        console.log('Debug: Normalizing chore_assignment', {
-          id: normalizedItem.id,
-          student_id: normalizedItem.student_id,
-          student_name: normalizedItem.student_name,
-          chore_id: normalizedItem.chore_id,
-          chore_name: normalizedItem.chore_name,
-          class_id: normalizedItem.class_id,
-          class_name: normalizedItem.class_name,
-          assignment_date: normalizedItem.assignment_date
-        });
-      }
+    }
+
+    if (this.name === 'lehrplan_kompetenz') {
+      normalizedItem.fach_name = item.fach_name || 'Unbekannt';  // ← Hinzufügen: Default auf 'Unbekannt'
     }
 
     ['lesson_number', 'week_number', 'school_year'].forEach(field => {
@@ -209,6 +193,7 @@ class PbEntity {
       normalizedItem.subject = null;
       // Setze subjectNames aus allerlei_subjects, wenn verfügbar
       normalizedItem.allerlei_subjects = normalizedItem.allerlei_subjects || [];
+      normalizedItem.added_yearly_lesson_ids = normalizedItem.added_yearly_lesson_ids || [];  // ← Neu: Sicherstelle Array
     } else if (this.name === 'yearly_lesson') {
       normalizedItem.subject_name = normalizedItem.expand?.subject?.name || normalizedItem.subject_name || 'Unbekannt';
     }
@@ -220,24 +205,15 @@ class PbEntity {
       try {
         normalizedItem.preferences = JSON.parse(normalizedItem.preferences);
       } catch (e) {
-        if (isDebug) {
-          console.error(`Error parsing preferences JSON for ${this.name}:`, e);
-        }
         normalizedItem.preferences = {};
       }
     }
 
     if (this.name === 'ueberfachliche_kompetenz') {
       if (!normalizedItem.competency_id || typeof normalizedItem.competency_id !== 'string') {
-        if (isDebug) {
-          console.warn(`Invalid competency_id for ${this.name}:`, normalizedItem);
-        }
         return null;
       }
       if (!normalizedItem.expand?.competency_id?.name) {
-        if (isDebug) {
-          console.warn(`Missing expanded competency name for ${this.name} ID ${normalizedItem.competency_id}:`, normalizedItem);
-        }
         normalizedItem.competency_name_display = `Kompetenz-ID: ${normalizedItem.competency_id} (Name fehlt)`;
       } else {
         normalizedItem.competency_name_display = normalizedItem.expand.competency_id.name;
@@ -246,15 +222,9 @@ class PbEntity {
 
     if (this.name === 'classe') {
       if (!normalizedItem.id || typeof normalizedItem.id !== 'string') {
-        if (isDebug) {
-          console.warn(`Invalid class item, missing or invalid id:`, normalizedItem);
-        }
         return null;
       }
       if (!normalizedItem.name || typeof normalizedItem.name !== 'string') {
-        if (isDebug) {
-          console.warn(`Invalid class item, missing or invalid name:`, normalizedItem);
-        }
         normalizedItem.name = 'Unbenannte Klasse';
       }
     }
@@ -271,7 +241,6 @@ class PbEntity {
   // Vorschlag 2: Neue Batch-Normalisierungs-Methode mit safeProcessArray
   batchNormalize(items) {
     if (!Array.isArray(items)) {
-      if (isDebug) console.warn(`Invalid items in batchNormalize for ${this.name}:`, items);
       return [];
     }
 
@@ -279,80 +248,48 @@ class PbEntity {
   }
 
   async list(query = {}) {
-    // ✅ $cancelKey separat handhaben - NICHT im Filter!
     const cancelKey = query.$cancelKey || `list-${this.name}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
+    // Spezialfall für subjects: lädt deine aktuellen + alle alten ohne user_id
+    let customFilter = '';
+    if (this.name === 'subject') {
+      const uid = pb.authStore.model?.id;
+      if (uid) {
+        customFilter = `(user_id = '${uid}' || user_id = null || user_id = '')`;
+      } else {
+        customFilter = `(user_id = null || user_id = '')`;
+      }
+    }
+
+    const baseFilter = this.buildFilter({ ...query, $cancelKey: undefined });
+
+    let finalFilter = '';
+    if (baseFilter && customFilter) finalFilter = `(${baseFilter}) && ${customFilter}`;
+    else if (baseFilter) finalFilter = baseFilter;
+    else if (customFilter) finalFilter = customFilter;
+
     const params = {
-      filter: this.buildFilter({ ...query, $cancelKey: undefined }), // $cancelKey entfernen
+      filter: finalFilter || '',
       perPage: 500,
       expand: this.expandFields,
-      $cancelKey: cancelKey // Als separater Parameter
+      $cancelKey: cancelKey
     };
-    
-    try {
-      const currentUser = pb.authStore.model;
-      if (isDebug) {
-        console.log(`Debug: Loading ${this.name}s for user:`, currentUser?.id || 'No user');
-        console.log(`Debug: Query params:`, params);
-      }
-      let response;
-      try {
-        response = await this.collection.getList(1, params.perPage, params);
-        console.log(`Debug ${this.name} full response:`, {
-          expandUsed: params.expand,
-          items: response.items.map(i => ({
-            id: i.id,
-            expand: i.expand ? Object.keys(i.expand) : null,
-            primary_yearly_lesson_id: i.primary_yearly_lesson_id,
-            added_yearly_lesson_ids: i.added_yearly_lesson_ids,
-            allerlei_subjects: i.allerlei_subjects
-          }))
-        }); // Erweiterter Log für expand keys und relevante Felder
-      } catch (error) {
-        console.error(`Error fetching ${this.name}:`, error);
-        return [];
-      }
-      const items = response?.items || [];
-      if (!Array.isArray(items)) {
-        console.error(`Invalid API response for ${this.name}: items is not an array`, response);
-        return [];
-      }
-      
-      // Neu: Für allerlei_lesson warn only, no retry to avoid loop
-      if (items.length === 0 && this.name === 'allerlei_lesson') {
-        console.warn(`No ${this.name} found. This may be normal if none exist.`); // Neu: Warn only, no retry
-      }
 
-      if (this.name === 'ueberfachliche_kompetenz') {
-        console.log(`Debug: Raw ueberfachliche_kompetenz data from API`, items.map(item => ({
-          id: item.id,
-          competency_id: item.competency_id,
-          class_id: item.class_id,
-          student_id: item.student_id,
-          user_id: item.user_id,
-          assessments: item.assessments,
-          expand: {
-            competency_id: item.expand?.competency_id ? {
-              id: item.expand.competency_id.id,
-              name: item.expand.competency_id.name
-            } : null
-          }
-        })));
-      }
-      const validItems = items.filter(item => item && typeof item === 'object');
-      const normalizedItems = this.batchNormalize(validItems); // Vorschlag 2: Batch statt map(single)
-      return normalizedItems;
+    try {
+      const response = await this.collection.getList(1, params.perPage, params);
+
+      const items = response?.items || [];
+      if (!Array.isArray(items)) return [];
+
+      const validItems = items.filter(Boolean);
+      return this.batchNormalize(validItems);
     } catch (error) {
-      // ✅ Bessere Autocancellation-Behandlung auch hier
-      if (error.message?.includes('autocancelled') && isDebug) {
-        console.warn(`Debug: List request for ${this.name} was autocancelled`);
-        return []; // Leere Liste zurückgeben statt Fehler werfen
+      if (!error.message?.includes('autocancelled')) {
+        console.error(`Error listing ${this.name}s:`, error);
       }
-      
-      console.error(`Error listing ${this.name}s:`, error.message, error.data, error.stack);
       return [];
     }
   }
-
   async find(query = {}) {
     return this.list(query);
   }
@@ -377,9 +314,7 @@ class PbEntity {
       const item = await this.collection.getOne(id, params);
       return this.normalizeData(item);
     } catch (error) {
-      if (isDebug) {
-        console.error(`Error fetching ${this.name} by id ${id}:`, error.message, error.data, error.stack);
-      }
+      console.error(`Error fetching ${this.name} by id ${id}:`, error.message, error.data, error.stack);
       return null;
     }
   }
@@ -390,15 +325,10 @@ class PbEntity {
     const params = { $cancelKey: cancelKey };
 
     if (data instanceof FormData) {
-      if (isDebug) console.log(`Debug: Creating ${this.name} with FormData`, data);
       try {
         const response = await pb.collection(this.collectionName).create(data, params);
-        if (isDebug) console.log(`Debug: Create response for ${this.name}:`, JSON.stringify(response, null, 2));
         return response;
       } catch (error) {
-        if (isDebug) {
-          console.error(`Error creating ${this.name} with FormData:`, error);
-        }
         throw error;
       }
     }
@@ -422,7 +352,6 @@ class PbEntity {
       // Konvertiere leeres topic_id zu null
       if (preparedData.topic_id === '' || preparedData.topic_id === 'no_topic') {
         preparedData.topic_id = null;
-        if (isDebug) console.log(`Debug: Converted topic_id to null for ${this.name}`);
       }
     }
 
@@ -453,15 +382,13 @@ class PbEntity {
     }
     
     // Bestehende Validierung für required Felder wie user_id
-    if (['competencie', 'ueberfachliche_kompetenz', 'performance', 'classe', 'allerlei_lesson', 'topic'].includes(this.name)) {
+    if (['competencie', 'ueberfachliche_kompetenz', 'performance', 'classe', 'allerlei_lesson', 'topic', 'holiday', 'yearly_lesson', 'lesson', 'setting'].includes(this.name)) {
       const currentUser = pb.authStore.model;
       if (!preparedData.user_id) {
         if (currentUser && currentUser.id) {
           preparedData.user_id = currentUser.id;
-          if (isDebug) console.log(`Debug: Force-added user_id ${currentUser.id} to ${this.name} payload`);
         } else {
           const error = new Error(`Missing required user_id for ${this.name}. No authenticated user found.`);
-          if (isDebug) console.error(`Error creating ${this.name}:`, error.message);
           throw error;
         }
       }
@@ -470,34 +397,15 @@ class PbEntity {
     // Validierung vor dem Erstellen
     if (!preparedData || Object.keys(preparedData).length === 0) {
       const error = new Error(`No valid data to create ${this.name}`);
-      if (isDebug) console.error(`Error creating in ${this.name}:`, error.message);
       throw error;
-    }
-    
-    if (isDebug) {
-      console.log(`Debug: Raw create payload for ${this.name}:`, JSON.stringify(cleanData, null, 2));
-      console.log(`Debug: Prepared create for ${this.name}:`, JSON.stringify(preparedData, null, 2));
-      console.log(`Debug: Using collectionName:`, this.collectionName);
     }
     
     try {
       const response = await pb.collection(this.collectionName).create(preparedData, params);
-      if (isDebug) console.log(`Debug: Create response for ${this.name}:`, JSON.stringify(response, null, 2));
       return response;
     } catch (error) {
-      if (isDebug) {
-        console.error(`Error creating in ${this.name}:`, {
-          message: error.message,
-          status: error.status,
-          data: error.data ? JSON.stringify(error.data, null, 2) : error,
-          requestData: JSON.stringify(preparedData, null, 2),
-          stack: error.stack
-        });
-      }
-      
       // Bessere Fehlerbehandlung: Unterscheide zwischen Autocancellation und Validierungsfehlern
       if (error.message?.includes('autocancelled')) {
-        if (isDebug) console.warn(`Create request for ${this.name} was autocancelled`);
         throw error; // Weiterwerfen, damit Retry-Logik im aufrufenden Code greifen kann
       }
       
@@ -531,15 +439,11 @@ class PbEntity {
     
     try {
       preparedUpdates = this.prepareForPersist(cleanUpdates);
-      if (isDebug) console.log(`Debug: Prepared updates for ${this.name}:`, preparedUpdates);
       if (!preparedUpdates) {
         throw new Error(`Invalid update data for ${this.name}`);
       }
       
       const currentUser = pb.authStore.model;
-      if (currentUser && isDebug) {
-        console.log(`Debug: Updating ${this.name} ${id} for user ${currentUser.id}`);
-      }
       
       const updated = await this.collection.update(id, preparedUpdates, params);
       const fullUpdated = await this.collection.getOne(id, { expand: this.expandFields });
@@ -547,9 +451,6 @@ class PbEntity {
     } catch (error) {
       // ✅ BESSERE FEHLERBEHANDLUNG für Autocancellation
       if (error.message?.includes('autocancelled') && preparedUpdates) {
-        if (isDebug) {
-          console.warn(`Debug: Update request for ${this.name} ${id} was autocancelled - likely due to parallel request`);
-        }
         // ✅ Retry-Logik für user_preference und customization_setting
         if (['user_preference', 'customization_setting'].includes(this.name)) {
           return new Promise((resolve, reject) => {
@@ -562,22 +463,12 @@ class PbEntity {
                 const fullUpdated = await this.collection.getOne(id, { expand: this.expandFields });
                 resolve(this.normalizeData(fullUpdated));
               } catch (retryError) {
-                if (isDebug) console.error(`Retry failed for ${this.name} ${id}:`, retryError);
                 reject(error); // Original error weiterwerfen
               }
             }, 150); // 150ms Wartezeit
           });
         }
         throw error; // Für andere Entities normal weiterwerfen
-      }
-      
-      if (isDebug) {
-        console.error(`Error updating in ${this.name}:`, {
-          message: error.message,
-          data: error.data,
-          stack: error.stack,
-          requestData: JSON.stringify(updates, null, 2)
-        });
       }
       
       import('react-hot-toast').then(({ toast }) => {
@@ -627,9 +518,6 @@ class PbEntity {
 
   buildFilter(query) {
     if (query.filter && typeof query.filter === 'string') {
-      if (isDebug) {
-        console.log('Building filter with query:', query, 'Final filter:', query.filter);
-      }
       return query.filter;
     }
 
@@ -658,9 +546,6 @@ class PbEntity {
       filters = filters.join(' && ');
     }
 
-    if (isDebug) {
-      console.log('Building filter with query:', query, 'Final filter:', filters);
-    }
     return filters;
   }
 }
@@ -675,7 +560,7 @@ export const Subject = new PbEntity('Subject');
 export const Holiday = new PbEntity('Holiday');
 export const Performance = new PbEntity('Performance');
 export const UeberfachlichKompetenz = new PbEntity('Ueberfachliche_kompetenz');
-export const Competency = new PbEntity('Competencie');
+export const Competency = new PbEntity('Competicie');
 export const Fachbereich = new PbEntity('Fachbereich');
 Fachbereich.collectionName = 'fachbereichs';
 export const DailyNote = new PbEntity('Daily_note');
@@ -686,6 +571,7 @@ export const Group = new PbEntity('Group');
 export const UserPreferences = new PbEntity('User_preference');
 export const CustomizationSettings = new PbEntity('Customization_setting');
 export const AllerleiLesson = new PbEntity('Allerlei_lesson');  // Neu: Entity für neue Collection
+export const LehrplanKompetenz = new PbEntity('lehrplan_kompetenz');
 
 export const User = {
   current: () => pb.authStore.model || null,
@@ -695,9 +581,6 @@ export const User = {
       const authData = await pb.collection('users').authWithPassword(email, password);
       return { success: true, user: authData.record };
     } catch (error) {
-      if (isDebug) {
-        console.error('Login Error Details:', error.message, error.data);
-      }
       import('react-hot-toast').then(({ toast }) => {
         toast.error('Fehler beim Anmelden. Bitte überprüfen Sie Ihre Anmeldedaten.');
       });

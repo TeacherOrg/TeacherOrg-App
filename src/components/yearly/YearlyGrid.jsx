@@ -1,12 +1,8 @@
-import React, { useState, useEffect, useRef, useMemo, forwardRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import YearLessonCell from './YearLessonCell';
-import { ChevronLeft, ChevronRight, BookOpen } from 'lucide-react';
-import { Button } from '@/components/ui/button';
 import { adjustColor } from '@/utils/colorUtils';
-import { FixedSizeList as List } from 'react-window';
-import AutoSizer from 'react-virtualized-auto-sizer';
 import { Checkbox } from '@/components/ui/checkbox';
-import { useCallback } from 'react';
+import ClassSelectorBar from './ClassSelectorBar';
 
 const ACADEMIC_WEEKS = 52;
 
@@ -26,29 +22,61 @@ const getHolidayDisplay = (holiday) => {
   }
 };
 
-const YearlyGrid = React.memo(({ 
-  lessons, 
-  topics, 
-  subjects, 
-  academicWeeks = ACADEMIC_WEEKS, 
-  onLessonClick, 
-  activeClassId, 
-  activeTopicId, 
-  currentYear, 
-  activeClassName, 
-  holidays = [], 
-  onShowHover, 
-  onHideHover, 
+const getCurrentWeek = () => {
+  const now = new Date();
+  const jan4 = new Date(now.getFullYear(), 0, 4);
+  const daysToMonday = (jan4.getDay() + 6) % 7;
+  const mondayOfWeek1 = new Date(jan4.getTime() - daysToMonday * 86400000);
+  const diffTime = now.getTime() - mondayOfWeek1.getTime();
+  return Math.max(1, Math.min(52, Math.floor(diffTime / (7 * 24 * 60 * 60 * 1000)) + 1));
+};
+
+const YearlyGrid = React.memo(({
+  lessons,
+  topics,
+  subjects,
+  academicWeeks = ACADEMIC_WEEKS,
+  onLessonClick,
+  activeClassId,
+  activeTopicId,
+  currentYear,
+  activeClassName,
+  holidays = [],
+  onShowHover,
+  onHideHover,
   allYearlyLessons,
   densityMode = 'standard',
   isAssignMode = false,
   selectedLessons = [],
-  onSelectLesson
+  onSelectLesson,
+  classes,
+  onSelectClass
 }) => {
-  const tableRef = useRef(null);
+  const containerRef = useRef(null);
+  const subjectHeaderRef = useRef(null);
   const hasScrolledToCurrentWeek = useRef(false);
-  const listRef = useRef(null);
-  const classHeaderRef = useRef(null);
+
+  const weekColumnWidth = 120;
+  const horizontalPadding = 48;
+
+  const [availableWidth, setAvailableWidth] = useState(0);
+
+  // Breite updaten
+  useEffect(() => {
+    const updateWidth = () => {
+      if (containerRef.current) {
+        setAvailableWidth(containerRef.current.clientWidth - weekColumnWidth - horizontalPadding);
+      }
+    };
+    updateWidth();
+    window.addEventListener('resize', updateWidth);
+    const ro = new ResizeObserver(updateWidth);
+    if (containerRef.current) ro.observe(containerRef.current);
+    return () => {
+      window.removeEventListener('resize', updateWidth);
+      ro.disconnect();
+    };
+  }, []);
 
   const lessonsByWeek = useMemo(() => {
     const result = lessons.reduce((acc, lesson) => {
@@ -81,6 +109,14 @@ const YearlyGrid = React.memo(({
     }, {});
   }, [subjects]);
 
+  const getDisplayName = useCallback((sub) => {
+    if (activeClassId === null) {
+      const className = classes.find(c => c.id === sub.class_id)?.name || '';
+      return `${className} – ${sub.name}`;
+    }
+    return sub.name;
+  }, [activeClassId, classes]);
+
   const yearlyLessonsById = useMemo(() => {
     const map = new Map();
     lessons.forEach(lesson => {
@@ -89,59 +125,40 @@ const YearlyGrid = React.memo(({
     return map;
   }, [lessons]);
 
-  const CELL_WIDTHS = {
-    compact: 72,
-    standard: 82,
-    spacious: 92
-  };
+  const BASE_CELL_WIDTHS = { compact: 72, standard: 82, spacious: 92 };
+  const minCellWidth = BASE_CELL_WIDTHS[densityMode] || 82;
+  const maxCellWidth = 160;
 
-  const cellWidth = CELL_WIDTHS[densityMode] || CELL_WIDTHS.standard;
-  const weekColumnWidth = 120;
-  
-  const subjectBlockWidths = useMemo(() => {
-    return uniqueSubjects.map((subject) => {
-      const slots = lessonsPerWeekBySubject[subject] || 4;
-      return slots * cellWidth;
-    });
-  }, [uniqueSubjects, lessonsPerWeekBySubject, cellWidth]);
+  const effectiveAvailableWidth = availableWidth || 800;
 
-  const totalWidth = useMemo(() => {
-    return weekColumnWidth + subjectBlockWidths.reduce((sum, width) => sum + width, 0);
-  }, [weekColumnWidth, subjectBlockWidths]);
+  const totalSlots = uniqueSubjects.reduce((sum, subject) => sum + (lessonsPerWeekBySubject[subject] || 4), 0) || 1;
+  const cellWidth = Math.min(maxCellWidth, Math.max(minCellWidth, effectiveAvailableWidth / totalSlots));
 
-  const scrolledWidth = useMemo(() => totalWidth - weekColumnWidth, [totalWidth, weekColumnWidth]);
+  const subjectBlockWidths = useMemo(() => uniqueSubjects.map(s => (lessonsPerWeekBySubject[s] || 4) * cellWidth), [uniqueSubjects, lessonsPerWeekBySubject, cellWidth]);
+  const totalWidth = weekColumnWidth + subjectBlockWidths.reduce((a, b) => a + b, 0);
+  const rowHeight = densityMode === 'compact' ? 48 : densityMode === 'spacious' ? 80 : 68;
 
   const weeks = useMemo(() => Array.from({ length: academicWeeks }, (_, i) => i + 1), [academicWeeks]);
 
-  const rowHeight = useMemo(() => {
-    return densityMode === 'compact' ? 48 : densityMode === 'spacious' ? 80 : 68;
-  }, [densityMode]);
+  const currentWeek = getCurrentWeek();
 
-  const densityClass = useMemo(() => `density-${densityMode}`, [densityMode]);
-
-  const processedLessons = useMemo(() => {
-    const lessonMap = new Map();
-    lessons.forEach(lesson => {
-      const key = `${lesson.week_number}-${lesson.subject}`;
-      if (!lessonMap.has(key)) lessonMap.set(key, []);
-      lessonMap.get(key).push(lesson);
-    });
-    return lessonMap;
-  }, [lessons]);
-
-  const getCurrentWeek = useCallback(() => {
-    const now = new Date();
-    const jan4 = new Date(now.getFullYear(), 0, 4);
-    const jan4Day = jan4.getDay();
-    const daysToMondayOfJan4Week = (jan4Day + 6) % 7;
-    const mondayOfWeek1 = new Date();
-    mondayOfWeek1.setTime(jan4.getTime() - daysToMondayOfJan4Week * 86400000);
-    const diffTime = now.getTime() - mondayOfWeek1.getTime();
-    const diffWeeks = Math.floor(diffTime / (7 * 24 * 60 * 60 * 1000));
-    return Math.max(1, Math.min(52, diffWeeks + 1));
+  // Horizontal scroll sync
+  const handleScroll = useCallback(() => {
+    if (subjectHeaderRef.current && containerRef.current) {
+      subjectHeaderRef.current.scrollLeft = containerRef.current.scrollLeft;
+    }
   }, []);
 
-  const currentWeek = getCurrentWeek();
+  // Scroll to current week
+  useEffect(() => {
+    if (containerRef.current && !hasScrolledToCurrentWeek.current && currentYear === new Date().getFullYear()) {
+      setTimeout(() => {
+        const target = (currentWeek - 1) * rowHeight;
+        containerRef.current.scrollTop = target;
+        hasScrolledToCurrentWeek.current = true;
+      }, 300);
+    }
+  }, [currentWeek, rowHeight, currentYear, uniqueSubjects.length]);
 
   const getWeekDateRange = useCallback((weekNumber, year) => {
     const jan1 = new Date(year, 0, 1);
@@ -198,13 +215,13 @@ const YearlyGrid = React.memo(({
 
   useEffect(() => {
     const updateDimensions = () => {
-      if (classHeaderRef.current) {
-        setClassHeaderHeight(classHeaderRef.current.getBoundingClientRect().height);
+      if (subjectHeaderRef.current) {
+        setClassHeaderHeight(subjectHeaderRef.current.getBoundingClientRect().height);
       }
     };
 
     const observer = new ResizeObserver(updateDimensions);
-    if (tableRef.current) observer.observe(tableRef.current);
+    if (containerRef.current) observer.observe(containerRef.current);
 
     updateDimensions(); // Initial call
 
@@ -212,9 +229,10 @@ const YearlyGrid = React.memo(({
   }, [densityMode, uniqueSubjects.length]);
 
   useEffect(() => {
-    if (listRef.current && !hasScrolledToCurrentWeek.current && uniqueSubjects.length > 0 && currentYear === new Date().getFullYear()) {
+    if (containerRef.current && !hasScrolledToCurrentWeek.current && uniqueSubjects.length > 0 && currentYear === new Date().getFullYear()) {
       setTimeout(() => {
-        listRef.current?.scrollToItem(currentWeek, 'center');
+        const target = (currentWeek - 1) * rowHeight;
+        containerRef.current.scrollTop = target;
         hasScrolledToCurrentWeek.current = true;
       }, 500);
     }
@@ -232,81 +250,18 @@ const YearlyGrid = React.memo(({
     );
   }
 
-  const Inner = forwardRef(({ children, style, ...rest }, ref) => {
-    const effectiveWidth = Math.min(style.width || totalWidth, totalWidth); // Verwende die kleinere Breite
-    return (
-      <div
-        ref={ref}
-        style={{
-          ...style,
-          width: `${effectiveWidth}px`,
-          minWidth: '100%',
-          maxWidth: '100%',
-          margin: '0 auto' // Zentriert die Tabelle
-        }}
-        {...rest}
-      >
-        {children}
-      </div>
-    );
-  });
-
   const selectedSet = useMemo(() => new Set(selectedLessons.filter(l => typeof l === 'string')), [selectedLessons]);
 
-  const renderRow = ({ index, style }) => {
-    if (index === 0) {
-      return (
-        <div style={{ ...style, top: 0 }} className="flex flex-nowrap sticky z-40">
-          <div 
-            className="sticky left-0 p-3 font-bold text-slate-800 dark:text-slate-100 text-center bg-gradient-to-r from-slate-50 to-slate-100 dark:from-slate-700 dark:to-slate-800 z-40 border-b-2 border-r-2 border-slate-200 dark:border-slate-600"
-            style={{ 
-              width: `${weekColumnWidth}px`, 
-              minWidth: `${weekColumnWidth}px`, 
-              maxWidth: `${weekColumnWidth}px`,
-              height: `${rowHeight}px`,
-              left: 0,
-              zIndex: 40
-            }}
-          >
-            Woche
-          </div>
-          <div style={{ display: 'flex', width: `${scrolledWidth}px` }}>
-            {uniqueSubjects.map((subject, index) => {
-              const blockWidth = subjectBlockWidths[index] || 100;
-              const subjectColor = subjectsByName[subject]?.color || '#3b82f6';
-              return (
-                <div 
-                  key={subject}
-                  className="p-3 font-bold border-b-2 border-l border-slate-200 dark:border-slate-600 text-center text-slate-800 dark:text-slate-100 bg-gradient-to-r from-slate-50 to-slate-100 dark:from-slate-700 dark:to-slate-800 z-10"
-                  style={{
-                    width: `${blockWidth}px`,
-                    minWidth: `${blockWidth}px`, 
-                    maxWidth: `${blockWidth}px`,
-                    borderLeftColor: index === 0 ? 'transparent' : '#e5e7eb',
-                    backgroundColor: `color-mix(in srgb, ${subjectColor} 5%, transparent)`,
-                    height: `${rowHeight}px`
-                  }}
-                >
-                  <div className="flex items-center justify-center">
-                    <span className="truncate">{subject || 'Fallback'}</span>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      );
-    }
-
-    const week = weeks[index - 1];
+  const renderWeekRow = (week) => {
     const isCurrentWeek = week === currentWeek && currentYear === new Date().getFullYear();
     const weekDates = getWeekDateRange(week, currentYear);
     const holiday = getHolidayForWeek(week);
     const holidayDisplay = getHolidayDisplay(holiday);
 
-    const subjectCells = uniqueSubjects.map((subject, subjectIndex) => {
+    const subjectCells = uniqueSubjects.map((subject) => {
       const lessonSlotsCount = lessonsPerWeekBySubject[subject] || 4;
       const subjectColor = subjectsByName[subject]?.color || '#3b82f6';
+      const subjectId = subjectsByName[subject]?.id;
       const renderedSlots = new Set();
       const cells = [];
 
@@ -320,10 +275,9 @@ const YearlyGrid = React.memo(({
         const slot = { week_number: week, subjectName: subject, subject: subjectsByName[subject].id, lesson_number: lessonNumber, school_year: currentYear };
 
         if (!lesson) {
-          const safeSelected = selectedLessons.filter(l => typeof l === 'string');
-          const isSelected = safeSelected.some(l => {
-            const [w, sub, num] = l.split('-');
-            return Number(w) === week && sub === subject && Number(num) === lessonNumber;
+          const isSelected = selectedLessons.some(l => {
+            const [w, subId, num] = l.split('-');
+            return Number(w) === week && subId === subjectId && Number(num) === lessonNumber;
           });
           cells.push(
             <div
@@ -335,13 +289,13 @@ const YearlyGrid = React.memo(({
                 maxWidth: `${cellWidth}px`,
                 height: `${rowHeight}px`
               }}
-              onClick={isAssignMode ? () => onSelectLesson({ week_number: week, subject, lesson_number: lessonNumber }) : undefined}
+              onClick={isAssignMode ? () => onSelectLesson({ week_number: week, subject: subjectId, lesson_number: lessonNumber }) : undefined}
             >
               <div className="h-full flex items-center justify-center bg-slate-100 dark:bg-slate-900/50">
                 {isAssignMode && (
                   <Checkbox
                     checked={isSelected}
-                    onCheckedChange={() => onSelectLesson({ week_number: week, subject, lesson_number: lessonNumber })}
+                    onCheckedChange={() => onSelectLesson({ week_number: week, subject: subjectId, lesson_number: lessonNumber })}
                     className="absolute top-2 left-2 z-50"
                   />
                 )}
@@ -523,14 +477,14 @@ const YearlyGrid = React.memo(({
       }
 
       return (
-        <div key={subjectIndex} className="flex">
+        <div key={subject} className="flex">
           {cells}
         </div>
       );
     });
 
     return (
-      <div style={style} className={`flex flex-nowrap relative ${isCurrentWeek ? 'bg-blue-50 dark:bg-blue-900/30' : ''}`}>
+      <div className={`flex flex-nowrap relative ${isCurrentWeek ? 'bg-blue-50 dark:bg-blue-900/30' : ''}`} style={{ height: `${rowHeight}px` }}>
         {holiday && (
           <div
             className="absolute flex flex-col items-center justify-center text-center text-white pointer-events-none"
@@ -578,34 +532,69 @@ const YearlyGrid = React.memo(({
   };
 
   return (
-    <div className={`bg-white dark:bg-slate-800 rounded-xl shadow-sm h-full overflow-hidden ${densityClass}`}>
-      <div className="h-full" ref={tableRef} style={{ overflowX: 'hidden', overflowY: 'auto' }}>
-        <AutoSizer>
-          {({ height, width }) => (
-            <>
-              <div ref={classHeaderRef} className="class-header" style={{ position: 'sticky', top: 0, zIndex: 50, width: '100%', maxWidth: `${totalWidth}px`, margin: '0 auto', textAlign: 'center' }}>
-                <div 
-                  className="p-3 font-bold border-b-2 border-slate-200 dark:border-slate-600 text-slate-800 dark:text-slate-100 bg-gradient-to-r from-slate-50 to-slate-100 dark:from-slate-700 dark:to-slate-800 z-40"
-                  style={{ width: '100%' }}
-                >
-                  {activeClassName || 'Klasse auswählen'}
+    <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm h-full flex flex-col">
+      {/* 1. KLASSEN-SELECTION sticky */}
+      <ClassSelectorBar
+        classes={classes || []}
+        activeClassId={activeClassId}
+        onSelectClass={onSelectClass}
+      />
+
+      {/* 2. Scroll-Container */}
+      <div
+        ref={containerRef}
+        className="flex-1 overflow-auto scrollbar-gutter-stable"
+        onScroll={handleScroll}
+      >
+        {/* Fächer-Header – sticky + zentriert */}
+        <div
+          ref={subjectHeaderRef}
+          className="z-40 bg-white dark:bg-slate-800 border-b-2 border-slate-200 dark:border-slate-600 flex flex-nowrap sticky top-0"
+          style={{ 
+            height: `${rowHeight}px`, 
+            minWidth: `${totalWidth}px`, 
+            // unverändert
+            boxSizing: 'border-box',
+          }}
+        >
+          <div className="sticky left-0 z-50 bg-gradient-to-r from-slate-50 to-slate-100 dark:from-slate-700 dark:to-slate-800 p-3 font-bold text-slate-800 dark:text-slate-100 text-center border-b-2 border-r-2 border-slate-200 dark:border-slate-600" style={{ width: `${weekColumnWidth}px`, minWidth: `${weekColumnWidth}px`, maxWidth: `${weekColumnWidth}px` }}>Woche</div>
+          {subjects.map((sub, i) => {
+            const blockWidth = subjectBlockWidths[i] || 100;
+            const subjectColor = sub.color || '#3b82f6';
+
+            // Hex + Alpha → #3b82f620 = ca. 12–15 % Deckkraft (perfekt sichtbar, aber nicht zu stark)
+            const tintColor = subjectColor + '22'; // 22 hex = ~13% opacity
+
+            return (
+              <div
+                key={sub.id}
+                className={`p-3 font-bold text-center text-slate-800 dark:text-slate-100 border-b-2 border-l border-slate-200 dark:border-slate-600
+                  ${i === 0 ? 'border-l-0' : ''} 
+                  ${i === subjects.length - 1 ? 'border-r-2 border-slate-200 dark:border-slate-600' : ''}`}
+                style={{
+                  width: `${blockWidth}px`,
+                  minWidth: `${blockWidth}px`,
+                  maxWidth: `${blockWidth}px`,
+                  backgroundColor: tintColor,   // ← das ist der neue Teil
+                  height: `${rowHeight}px`,
+                }}
+              >
+                <div className="flex items-center justify-center">
+                  <span className="truncate">{getDisplayName(sub)}</span>
                 </div>
               </div>
-              
-              <List
-                ref={listRef}
-                height={height - classHeaderHeight}
-                itemCount={weeks.length + 1}
-                itemSize={rowHeight}
-                width={width}
-                overscanCount={30}
-                innerElementType={Inner}
-              >
-                {renderRow}
-              </List>
-            </>
-          )}
-        </AutoSizer>
+            );
+          })}
+        </div>
+
+        {/* Wochen */}
+        <div className="mx-auto" style={{ minWidth: `${totalWidth}px` }}>
+          {weeks.map(week => (
+            <React.Fragment key={week}>
+              {renderWeekRow(week)}
+            </React.Fragment>
+          ))}
+        </div>
       </div>
     </div>
   );

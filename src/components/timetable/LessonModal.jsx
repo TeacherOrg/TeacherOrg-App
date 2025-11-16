@@ -72,7 +72,7 @@ export default function LessonModal({
   isOpen, onClose, onSave, onDelete, onDuplicate,
   lesson, copiedLesson, slotInfo, currentWeek, allLessons, allYearlyLessons, timeSlots,
   subjectColor, initialSubject, subjects, topics, activeClassId, setEditingLesson,
-  setIsModalOpen // Add this line
+  setIsModalOpen, currentYear // Add this line
 }) {
   const { setAllLessons } = useLessonStore();  // Korrigiert: Hook an Top-Level
 
@@ -131,9 +131,17 @@ export default function LessonModal({
   }, [subjects, activeClassId]);
 
   const subjectTopics = useMemo(() => {
-    const validSubjectIds = subjectOptions.map(s => s.id);
-    return topics?.filter(topic => validSubjectIds.includes(topic.subject)) || [];
-  }, [topics, subjectOptions]);
+    if (!selectedSubject) return [];
+    // selectedSubject ist die Subject-ID; Topic.subject kann aber entweder die ID oder der Subject-Name sein.
+    const selectedSubjectObj = subjectOptions.find(s => s.id === selectedSubject);
+    const selectedSubjectName = selectedSubjectObj?.name;
+    return topics?.filter(topic =>
+      // Akzeptiere Topics, deren topic.subject mit der ID übereinstimmt
+      topic.subject === selectedSubject ||
+      // ...oder mit dem Subject-Namen übereinstimmt (Fallback)
+      (selectedSubjectName && topic.subject === selectedSubjectName)
+    ) || [];
+  }, [topics, subjectOptions, selectedSubject]);
 
   const getCurrentLessonPosition = useCallback(() => {
     const targetLesson = isEditing ? lesson : slotInfo;
@@ -230,45 +238,77 @@ export default function LessonModal({
     onSubjectsChange,
     onLessonsChange,
     onStepsChange,
-    onIntegratedDataChange
+    onIntegratedDataChange,
+    currentYear, 
+    activeClassId,
+    selectedSubject  // ← NEU: hinzufügen
   });
 
-  const handleAllerleiToggle = (checked) => {
+  const handleAllerleiToggle = async (checked) => {
     setValidationError(null);
     handleAllerleiToggleHook(checked);
+
     if (checked) {
-      const initiatingSubject = lesson?.subject || initialSubject || '';
-      console.log('Debug: handleAllerleiToggle (on) - Initiating subject:', initiatingSubject, 'Lesson:', lesson, 'InitialSubject:', initialSubject);
-      const primaryYl = allYearlyLessons.find(yl => yl.subject === initiatingSubject && yl.week_number === currentWeek);
-      if (primaryYl) {
-        console.log('Debug: handleAllerleiToggle (on) - Setting primary lesson:', primaryYl.id, 'Subject:', primaryYl.subject_name || primaryYl.expand?.subject?.name);
-        setSelectedLessons({ 0: primaryYl.id });
-        setAllerleiSubjects(['']);
-      } else {
-        setValidationError('Keine Lektion für das initiierende Fach gefunden.');
+      // ─────── Primary YL bestimmen (bestehende Lektion) oder neu anlegen (neuer Slot) ───────
+      let primaryYlId = lesson?.yearly_lesson_id || null;
+
+      // Nur bei neuem Slot (keine lesson) → neue Primary YL anlegen
+      if (!primaryYlId && selectedSubject) {
+        const nextNumber = allYearlyLessons.filter(yl => yl.subject === selectedSubject && yl.week_number === currentWeek).length + 1;
+        const newYl = await YearlyLesson.create({
+          subject: selectedSubject,
+          week_number: currentWeek,
+          lesson_number: nextNumber,
+          school_year: currentYear,
+          name: `Lektion ${nextNumber}`,
+          steps: [],
+          topic_id: null,
+          is_double_lesson: false,
+          is_exam: false,
+          is_half_class: false,
+          user_id: pb.authStore.model.id,
+          class_id: activeClassId
+        });
+        primaryYlId = newYl.id;
+        console.log('Debug: Created new primary YL for empty slot:', primaryYlId);
       }
+
+      // ─────── formData sofort auf "bestehende Allerlei" setzen → Hook erstellt KEINE neue YL ───────
+      setFormData(prev => ({
+        ...prev,
+        is_allerlei: true,
+        primary_yearly_lesson_id: primaryYlId,
+        added_yearly_lesson_ids: []
+      }));
+
+      setSelectedLessons({ 0: primaryYlId });
+      setAllerleiSubjects([]);
     } else {
+      // ─────── Toggle OFF ───────
       const primaryId = getAllerleiYearlyLessonIds()[0];
       const primaryYL = allYearlyLessons.find(yl => yl.id === primaryId);
       const primaryOrig = integratedOriginalData[primaryId] || {};
+
       if (!primaryYL) {
         setValidationError('Primäre Lektion nicht gefunden.');
         return;
       }
-      console.log('Debug: handleAllerleiToggle (off) - Primary ID:', primaryId, 'Primary YL:', primaryYL, 'Original Data:', primaryOrig);
+
       setSelectedSubject(primaryYL.subject);
       setFormData(prev => ({ 
         ...prev, 
         name: primaryOrig.original_name || primaryYL.name || 'Primäre Lektion',
         topic_id: primaryOrig.original_topic_id || primaryYL.topic_id || "no_topic",
-        is_allerlei: false
+        is_allerlei: false,
+        primary_yearly_lesson_id: null,
+        added_yearly_lesson_ids: []
       }));
+
       setPrimarySteps((primaryOrig.steps || primaryYL.steps || []).map(s => ({ ...s, id: generateId() })));
       setSecondSteps([]);  
       setAllerleiSteps({});  
-      setAllerleiSubjects(['']);
-      setSelectedLessons({ 0: primaryId }); // Retain primary lesson
-      // Do not reset integratedOriginalData to preserve it for unlink
+      setAllerleiSubjects([]);
+      setSelectedLessons({ 0: primaryId });
     }
   };
 
@@ -276,7 +316,21 @@ export default function LessonModal({
     if (isOpen) {
       const lessonToLoad = copiedLesson || lesson || {};
       originalLessonRef.current = lesson;
-      let loadedTopicId = lessonToLoad.topic_id || "no_topic";
+      // Normalize topic id: topic may be stored as ID, as title/name, or be 'no_topic'
+      const rawTopicRef = lessonToLoad.topic_id || "no_topic";
+      let resolvedTopicId = "no_topic";
+      if (rawTopicRef && rawTopicRef !== 'no_topic') {
+        // Try direct ID match in topics prop
+        const foundById = topics?.find(t => t.id === rawTopicRef);
+        if (foundById) {
+          resolvedTopicId = foundById.id;
+        } else {
+          // Try matching by title/name (case-insensitive)
+          const foundByTitle = topics?.find(t => (t.title || '').toString().toLowerCase() === String(rawTopicRef).toLowerCase());
+          resolvedTopicId = foundByTitle ? foundByTitle.id : rawTopicRef;
+        }
+      }
+      let loadedTopicId = resolvedTopicId;
       let loadedName = '';
       let loadedSecondName = '';
       let loadedPrimarySteps = [];
@@ -316,6 +370,13 @@ export default function LessonModal({
         }
       }
 
+      // ─── NEU: loadedSubject berechnen ─────────────────────────────────────
+      let loadedSubject = lessonToLoad.subject || initialSubject || "";
+      if (lessonToLoad.collectionName === 'allerlei_lessons' && loadedPrimaryYlId) {
+        const primaryYL = allYearlyLessons.find(yl => yl.id === loadedPrimaryYlId);
+        loadedSubject = primaryYL?.subject || initialSubject || "";
+      }
+
       setFormData({
         topic_id: loadedTopicId,
         is_double_lesson: lessonToLoad.is_double_lesson || false,
@@ -325,9 +386,12 @@ export default function LessonModal({
         name: loadedName,
         second_name: loadedSecondName,
         primary_yearly_lesson_id: loadedPrimaryYlId,
-        added_yearly_lesson_ids: loadedAddedYlIds
+        added_yearly_lesson_ids: loadedAddedYlIds,
+        is_allerlei: lessonToLoad.collectionName === 'allerlei_lessons',
+        subject: loadedSubject                     // ← NEU: subject in formData speichern
       });
-      setSelectedSubject(lessonToLoad.subject || initialSubject || "");
+
+      setSelectedSubject(loadedSubject);             // ← WICHTIG: selectedSubject korrekt setzen
       setAddSecondLesson(lessonToLoad.is_double_lesson && !!lessonToLoad.second_yearly_lesson_id);
       setSelectedSecondLesson(lessonToLoad.second_yearly_lesson_id || "");
       setPrimarySteps(loadedPrimarySteps);
@@ -343,64 +407,49 @@ export default function LessonModal({
     }
   }, [isOpen, lesson, copiedLesson, initialSubject, allYearlyLessons]);
 
+  // ─── Sync selectedSubject → formData.subject (für neue Lektionen wichtig) ─────
   useEffect(() => {
-    if (!isOpen || isEditing || copiedLesson) return;
-    if (selectedSubject) {
-      const availableYearlyLessons = allYearlyLessons.filter(
-        yl => yl.subject === selectedSubject && yl.week_number === currentWeek && !scheduledLessonIds.has(yl.id)
-      ).sort((a, b) => a.lesson_number - b.lesson_number);
-      if (availableYearlyLessons.length > 0) {
-        const yearlyLessonToUse = availableYearlyLessons[0];
-        setFormData(prev => ({
-          ...prev,
-          topic_id: yearlyLessonToUse.topic_id || "no_topic",
-          is_double_lesson: yearlyLessonToUse.is_double_lesson || false,
-          is_exam: yearlyLessonToUse.is_exam || false,
-          is_half_class: yearlyLessonToUse.is_half_class || false,
-        }));
-        setPrimarySteps(yearlyLessonToUse.steps?.map(s => ({ ...s, id: s.id || generateId() })) || []);
-        if (yearlyLessonToUse.is_double_lesson && yearlyLessonToUse.second_yearly_lesson_id) {
-          setAddSecondLesson(true);
-          setSelectedSecondLesson(yearlyLessonToUse.second_yearly_lesson_id);
-          const secondYL = allYearlyLessons.find(yl => yl.id === yearlyLessonToUse.second_yearly_lesson_id);
-          setSecondSteps(secondYL?.steps?.map(s => ({ ...s, id: `second-${s.id || generateId()}` })) || []);
-        } else {
-          setAddSecondLesson(false);
-          setSelectedSecondLesson("");
-          setSecondSteps([]);
-        }
-      } else {
-        setFormData({ topic_id: "no_topic", is_double_lesson: false, is_exam: false, is_half_class: false });
-        setPrimarySteps([]);
-        setSecondSteps([]);
-        setAddSecondLesson(false);
-        setSelectedSecondLesson("");
-      }
+    if (selectedSubject && !isAllerlei && (!formData.subject || formData.subject !== selectedSubject)) {
+      setFormData(prev => ({ ...prev, subject: selectedSubject }));
+    }
+  }, [selectedSubject, isAllerlei, formData.subject]);
+
+  const handleAutoFill = useCallback(() => {
+    if (!selectedSubject) return;
+
+    const subjectYearlyLessons = allYearlyLessons.filter(yl => yl.subject === selectedSubject && yl.week_number === currentWeek);
+    if (subjectYearlyLessons.length === 0) return;
+
+    const firstLesson = subjectYearlyLessons[0];
+    const firstSteps = firstLesson.steps?.map(s => ({ ...s, id: generateId() })) || [];
+
+    setPrimarySteps(firstSteps);
+    setFormData(prev => ({
+      ...prev,
+      topic_id: firstLesson.topic_id || "no_topic",
+      is_double_lesson: firstLesson.is_double_lesson || false,
+      is_exam: firstLesson.is_exam || false,
+      is_half_class: firstLesson.is_half_class || false,
+    }));
+
+    if (firstLesson.is_double_lesson && firstLesson.second_yearly_lesson_id) {
+      const secondLesson = subjectYearlyLessons.find(yl => yl.id === firstLesson.second_yearly_lesson_id);
+      const secondSteps = secondLesson?.steps?.map(s => ({ ...s, id: `second-${s.id || generateId()}` })) || [];
+      setSecondSteps(secondSteps);
+      setAddSecondLesson(true);
+      setSelectedSecondLesson(secondLesson.id);
     } else {
-      setFormData({ topic_id: "no_topic", is_double_lesson: false, is_exam: false, is_half_class: false });
-      setPrimarySteps([]);
       setSecondSteps([]);
       setAddSecondLesson(false);
       setSelectedSecondLesson("");
     }
-  }, [isOpen, isEditing, copiedLesson, selectedSubject, currentWeek, allYearlyLessons, scheduledLessonIds]);
+  }, [selectedSubject, allYearlyLessons, currentWeek]);
 
   useEffect(() => {
-    const handleKeyDown = (e) => {
-      if (!isOpen) return;
-      
-      if (e.key === 'Escape') {
-        onClose();
-      } else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
-        document.getElementById('lesson-form').requestSubmit();
-      } else if (e.key === 'Delete' && isEditing) {
-        handleDeleteClick();
-      }
-    };
-
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, isEditing, onClose]);
+    if (isOpen && !isEditing && !copiedLesson) {
+      handleAutoFill();
+    }
+  }, [isOpen, isEditing, copiedLesson, handleAutoFill]);
 
   const handleDoubleToggle = (checked) => {
     setFormData(prev => ({ ...prev, is_double_lesson: checked }));
@@ -511,23 +560,31 @@ export default function LessonModal({
       // Handle dissolution
       if (isEditing && wasAllerlei && !isAllerlei) {
         try {
+          // Fetch Allerlei data before unlink to get primaryId
+          const allerlei = await AllerleiLesson.findById(lesson.id);
+          const primaryId = allerlei.primary_yearly_lesson_id;
+          
           await allerleiService.unlink(lesson.id, allLessons, timeSlots, currentWeek, integratedOriginalData, lesson.day_of_week, lesson.period_slot);
           // Refetch lessons to update allLessons
           const updatedLessons = await Lesson.find({ week_number: currentWeek, user_id: pb.authStore.model.id });
           setAllLessons(updatedLessons);
           console.log('Debug: handleSubmit - After unlink, updated allLessons:', updatedLessons);
-          const primaryId = getAllerleiYearlyLessonIds()[0];
           const restoredPrimary = updatedLessons.find(l => l.yearly_lesson_id === primaryId && l.week_number === currentWeek && !l.is_hidden);
-          console.log('Debug: After unlink - Primary ID:', primaryId, 'Restored Primary:', restoredPrimary);
+          console.log('Debug: Searched for restoredPrimary with yearly_lesson_id:', primaryId, 'Found:', restoredPrimary);
           if (restoredPrimary) {
             console.log('Restored primary lesson:', restoredPrimary);
             setEditingLesson(restoredPrimary); // Update the editing lesson
-            setIsModalOpen(true); // Reopen the modal
+            onClose(); // Zuerst schließen
+            setTimeout(() => { // Neu: Verzögerung für Reopen, um Race-Conditions zu vermeiden
+              if (typeof setIsModalOpen === 'function') {
+                setIsModalOpen(true);
+              }
+            }, 100);
           } else {
             setValidationError('Primary lesson not restored correctly after dissolution.');
             return;
           }
-          onClose();
+          // onClose() bereits aufgerufen vor Reopen-Logik
         } catch (error) {
           console.error('Debug: handleSubmit - Unlink error:', error);
           setValidationError(error.message);
@@ -567,6 +624,12 @@ export default function LessonModal({
 
       // Handle integration
       if (isAllerlei) {
+        if (typeof allerleiService.integrate !== 'function') {
+          console.error('Debug: integrate missing in allerleiService', allerleiService);
+          setValidationError('Integration service not available. Check console for details.');
+          setIsSubmitting(false);
+          return;
+        }
         await allerleiService.integrate(
           getAllerleiYearlyLessonIds(),
           allLessons,
@@ -592,17 +655,18 @@ export default function LessonModal({
         lessonData = {
           id: lesson.id,
           ...preparedFormData,
-          description: "Allerlei",
+          description: "Allerlei: " + (allerleiSubjects || []).filter(Boolean).join(', '),
           steps: [...primarySteps, ...Object.values(allerleiSteps).flat(), ...secondSteps],
           subject: null,
           primary_yearly_lesson_id: getAllerleiYearlyLessonIds()[0],
           added_yearly_lesson_ids: getAllerleiYearlyLessonIds().slice(1),
+          allerlei_subjects: allerleiSubjects,
         };
         await AllerleiLesson.update(lesson.id, lessonData);
       } else if (isEditing && lesson.collectionName !== 'allerlei_lessons' && isAllerlei) {  
         lessonData = {
           ...preparedFormData,
-          description: "Allerlei",
+          description: "Allerlei: " + (allerleiSubjects || []).filter(Boolean).join(', '),
           steps: [...primarySteps, ...Object.values(allerleiSteps).flat(), ...secondSteps],
           primary_yearly_lesson_id: getAllerleiYearlyLessonIds()[0],
           added_yearly_lesson_ids: getAllerleiYearlyLessonIds().slice(1),
@@ -611,7 +675,8 @@ export default function LessonModal({
           day_of_week: lesson.day_of_week,
           period_slot: lesson.period_slot,
           isNew: true,
-          collectionName: 'allerlei_lessons'
+          collectionName: 'allerlei_lessons',
+          allerlei_subjects: allerleiSubjects,
         };
         const newAllerlei = await allerleiService.convertToAllerlei(lesson.id, lessonData);
         lessonData.id = newAllerlei.id;
@@ -623,7 +688,7 @@ export default function LessonModal({
         }
         lessonData = {
           ...preparedFormData,
-          description: "Allerlei",
+          description: "Allerlei: " + (allerleiSubjects || []).filter(Boolean).join(', '),
           steps: [...primarySteps, ...Object.values(allerleiSteps).flat(), ...secondSteps],
           subject: null,
           primary_yearly_lesson_id: yearlyIds[0],
@@ -632,6 +697,7 @@ export default function LessonModal({
           week_number: currentWeek,
           day_of_week: slotInfo.day,
           period_slot: slotInfo.period,
+          allerlei_subjects: allerleiSubjects,
         };
         const newAllerlei = await AllerleiLesson.create(lessonData);
         // Neu: Verify creation
@@ -927,18 +993,18 @@ export default function LessonModal({
                 Primäres Fach: {subjectOptions.find(s => s.id === (lesson?.subject || selectedSubject))?.name || 'Unbekannt'}
               </p>
               <div className="space-y-3">
-                {allerleiSubjects.slice(1).map((fach, index) => ( // Start from index 1 for additional subjects
+                {allerleiSubjects.map((fach, index) => (
                   <AllerleiSubjectSelector
-                    key={index + 1}
-                    index={index + 1} // Use index + 1 to avoid overwriting primary
+                    key={index}
+                    index={index}
                     subject={fach}
                     availableSubjects={subjectOptions}
                     onUpdateSubject={updateSubject}
                     onRemoveSubject={removeSubject}
                     selectedLesson={selectedLessons[index + 1]}
                     onSelectLesson={selectLesson}
-                    availableLessons={getAvailableAllerleiLessons(fach, index + 1)}
-                    steps={allerleiSteps[index + 1] || []}
+                    availableLessons={getAvailableAllerleiLessons(fach, index)}
+                    steps={allerleiSteps[index] || []}
                     onUpdateStep={updateAllerleiStep}
                     onRemoveStep={removeAllerleiStep}
                     onAddStep={addAllerleiStep}

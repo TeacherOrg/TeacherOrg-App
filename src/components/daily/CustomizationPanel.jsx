@@ -397,21 +397,6 @@ export default function CustomizationPanel({ customization, onCustomizationChang
               </h3>
               
               <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <Label className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                      Aktuelle Lektion automatisch anzeigen
-                    </Label>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                      Zeigt automatisch die Details der gerade laufenden Lektion an
-                    </p>
-                  </div>
-                  <Switch
-                    checked={customization.autoFocusCurrentLesson}
-                    onCheckedChange={(checked) => handleToggleChange('autoFocusCurrentLesson', checked)}
-                  />
-                </div>
-
                 {/* ENTFERNT: "Pausen anzeigen", da diese nun anders gehandhabt werden */}
                 {/* ENTFERNT: "Lehrer-Notizen anzeigen" (moved to Layout tab) */}
 

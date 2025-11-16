@@ -97,8 +97,15 @@ export default function LessonModal({
   const displayLesson = lesson || newLessonSlot;
 
   // Berechne subjectId und subjectTopics außerhalb von useEffect
-  const subjectId = typeof displayLesson?.subject === 'object' ? displayLesson.subject.id : displayLesson?.subject;
-  const subjectTopics = topics?.filter(topic => topic.subject === subjectId) || [];
+  // Robust: topic.subject kann entweder die Subject-ID oder der Subject-Name sein.
+  const rawSubject = displayLesson?.subject;
+  const subjectId = typeof rawSubject === 'object' ? rawSubject.id : rawSubject;
+  const subjectName = displayLesson?.subject_name || displayLesson?.subjectName || null;
+  const subjectCandidates = [subjectId, subjectName].filter(Boolean).map(s => String(s).toLowerCase());
+  const subjectTopics = (topics || []).filter(topic => {
+    const topicSubject = topic?.subject ?? topic?.subject_id ?? topic?.subjectName ?? '';
+    return subjectCandidates.some(candidate => String(topicSubject).toLowerCase() === candidate);
+  });
 
   // Initialize form data and steps when the modal opens or lesson changes
   useEffect(() => {
