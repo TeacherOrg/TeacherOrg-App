@@ -560,15 +560,12 @@ export default function LessonModal({
       // Handle dissolution
       if (isEditing && wasAllerlei && !isAllerlei) {
         try {
-          // Fetch Allerlei data before unlink to get primaryId
-          const allerlei = await AllerleiLesson.findById(lesson.id);
-          const primaryId = allerlei.primary_yearly_lesson_id;
-          
           await allerleiService.unlink(lesson.id, allLessons, timeSlots, currentWeek, integratedOriginalData, lesson.day_of_week, lesson.period_slot);
           // Refetch lessons to update allLessons
           const updatedLessons = await Lesson.find({ week_number: currentWeek, user_id: pb.authStore.model.id });
           setAllLessons(updatedLessons);
           console.log('Debug: handleSubmit - After unlink, updated allLessons:', updatedLessons);
+          const primaryId = getAllerleiYearlyLessonIds()[0];
           const restoredPrimary = updatedLessons.find(l => l.yearly_lesson_id === primaryId && l.week_number === currentWeek && !l.is_hidden);
           console.log('Debug: Searched for restoredPrimary with yearly_lesson_id:', primaryId, 'Found:', restoredPrimary);
           if (restoredPrimary) {

@@ -54,6 +54,7 @@ const MaterialQuickAdd = ({ step, onUpdate, topicMaterials = [], topicColor }) =
           <button
             key={mat}
             type="button"
+            onMouseDown={(e) => e.preventDefault()}
             onClick={() => toggleMaterial(mat)}
             className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all duration-200 shadow-sm
               ${isSelected 
@@ -72,8 +73,10 @@ const MaterialQuickAdd = ({ step, onUpdate, topicMaterials = [], topicColor }) =
   );
 };
 
-const StepRow = ({ step, onUpdate, onRemove, topicMaterials = [], topicColor }) => {
-  const materialIsEmpty = !step.material?.trim();
+const StepRow = ({ step, onUpdate, onRemove, topicMaterials = [], topicColor, isLast = false }) => {
+  const [isMaterialFocused, setIsMaterialFocused] = useState(false);
+
+  const showQuickAdd = topicMaterials.length > 0 && (isLast || isMaterialFocused);
 
   return (
     <div className="grid grid-cols-[60px_140px_1fr_1fr_auto] gap-2 items-start">
@@ -112,23 +115,36 @@ const StepRow = ({ step, onUpdate, onRemove, topicMaterials = [], topicColor }) 
         <Input
           value={step.material || ''}
           onChange={e => onUpdate('material', e.target.value)}
+          onFocus={() => setIsMaterialFocused(true)}
+          onBlur={() => setIsMaterialFocused(false)}
           placeholder="Material"
           className="bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600"
         />
-        
-        {/* Immer anzeigen, wenn Topic-Materialien existieren */}
-        {topicMaterials.length > 0 && (
-          <MaterialQuickAdd
-            step={step}
-            onUpdate={(field, value) => onUpdate(field, value)}
-            topicMaterials={topicMaterials}
-            topicColor={topicColor}
-          />
-        )}
+
+        {/* QuickAdd mit sanfter Transition */}
+        <div
+          className={`transition-all duration-300 ease-in-out overflow-hidden ${
+            showQuickAdd ? 'opacity-100 mt-2' : 'opacity-0 mt-0 h-0'
+          }`}
+        >
+          {showQuickAdd && (
+            <MaterialQuickAdd
+              step={step}
+              onUpdate={(field, value) => onUpdate(field, value)}
+              topicMaterials={topicMaterials}
+              topicColor={topicColor}
+            />
+          )}
+        </div>
       </div>
 
       {/* Löschen */}
-      <Button variant="ghost" size="icon" onClick={onRemove} className="text-red-500 hover:text-red-700 hover:bg-red-100 dark:hover:bg-red-900/30">
+      <Button
+        variant="ghost"
+        size="icon"
+        onClick={onRemove}
+        className="text-red-500 hover:text-red-700 hover:bg-red-100 dark:hover:bg-red-900/30"
+      >
         <Trash2 className="w-4 h-4" />
       </Button>
     </div>
@@ -491,10 +507,14 @@ export default function LessonModal({
   const topicMaterialsString = topicMaterials.join(', ');
   const topicColor = currentTopic?.color || subjectColor || '#3b82f6';
 
+  // Berechne IDs der letzten Schritte
+  const lastPrimaryStepId = primarySteps[primarySteps.length - 1]?.id ?? null;
+  const lastSecondStepId = secondSteps[secondSteps.length - 1]?.id ?? null;
+
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent 
-        className="max-w-4xl border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900" 
+        className="max-w-4xl border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 max-h-[80vh] overflow-y-auto" 
         style={{ 
           borderColor: modalColor + '40'
         }}
@@ -611,6 +631,7 @@ export default function LessonModal({
                   onRemove={() => handleRemovePrimaryStep(step.id)}
                   topicMaterials={currentTopic?.materials || []}
                   topicColor={topicColor}
+                  isLast={step.id === lastPrimaryStepId}
                 />
               ))}
               <Button type="button" variant="outline" onClick={handleAddPrimaryStep} className="w-full mt-2 border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white bg-white dark:bg-slate-700 hover:bg-slate-100 dark:hover:bg-slate-600">
@@ -632,6 +653,7 @@ export default function LessonModal({
                     onRemove={() => handleRemoveSecondStep(step.id)}
                     topicMaterials={currentTopic?.materials || []}
                     topicColor={topicColor}
+                    isLast={step.id === lastSecondStepId}
                   />
                 ))}
                 <Button type="button" variant="outline" onClick={handleAddSecondStep} className="w-full mt-2 border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white bg-white dark:bg-slate-700 hover:bg-slate-100 dark:hover:bg-slate-600">

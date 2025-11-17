@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Holiday } from '@/api/entities';
 import { Button } from '@/components/ui/button';
@@ -74,13 +73,13 @@ export default function HolidaySettings({ holidays = [], refreshData }) {
     return (
         <div className="space-y-6">
             <div>
-                <h3 className="text-lg font-semibold text-white">Ferien und Feiertage</h3>
-                <p className="text-sm text-slate-400">
+                <h3 className="text-lg font-semibold text-black dark:text-white">Ferien und Feiertage</h3>
+                <p className="text-sm text-slate-600 dark:text-slate-400">
                     Verwalten Sie hier Schulferien und Feiertage.
                 </p>
             </div>
             
-            <form onSubmit={handleAddHoliday} className="p-4 bg-slate-800 rounded-lg space-y-4">
+            <form onSubmit={handleAddHoliday} className="p-4 bg-white dark:bg-slate-800 rounded-lg space-y-4 border border-slate-300 dark:border-slate-600">
                 {/* Mode Selection at the top */}
                 <div className="space-y-3">
                     <div className="flex gap-6">
@@ -96,7 +95,7 @@ export default function HolidaySettings({ holidays = [], refreshData }) {
                                 }}
                                 className="text-blue-600"
                             />
-                            <span className="text-white">Vordefiniert</span>
+                            <span className="text-black dark:text-white">Vordefiniert</span>
                         </label>
                         <label className="flex items-center space-x-2 cursor-pointer">
                             <input 
@@ -110,7 +109,7 @@ export default function HolidaySettings({ holidays = [], refreshData }) {
                                 }}
                                 className="text-blue-600"
                             />
-                            <span className="text-white">Eigene Angabe</span>
+                            <span className="text-black dark:text-white">Eigene Angabe</span>
                         </label>
                     </div>
                 </div>
@@ -118,11 +117,11 @@ export default function HolidaySettings({ holidays = [], refreshData }) {
                 {/* Type and Name/Selection on same row */}
                 <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
-                        <label className="text-sm text-slate-300">Typ</label>
+                        <label className="text-sm text-slate-600 dark:text-slate-300">Typ</label>
                         <select
                             value={formData.type}
                             onChange={(e) => setFormData(prev => ({ ...prev, type: e.target.value }))}
-                            className="w-full p-3 bg-slate-700 border border-slate-600 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            className="w-full p-3 bg-slate-100 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 text-black dark:text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                         >
                             <option value="vacation">Ferien</option>
                             <option value="holiday">Feiertag</option>
@@ -133,14 +132,14 @@ export default function HolidaySettings({ holidays = [], refreshData }) {
                     <div className="space-y-2">
                         {formData.type === 'vacation' ? (
                             <>
-                                <label className="text-sm text-slate-300">
+                                <label className="text-sm text-slate-600 dark:text-slate-300">
                                     {mode === 'preset' ? 'Ferien auswählen' : 'Name der Ferien'}
                                 </label>
                                 {mode === 'preset' ? (
                                     <select
                                         value={formData.name}
                                         onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
-                                        className="w-full p-3 bg-slate-700 border-slate-600 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                        className="w-full p-3 bg-slate-100 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 text-black dark:text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                                     >
                                         <option value="">Ferien auswählen...</option>
                                         {PRESET_VACATIONS.map(vac => (
@@ -152,18 +151,18 @@ export default function HolidaySettings({ holidays = [], refreshData }) {
                                         value={formData.name}
                                         onChange={(e) => setFormData(prev => ({...prev, name: e.target.value}))}
                                         placeholder="Name der Ferien eingeben"
-                                        className="bg-slate-700 border-slate-600 text-white"
+                                        className="bg-slate-100 dark:bg-slate-700 border-slate-300 dark:border-slate-600 text-black dark:text-white"
                                     />
                                 )}
                             </>
                         ) : (
                             <>
-                                <label className="text-sm text-slate-300">Name</label>
+                                <label className="text-sm text-slate-600 dark:text-slate-300">Name</label>
                                 <Input 
                                     value={formData.name}
                                     onChange={(e) => setFormData(prev => ({...prev, name: e.target.value}))}
                                     placeholder={`Name für ${formData.type === 'holiday' ? 'Feiertag' : 'Fortbildung'}`}
-                                    className="bg-slate-700 border-slate-600 text-white"
+                                    className="bg-slate-100 dark:bg-slate-700 border-slate-300 dark:border-slate-600 text-black dark:text-white"
                                     required
                                 />
                             </>
@@ -173,22 +172,22 @@ export default function HolidaySettings({ holidays = [], refreshData }) {
                 
                 <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
-                        <label className="text-sm text-slate-300">Startdatum</label>
+                        <label className="text-sm text-slate-600 dark:text-slate-300">Startdatum</label>
                         <Input 
                             type="date" 
                             value={formData.startDate}
                             onChange={(e) => setFormData(prev => ({...prev, startDate: e.target.value}))}
-                            className="bg-slate-700 border-slate-600 text-white"
+                            className="bg-slate-100 dark:bg-slate-700 border-slate-300 dark:border-slate-600 text-black dark:text-white"
                             required
                         />
                     </div>
                     <div className="space-y-2">
-                        <label className="text-sm text-slate-300">Enddatum (optional)</label>
+                        <label className="text-sm text-slate-600 dark:text-slate-300">Enddatum (optional)</label>
                         <Input 
                             type="date"
                             value={formData.endDate}
                             onChange={(e) => setFormData(prev => ({...prev, endDate: e.target.value}))}
-                            className="bg-slate-700 border-slate-600 text-white"
+                            className="bg-slate-100 dark:bg-slate-700 border-slate-300 dark:border-slate-600 text-black dark:text-white"
                         />
                     </div>
                 </div>
@@ -200,18 +199,18 @@ export default function HolidaySettings({ holidays = [], refreshData }) {
             </form>
 
             <div className="space-y-2">
-                <h4 className="text-md font-semibold text-white">Gespeicherte Einträge</h4>
+                <h4 className="text-md font-semibold text-black dark:text-white">Gespeicherte Einträge</h4>
                 {holidays.length === 0 ? (
-                    <p className="text-slate-400 text-sm">Noch keine Einträge vorhanden.</p>
+                    <p className="text-slate-600 dark:text-slate-400 text-sm">Noch keine Einträge vorhanden.</p>
                 ) : (
                     <ul className="space-y-2">
                         {holidays.sort((a,b) => new Date(a.start_date) - new Date(b.start_date)).map(h => (
-                            <li key={h.id} className="flex justify-between items-center p-3 bg-slate-800 rounded-lg">
+                            <li key={h.id} className="flex justify-between items-center p-3 bg-white dark:bg-slate-800 rounded-lg border border-slate-300 dark:border-slate-600">
                                 <div className="flex items-center gap-3">
                                     <span className="text-xl">{getHolidayEmoji(h.type, h.name)}</span>
                                     <div>
-                                        <p className="font-medium text-white">{h.name}</p>
-                                        <p className="text-sm text-slate-400">
+                                        <p className="font-medium text-black dark:text-white">{h.name}</p>
+                                        <p className="text-sm text-slate-600 dark:text-slate-400">
                                             {new Date(h.start_date).toLocaleDateString('de-DE')} - {new Date(h.end_date).toLocaleDateString('de-DE')}
                                         </p>
                                     </div>

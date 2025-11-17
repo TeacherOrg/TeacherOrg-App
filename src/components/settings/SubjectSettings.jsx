@@ -101,49 +101,49 @@ const SubjectSettings = ({ subjects, classes, activeClassId, setActiveClassId, r
     return (
         <div className="space-y-6">
             <div>
-                <Label className="text-lg font-semibold text-white">Klasse auswählen</Label>
+                <Label className="text-lg font-semibold text-black dark:text-white">Klasse auswählen</Label>
                 <select
                     value={activeClassId || ''}
                     onChange={(e) => setActiveClassId(e.target.value)}
-                    className="w-full mt-2 p-2 rounded-lg border border-slate-600 bg-slate-800 text-white"
+                    className="w-full mt-2 p-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-black dark:text-white"
                 >
                     {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </select>
             </div>
             
-            <div className="p-4 border border-slate-700 rounded-lg space-y-4 bg-slate-800">
-                <h3 className="font-semibold text-white">Neues Fach hinzufügen</h3>
+            <div className="p-4 border border-slate-300 dark:border-slate-700 rounded-lg space-y-4 bg-white dark:bg-slate-800">
+                <h3 className="font-semibold text-black dark:text-white">Neues Fach hinzufügen</h3>
                 <div className="space-y-4">
                     <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-2">
-                            <Label className="text-slate-300">Fachname</Label>
+                            <Label className="text-slate-600 dark:text-slate-300">Fachname</Label>
                             <Input
                                 value={newSubject.name}
                                 onChange={(e) => setNewSubject({ ...newSubject, name: e.target.value })}
                                 placeholder="z.B. Mathematik"
-                                className="bg-slate-700 border-slate-600 text-white"
+                                className="bg-slate-100 dark:bg-slate-700 border-slate-300 dark:border-slate-600 text-black dark:text-white"
                             />
                         </div>
                         <div className="space-y-2">
-                            <Label className="text-slate-300">Lektionen/Woche</Label>
+                            <Label className="text-slate-600 dark:text-slate-300">Lektionen/Woche</Label>
                             <Input
                                 type="number"
                                 min="1"
                                 value={newSubject.lessons_per_week}
                                 onChange={(e) => setNewSubject({ ...newSubject, lessons_per_week: Number(e.target.value) })}
-                                className="bg-slate-700 border-slate-600 text-white"
+                                className="bg-slate-100 dark:bg-slate-700 border-slate-300 dark:border-slate-600 text-black dark:text-white"
                             />
                         </div>
                     </div>
                     <div className="space-y-2">
-                        <Label className="text-slate-300">Farbe wählen</Label>
+                        <Label className="text-slate-600 dark:text-slate-300">Farbe wählen</Label>
                         <div className="flex flex-wrap gap-2 items-center">
                             {PRESET_COLORS.map(color => (
                                 <button
                                     key={color}
                                     type="button"
                                     className={`w-8 h-8 rounded-full border-2 transition-all hover:scale-110 ${
-                                        newSubject.color === color ? 'border-white scale-110 shadow-lg' : 'border-slate-500'
+                                        newSubject.color === color ? 'border-black dark:border-white scale-110 shadow-lg' : 'border-slate-300 dark:border-slate-500'
                                     }`}
                                     style={{ backgroundColor: color }}
                                     onClick={() => { setNewSubject({ ...newSubject, color }); setShowColorPicker(false); }}
@@ -151,39 +151,39 @@ const SubjectSettings = ({ subjects, classes, activeClassId, setActiveClassId, r
                             ))}
                             <button
                                 type="button"
-                                className="w-8 h-8 rounded-full border-2 border-slate-500 bg-gradient-to-br from-red-500 via-green-500 to-blue-500 hover:scale-110 transition-all flex items-center justify-center"
+                                className="w-8 h-8 rounded-full border-2 border-slate-300 dark:border-slate-500 bg-gradient-to-br from-red-500 via-green-500 to-blue-500 hover:scale-110 transition-all flex items-center justify-center"
                                 onClick={() => setShowColorPicker(!showColorPicker)}
                             >
-                                <span className="text-white text-xs font-bold">...</span>
+                                <span className="text-black dark:text-white text-xs font-bold">...</span>
                             </button>
                             {showColorPicker && (
                                 <Input
                                     type="color"
                                     value={newSubject.color}
                                     onChange={(e) => setNewSubject({ ...newSubject, color: e.target.value })}
-                                    className="w-14 h-10 p-1 bg-slate-700 border-slate-600"
+                                    className="w-14 h-10 p-1 bg-slate-100 dark:bg-slate-700 border-slate-300 dark:border-slate-600"
                                 />
                             )}
                         </div>
                     </div>
                     <div className="space-y-2">
-                        <Label className="text-slate-300">Emoji auswählen (optional)</Label>
+                        <Label className="text-slate-600 dark:text-slate-300">Emoji auswählen (optional)</Label>
                         <div className="relative">
                             <button
                                 type="button"
-                                className="w-10 h-10 rounded-lg border-2 border-slate-500 bg-slate-700 hover:bg-slate-600 transition-all flex items-center justify-center text-2xl"
+                                className="w-10 h-10 rounded-lg border-2 border-slate-300 dark:border-slate-500 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 transition-all flex items-center justify-center text-2xl"
                                 onClick={() => setShowEmojiPicker(!showEmojiPicker)}
                             >
                                 {newSubject.emoji || '📚'}
                             </button>
                             {showEmojiPicker && (
-                                <div className="absolute z-10 mt-2 p-4 bg-slate-800 border border-slate-600 rounded-lg shadow-lg max-h-64 overflow-y-auto grid grid-cols-5 gap-2">
+                                <div className="absolute z-10 mt-2 p-4 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg shadow-lg max-h-64 overflow-y-auto grid grid-cols-5 gap-2">
                                     {PRESET_EMOJIS.map(emoji => (
                                         <button
                                             key={emoji}
                                             type="button"
                                             className={`w-8 h-8 rounded-full border-2 transition-all hover:scale-110 flex items-center justify-center text-2xl ${
-                                                newSubject.emoji === emoji ? 'border-white scale-110 shadow-lg' : 'border-slate-500'
+                                                newSubject.emoji === emoji ? 'border-black dark:border-white scale-110 shadow-lg' : 'border-slate-300 dark:border-slate-500'
                                             }`}
                                             onClick={() => {
                                                 setNewSubject({ ...newSubject, emoji });
@@ -196,7 +196,7 @@ const SubjectSettings = ({ subjects, classes, activeClassId, setActiveClassId, r
                                     <button
                                         type="button"
                                         className={`w-8 h-8 rounded-full border-2 transition-all hover:scale-110 flex items-center justify-center text-sm ${
-                                            newSubject.emoji === '' ? 'border-white scale-110 shadow-lg' : 'border-slate-500'
+                                            newSubject.emoji === '' ? 'border-black dark:border-white scale-110 shadow-lg' : 'border-slate-300 dark:border-slate-500'
                                         }`}
                                         onClick={() => {
                                             setNewSubject({ ...newSubject, emoji: '' });
@@ -217,9 +217,9 @@ const SubjectSettings = ({ subjects, classes, activeClassId, setActiveClassId, r
             </div>
 
             <div className="space-y-2">
-                <h3 className="font-semibold text-white">Bestehende Fächer für "{activeClassName}"</h3>
-                <div className="bg-slate-800 rounded-lg border border-slate-700">
-                    <div className="divide-y divide-slate-700">
+                <h3 className="font-semibold text-black dark:text-white">Bestehende Fächer für "{activeClassName}"</h3>
+                <div className="bg-white dark:bg-slate-800 rounded-lg border border-slate-300 dark:border-slate-700">
+                    <div className="divide-y divide-slate-300 dark:divide-slate-700">
                         {(subjectsForClass || []).map(subject => (
                             <div key={subject.id} className="p-3">
                                 {editingSubjectId === subject.id ? (
@@ -228,25 +228,25 @@ const SubjectSettings = ({ subjects, classes, activeClassId, setActiveClassId, r
                                             <Input
                                                 value={subject.name}
                                                 onChange={(e) => handleUpdateSubject(subject.id, 'name', e.target.value)}
-                                                className="bg-slate-700 border-slate-600 text-white"
+                                                className="bg-slate-100 dark:bg-slate-700 border-slate-300 dark:border-slate-600 text-black dark:text-white"
                                             />
                                             <Input
                                                 type="number"
                                                 min="1"
                                                 value={subject.lessons_per_week}
                                                 onChange={(e) => handleUpdateSubject(subject.id, 'lessons_per_week', Number(e.target.value))}
-                                                className="bg-slate-700 border-slate-600 text-white"
+                                                className="bg-slate-100 dark:bg-slate-700 border-slate-300 dark:border-slate-600 text-black dark:text-white"
                                             />
                                         </div>
                                         <div className="space-y-2">
-                                            <Label className="text-slate-300">Farbe wählen</Label>
+                                            <Label className="text-slate-600 dark:text-slate-300">Farbe wählen</Label>
                                             <div className="flex flex-wrap gap-2 items-center">
                                                 {PRESET_COLORS.map(color => (
                                                     <button
                                                         key={color}
                                                         type="button"
                                                         className={`w-7 h-7 rounded-full border-2 transition-all hover:scale-110 ${
-                                                            subject.color === color ? 'border-white scale-110' : 'border-transparent'
+                                                            subject.color === color ? 'border-black dark:border-white scale-110' : 'border-slate-300 dark:border-slate-500'
                                                         }`}
                                                         style={{ backgroundColor: color }}
                                                         onClick={() => { handleUpdateSubject(subject.id, 'color', color); setEditingShowColorPicker(false); }}
@@ -254,39 +254,39 @@ const SubjectSettings = ({ subjects, classes, activeClassId, setActiveClassId, r
                                                 ))}
                                                 <button
                                                     type="button"
-                                                    className="w-7 h-7 rounded-full border-2 border-slate-500 bg-gradient-to-br from-red-500 via-green-500 to-blue-500 hover:scale-110 transition-all flex items-center justify-center"
+                                                    className="w-7 h-7 rounded-full border-2 border-slate-300 dark:border-slate-500 bg-gradient-to-br from-red-500 via-green-500 to-blue-500 hover:scale-110 transition-all flex items-center justify-center"
                                                     onClick={() => setEditingShowColorPicker(!editingShowColorPicker)}
                                                 >
-                                                    <span className="text-white text-xs font-bold">...</span>
+                                                    <span className="text-black dark:text-white text-xs font-bold">...</span>
                                                 </button>
                                                 {editingShowColorPicker && (
                                                     <Input
                                                         type="color"
                                                         value={subject.color}
                                                         onChange={(e) => handleUpdateSubject(subject.id, 'color', e.target.value)}
-                                                        className="w-14 h-10 p-1 bg-slate-700 border-slate-600"
+                                                        className="w-14 h-10 p-1 bg-slate-100 dark:bg-slate-700 border-slate-300 dark:border-slate-600"
                                                     />
                                                 )}
                                             </div>
                                         </div>
                                         <div className="space-y-2">
-                                            <Label className="text-slate-300">Emoji auswählen (optional)</Label>
+                                            <Label className="text-slate-600 dark:text-slate-300">Emoji auswählen (optional)</Label>
                                             <div className="relative">
                                                 <button
                                                     type="button"
-                                                    className="w-10 h-10 rounded-lg border-2 border-slate-500 bg-slate-700 hover:bg-slate-600 transition-all flex items-center justify-center text-2xl"
+                                                    className="w-10 h-10 rounded-lg border-2 border-slate-300 dark:border-slate-500 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 transition-all flex items-center justify-center text-2xl"
                                                     onClick={() => setEditingShowEmojiPicker(!editingShowEmojiPicker)}
                                                 >
                                                     {subject.emoji || '📚'}
                                                 </button>
                                                 {editingShowEmojiPicker && (
-                                                    <div className="absolute z-10 mt-2 p-4 bg-slate-800 border border-slate-600 rounded-lg shadow-lg max-h-64 overflow-y-auto grid grid-cols-5 gap-2">
+                                                    <div className="absolute z-10 mt-2 p-4 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg shadow-lg max-h-64 overflow-y-auto grid grid-cols-5 gap-2">
                                                         {PRESET_EMOJIS.map(emoji => (
                                                             <button
                                                                 key={emoji}
                                                                 type="button"
                                                                 className={`w-8 h-8 rounded-full border-2 transition-all hover:scale-110 flex items-center justify-center text-2xl ${
-                                                                    subject.emoji === emoji ? 'border-white scale-110 shadow-lg' : 'border-slate-500'
+                                                                    subject.emoji === emoji ? 'border-black dark:border-white scale-110 shadow-lg' : 'border-slate-300 dark:border-slate-500'
                                                                 }`}
                                                                 onClick={() => {
                                                                     handleUpdateSubject(subject.id, 'emoji', emoji);
@@ -299,7 +299,7 @@ const SubjectSettings = ({ subjects, classes, activeClassId, setActiveClassId, r
                                                         <button
                                                             type="button"
                                                             className={`w-8 h-8 rounded-full border-2 transition-all hover:scale-110 flex items-center justify-center text-sm ${
-                                                                subject.emoji === '' ? 'border-white scale-110 shadow-lg' : 'border-slate-500'
+                                                                subject.emoji === '' ? 'border-black dark:border-white scale-110 shadow-lg' : 'border-slate-300 dark:border-slate-500'
                                                             }`}
                                                             onClick={() => {
                                                                 handleUpdateSubject(subject.id, 'emoji', '');
@@ -322,15 +322,15 @@ const SubjectSettings = ({ subjects, classes, activeClassId, setActiveClassId, r
                                     <div className="flex items-center justify-between">
                                         <div className="flex items-center gap-3">
                                             <div className="w-4 h-4 rounded-full" style={{ backgroundColor: subject.color }}></div>
-                                            <span className="font-medium">{subject.name}</span>
-                                            <span className="text-sm text-slate-400">({subject.lessons_per_week} L/W)</span>
+                                            <span className="font-medium text-black dark:text-white">{subject.name}</span>
+                                            <span className="text-sm text-slate-600 dark:text-slate-400">({subject.lessons_per_week} L/W)</span>
                                             <span className="text-xl mr-2">{subject.emoji || '📚'}</span>
                                         </div>
                                         <div className="flex items-center gap-2">
-                                            <Button variant="ghost" size="icon" className="w-8 h-8 hover:bg-slate-700" onClick={() => { setEditingSubjectId(subject.id); setEditingShowColorPicker(false); setEditingShowEmojiPicker(false); }}>
+                                            <Button variant="ghost" size="icon" className="w-8 h-8 hover:bg-slate-200 dark:hover:bg-slate-700" onClick={() => { setEditingSubjectId(subject.id); setEditingShowColorPicker(false); setEditingShowEmojiPicker(false); }}>
                                                 <Edit className="w-4 h-4" />
                                             </Button>
-                                            <Button variant="ghost" size="icon" className="w-8 h-8 hover:bg-red-900/30 text-red-500" onClick={() => handleDeleteSubject(subject.id)}>
+                                            <Button variant="ghost" size="icon" className="w-8 h-8 hover:bg-red-100 dark:hover:bg-red-900/30 text-red-500" onClick={() => handleDeleteSubject(subject.id)}>
                                                 <Trash2 className="w-4 h-4" />
                                             </Button>
                                         </div>

@@ -178,6 +178,32 @@ export default function LessonDetailPanel({
     return progresses;
   }, [displayLesson, currentTime, selectedDate]);
 
+  // Add debugging logs for overflow check (updated for new grid layout) - Moved to the top, after other hooks
+  useEffect(() => {
+    if (!displayLesson) return;
+
+    const check = () => {
+      // Robuster: Nimm das äußere Panel und das innere Grid
+      const panel = document.querySelector('[class*="LessonDetailPanel"] > div > div.flex.h-full');
+      const content = document.querySelector('.flex-1.overflow-y-auto.bg-white\\/95');
+      const grid = document.querySelector('.grid-cols-\\[80px_80px_140px_1fr_200px\\]');
+
+      console.log('%cLessonDetail Overflow Check', 'font-weight:bold; color:#ec4899');
+      console.log('Viewport Breite:', window.innerWidth);
+      if (content && grid) {
+        console.log('Content wrapper Breite:', content.clientWidth, 'scrollWidth:', content.scrollWidth);
+        console.log('Grid Breite:', grid.offsetWidth, 'scrollWidth:', grid.scrollWidth);
+        console.log('Overflow?', grid.offsetWidth > content.clientWidth ? 'JA (Grid zu breit)' : 'Nein – alles gut 🎉');
+      } else {
+        console.log('Elemente nicht gefunden – wahrscheinlich noch nicht gerendert');
+      }
+    };
+
+    check();
+    window.addEventListener('resize', check);
+    return () => window.removeEventListener('resize', check);
+  }, [displayLesson]);
+
   // Pause View
   if (isPause) {
     return (
@@ -211,32 +237,6 @@ export default function LessonDetailPanel({
       </div>
     );
   }
-
-  // Add debugging logs for overflow check (updated for new grid layout)
-  useEffect(() => {
-    if (!displayLesson) return;
-
-    const check = () => {
-      // Robuster: Nimm das äußere Panel und das innere Grid
-      const panel = document.querySelector('[class*="LessonDetailPanel"] > div > div.flex.h-full');
-      const content = document.querySelector('.flex-1.overflow-y-auto.bg-white\\/95');
-      const grid = document.querySelector('.grid-cols-\\[80px_80px_140px_1fr_200px\\]');
-
-      console.log('%cLessonDetail Overflow Check', 'font-weight:bold; color:#ec4899');
-      console.log('Viewport Breite:', window.innerWidth);
-      if (content && grid) {
-        console.log('Content wrapper Breite:', content.clientWidth, 'scrollWidth:', content.scrollWidth);
-        console.log('Grid Breite:', grid.offsetWidth, 'scrollWidth:', grid.scrollWidth);
-        console.log('Overflow?', grid.offsetWidth > content.clientWidth ? 'JA (Grid zu breit)' : 'Nein – alles gut 🎉');
-      } else {
-        console.log('Elemente nicht gefunden – wahrscheinlich noch nicht gerendert');
-      }
-    };
-
-    check();
-    window.addEventListener('resize', check);
-    return () => window.removeEventListener('resize', check);
-  }, [displayLesson]);
 
   // Lesson Detail View
   if (displayLesson) {

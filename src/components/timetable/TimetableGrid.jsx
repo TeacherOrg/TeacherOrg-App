@@ -218,6 +218,24 @@ const TimetableGrid = React.forwardRef(
       height: 'var(--cell-height, 80px)'
     }), []);
 
+    // New: Check if the current week has any holidays
+    const hasHolidayInWeek = useMemo(() => {
+      if (!weekInfo || !holidays) return null;
+      const monday = new Date(weekInfo.start);
+      const friday = new Date(monday);
+      friday.setDate(monday.getDate() + 4); // Assuming 5-day week
+      for (const holiday of holidays) {
+        const startDate = new Date(holiday.start_date);
+        const endDate = new Date(holiday.end_date);
+        if (monday <= endDate && friday >= startDate) {
+          return holiday;
+        }
+      }
+      return null;
+    }, [weekInfo, holidays]);
+
+    const holidayDisplay = hasHolidayInWeek ? getHolidayDisplay(hasHolidayInWeek) : null;
+
     const renderTimeSlotRow = (slot, slotIndex) => {
       const rowNum = slotIndex + 2;
       const isLastRow = slotIndex === timeSlots.length - 1;
@@ -262,25 +280,44 @@ const TimetableGrid = React.forwardRef(
     };
 
     return (
-      <div ref={ref} className="timetable-grid-container grid gap-0 bg-white dark:bg-slate-800 rounded-2xl" style={gridStyle} key={lessons.length}>        {/* Header Row */}
-        <div 
-          className="p-3 text-center border-r border-b border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 sticky top-0 z-20"
-          style={{ ...timeSlotCellStyle, gridRow: 1, gridColumn: 1 }}
-        >
-          <div className="text-text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider flex items-center justify-center h-full">Zeit</div>
-        </div>
-        
-        {DAYS.map((day, dayIndex) => (
-          <div 
-            key={day.key} 
-            className={`bg-white dark:bg-slate-800 sticky top-0 z-10 border-b border-r ${dayIndex < DAYS.length - 1 ? 'border-r-slate-300 dark:border-r-slate-700' : 'border-r-transparent'} border-slate-300 dark:border-slate-700 text-center min-w-0 overflow-hidden text-black dark:text-white font-semibold`}
-            style={{ ...headerCellStyle, gridRow: 1, gridColumn: dayIndex + 2 }}
+      <div className="relative bg-transparent rounded-2xl">
+        {/* New: Full-week holiday overlay */}
+        {hasHolidayInWeek && (
+          <div
+            className="absolute flex flex-col items-center justify-center text-center text-white pointer-events-none z-10"
+            style={{
+              background: holidayDisplay.pattern ? `${holidayDisplay.gradient}, ${holidayDisplay.pattern}` : holidayDisplay.gradient,
+              top: 'var(--cell-height)',
+              left: '120px',
+              width: 'calc(100% - 120px)',
+              height: 'calc(100% - var(--cell-height))',
+            }}
           >
-            <DayHeader day={day.key} currentWeek={currentWeek} />
+            <div className="text-9xl">{holidayDisplay.emoji}</div>
+            <span className="text-sm font-bold leading-tight mt-1">{hasHolidayInWeek.name}</span>
           </div>
-        ))}
-        
-        {(timeSlots || []).map((slot, slotIndex) => renderTimeSlotRow(slot, slotIndex))}
+        )}
+        <div ref={ref} className="timetable-grid-container grid gap-0 bg-transparent rounded-2xl" style={gridStyle} key={lessons.length}>
+          {/* Header Row */}
+          <div 
+            className="p-3 text-center border-r border-b border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 sticky top-0 z-20"
+            style={{ ...timeSlotCellStyle, gridRow: 1, gridColumn: 1 }}
+          >
+            <div className="text-text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider flex items-center justify-center h-full">Zeit</div>
+          </div>
+          
+          {DAYS.map((day, dayIndex) => (
+            <div 
+              key={day.key} 
+              className={`bg-white dark:bg-slate-800 sticky top-0 z-10 border-b border-r ${dayIndex < DAYS.length - 1 ? 'border-r-slate-300 dark:border-r-slate-700' : 'border-r-transparent'} border-slate-300 dark:border-slate-700 text-center min-w-0 overflow-hidden text-black dark:text-white font-semibold`}
+              style={{ ...headerCellStyle, gridRow: 1, gridColumn: dayIndex + 2 }}
+            >
+              <DayHeader day={day.key} currentWeek={currentWeek} />
+            </div>
+          ))}
+          
+          {(timeSlots || []).map((slot, slotIndex) => renderTimeSlotRow(slot, slotIndex))}
+        </div>
       </div>
     );
   }

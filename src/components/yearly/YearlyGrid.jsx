@@ -222,15 +222,12 @@ const YearlyGrid = React.memo(({
 
   const getHolidayForWeek = useCallback((weekNumber) => {
     if (!holidays || holidays.length === 0) return null;
-    const janFirst = new Date(currentYear, 0, 1);
-    const firstDayOfYear = janFirst.getDay();
-    const firstMonday = new Date(janFirst);
-    if (firstDayOfYear !== 1) {
-      const daysUntilNextMonday = (8 - firstDayOfYear) % 7;
-      firstMonday.setDate(janFirst.getDate() + daysUntilNextMonday);
-    }
-    const weekStart = new Date(firstMonday);
-    weekStart.setDate(firstMonday.getDate() + (weekNumber - 1) * 7);
+    // Verwende die gleiche Logik wie getCurrentWeek für mondayOfWeek1
+    const jan4 = new Date(currentYear, 0, 4);
+    const daysToMonday = (jan4.getDay() + 6) % 7;
+    const mondayOfWeek1 = new Date(jan4.getTime() - daysToMonday * 86400000);
+    const weekStart = new Date(mondayOfWeek1);
+    weekStart.setDate(mondayOfWeek1.getDate() + (weekNumber - 1) * 7);
     weekStart.setHours(0, 0, 0, 0);
     const weekEnd = new Date(weekStart);
     weekEnd.setDate(weekStart.getDate() + 6);
@@ -537,11 +534,6 @@ const YearlyGrid = React.memo(({
           <div className={`text-xs text-gray-500 dark:text-slate-400 ${densityMode === 'compact' ? 'hidden' : ''}`}>
             {weekDates.mondayStr} - {weekDates.fridayStr}
           </div>
-          {holiday && (
-            <div className={`text-xs px-1 py-0.5 rounded mt-1 ${holidayDisplay.color} ${densityMode === 'compact' ? 'text-[10px] px-1 py-0.5' : ''}`}>
-              {holidayDisplay.emoji} {holiday.name.length > 15 ? `${holiday.name.substring(0, 12)}...` : holiday.name}
-            </div>
-          )}
         </div>
         {subjectCells}
       </div>
@@ -605,7 +597,7 @@ const YearlyGrid = React.memo(({
         </div>
 
         {/* Wochen */}
-        <div className="mx-auto" style={{ minWidth: `${totalWidth}px` }}>
+        <div style={{ minWidth: `${totalWidth}px` }}>
           {weeks.map(week => (
             <React.Fragment key={week}>
               {renderWeekRow(week)}

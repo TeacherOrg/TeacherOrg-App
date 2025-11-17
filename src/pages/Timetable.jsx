@@ -426,11 +426,25 @@ function InnerTimetablePage() {
   };
 
   const handlePrevWeek = () => {
-    setCurrentWeek(prev => prev > 1 ? prev - 1 : ACADEMIC_WEEKS);
+    setCurrentWeek(prev => {
+      if (prev > 1) {
+        return prev - 1;
+      } else {
+        setCurrentYear(year => year - 1);
+        return ACADEMIC_WEEKS;
+      }
+    });
   };
 
   const handleNextWeek = () => {
-    setCurrentWeek(prev => prev < ACADEMIC_WEEKS ? prev + 1 : 1);
+    setCurrentWeek(prev => {
+      if (prev < ACADEMIC_WEEKS) {
+        return prev + 1;
+      } else {
+        setCurrentYear(year => year + 1);
+        return 1;
+      }
+    });
   };
 
   const handlePrevDay = () => {

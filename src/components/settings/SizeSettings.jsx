@@ -47,14 +47,14 @@ export default function SizeSettings({ settings, setSettings }) {
     }, [settings.cellWidth, settings.cellHeight, maxCellHeight, maxCellWidth]);
 
     return (
-        <div className="space-y-6 bg-slate-900 text-white">
+        <div className="space-y-6 bg-white dark:bg-slate-900 text-black dark:text-white">
             <div>
-                <h3 className="text-lg font-semibold text-white">Größeneinstellungen</h3>
-                <p className="text-sm text-slate-400">Passen Sie die Größe der Stundenplan-Zellen an.</p>
+                <h3 className="text-lg font-semibold text-black dark:text-white">Größeneinstellungen</h3>
+                <p className="text-sm text-slate-600 dark:text-slate-400">Passen Sie die Größe der Stundenplan-Zellen an.</p>
             </div>
             
             <div className="space-y-3">
-                <Label className="text-white flex items-center gap-2">
+                <Label className="text-black dark:text-white flex items-center gap-2">
                     <input
                         type="checkbox"
                         checked={settings.autoFit ?? true}
@@ -63,16 +63,16 @@ export default function SizeSettings({ settings, setSettings }) {
                     />
                     Automatische Anpassung (Auto-Fit)
                 </Label>
-                <p className="text-xs text-slate-400">
+                <p className="text-xs text-slate-600 dark:text-slate-400">
                     Passt Zellengrößen dynamisch an den Bildschirm an, damit der Plan immer vollständig sichtbar ist. Deaktiviert: Manuelle Werte werden verwendet (kann zu Scrollen/Abgeschnittenem führen).
                 </p>
             </div>
             
             <div className="space-y-6">
                 <div className="space-y-3">
-                    <Label htmlFor="cellWidth" className="text-white">
+                    <Label htmlFor="cellWidth" className="text-black dark:text-white">
                         Zellenbreite: {Math.min(settings.cellWidth || 120, maxCellWidth)}px 
-                        <span className="text-xs text-slate-400 ml-2">(Max: {maxCellWidth}px für Ihren Bildschirm)</span>
+                        <span className="text-xs text-slate-600 dark:text-slate-400 ml-2">(Max: {maxCellWidth}px für Ihren Bildschirm)</span>
                     </Label>
                     <input
                         id="cellWidth"
@@ -82,21 +82,21 @@ export default function SizeSettings({ settings, setSettings }) {
                         step="10"
                         value={Math.min(settings.cellWidth || 120, maxCellWidth)}
                         onChange={(e) => handleSettingChange('cellWidth', parseInt(e.target.value))}
-                        className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer"
+                        className="w-full h-2 bg-slate-300 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer"
                         style={{
-                            background: `linear-gradient(to right, #3b82f6 0%, #3b82f6 ${((Math.min(settings.cellWidth || 120, maxCellWidth)) - 100) / (maxCellWidth - 100) * 100}%, #475569 ${((Math.min(settings.cellWidth || 120, maxCellWidth)) - 100) / (maxCellWidth - 100) * 100}%, #475569 100%)`
+                            background: `linear-gradient(to right, #3b82f6 0%, #3b82f6 ${((Math.min(settings.cellWidth || 120, maxCellWidth)) - 100) / (maxCellWidth - 100) * 100}%, #cbd5e1 ${((Math.min(settings.cellWidth || 120, maxCellWidth)) - 100) / (maxCellWidth - 100) * 100}%, #cbd5e1 100%)`
                         }}
                     />
-                    <div className="flex justify-between text-xs text-slate-400">
+                    <div className="flex justify-between text-xs text-slate-600 dark:text-slate-400">
                         <span>100px</span>
                         <span>{maxCellWidth}px</span>
                     </div>
                 </div>
                 
                 <div className="space-y-3">
-                    <Label htmlFor="cellHeight" className="text-white">
+                    <Label htmlFor="cellHeight" className="text-black dark:text-white">
                         Zellenhöhe: {Math.min(settings.cellHeight || 80, maxCellHeight)}px 
-                        <span className="text-xs text-slate-400 ml-2">(Max: {maxCellHeight}px für Ihren Bildschirm)</span>
+                        <span className="text-xs text-slate-600 dark:text-slate-400 ml-2">(Max: {maxCellHeight}px für Ihren Bildschirm)</span>
                     </Label>
                     <input
                         id="cellHeight"
@@ -106,22 +106,22 @@ export default function SizeSettings({ settings, setSettings }) {
                         step="5"
                         value={Math.min(settings.cellHeight || 80, maxCellHeight)}
                         onChange={(e) => handleSettingChange('cellHeight', parseInt(e.target.value))}
-                        className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer"
+                        className="w-full h-2 bg-slate-300 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer"
                         style={{
-                            background: `linear-gradient(to right, #10b981 0%, #10b981 ${((Math.min(settings.cellHeight || 80, maxCellHeight)) - 40) / (maxCellHeight - 40) * 100}%, #475569 ${((Math.min(settings.cellHeight || 80, maxCellHeight)) - 40) / (maxCellHeight - 40) * 100}%, #475569 100%)`
+                            background: `linear-gradient(to right, #10b981 0%, #10b981 ${((Math.min(settings.cellHeight || 80, maxCellHeight)) - 40) / (maxCellHeight - 40) * 100}%, #cbd5e1 ${((Math.min(settings.cellHeight || 80, maxCellHeight)) - 40) / (maxCellHeight - 40) * 100}%, #cbd5e1 100%)`
                         }}
                     />
-                    <div className="flex justify-between text-xs text-slate-400">
+                    <div className="flex justify-between text-xs text-slate-600 dark:text-slate-400">
                         <span>40px</span>
                         <span>{maxCellHeight}px</span>
                     </div>
                 </div>
             </div>
             
-            <div className="mt-6 p-4 bg-slate-800 rounded-lg">
-                <h4 className="font-semibold text-white mb-2">Vorschau</h4>
+            <div className="mt-6 p-4 bg-slate-50 dark:bg-slate-800 rounded-lg border border-slate-300 dark:border-slate-600">
+                <h4 className="font-semibold text-black dark:text-white mb-2">Vorschau</h4>
                 <div 
-                    className="border border-slate-600 rounded bg-blue-500 text-white flex items-center justify-center text-sm font-medium"
+                    className="border border-slate-300 dark:border-slate-600 rounded bg-blue-500 text-white flex items-center justify-center text-sm font-medium"
                     style={{ 
                         width: `${Math.min(settings.cellWidth || 120, maxCellWidth)}px`, 
                         height: `${Math.min(settings.cellHeight || 80, maxCellHeight)}px` 
