@@ -23,6 +23,7 @@ const PerformanceModal = ({ isOpen, onClose, onSave, students = [], subjects = [
   const [error, setError] = useState('');
   const [allFachbereiche, setAllFachbereiche] = useState([]);
   const [importMode, setImportMode] = useState('nameAndGrade');
+  const [weight, setWeight] = useState(1); // ← State mit Default = 1
 
   const availableFachbereiche = useMemo(() => {
     if (!selectedSubject) return [];
@@ -52,12 +53,14 @@ const PerformanceModal = ({ isOpen, onClose, onSave, students = [], subjects = [
       setError('');
       setImportMode('nameAndGrade');
       setNewFachbereichName('');
+      setWeight(1); // ← Reset weight on open
 
       if (editingPerformance) {
         setAssessmentName(editingPerformance.assessment_name || '');
         setDate(editingPerformance.date ? editingPerformance.date.slice(0, 10) : new Date().toISOString().slice(0, 10));
         setSelectedSubject(editingPerformance.subject || '');
         setSelectedFachbereiche(editingPerformance.fachbereiche || []);
+        setWeight(editingPerformance?.weight ?? 1); // ← Load weight if editing, default to 1
         const gradesForEdit = (students || []).map(s => ({
           student_id: s.id,
           name: s.name,
@@ -183,6 +186,7 @@ const PerformanceModal = ({ isOpen, onClose, onSave, students = [], subjects = [
       return;
     }
 
+    const effectiveWeight = weight ?? 1;  // nur wenn null → 1, sonst exakter Wert
     const performances = gradesToSave.map(sg => {
       const grade = parseFloat(sg.grade);
       if (isNaN(grade) || grade < 0 || grade > 6) {
@@ -195,6 +199,7 @@ const PerformanceModal = ({ isOpen, onClose, onSave, students = [], subjects = [
         subject: selectedSubject,
         assessment_name: assessmentName,
         grade,
+        weight: effectiveWeight, // ← Include weight
         fachbereiche: selectedFachbereiche,
         user_id: user.id
       };
@@ -290,32 +295,57 @@ const PerformanceModal = ({ isOpen, onClose, onSave, students = [], subjects = [
               ))}
             </div>
           </div>
-          {mode === 'manual' && (
-            <div>
-              <Label>Noten</Label>
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 mt-1 max-h-[30vh] overflow-y-auto p-2 bg-slate-800/50 rounded-lg">
-                {studentGrades.map((sg, index) => (
-                  <div key={sg.student_id} className="flex items-center justify-between p-2 bg-slate-800 rounded">
-                    <Label htmlFor={`grade-${sg.student_id}`} className="flex-1 truncate text-sm" title={sg.name}>{sg.name}</Label>
-                    <Input
-                      id={`grade-${sg.student_id}`}
-                      type="number"
-                      step="0.1"
-                      min="0"
-                      max="6"
-                      value={sg.grade}
-                      onChange={e => {
-                        const newGrades = [...studentGrades];
-                        newGrades[index].grade = e.target.value;
-                        setStudentGrades(newGrades);
-                      }}
-                      className="w-20 bg-slate-700 border-slate-600"
-                    />
-                  </div>
-                ))}
-              </div>
+          <div className="space-y-1 mt-6">
+            <Label>Gewichtung</Label>
+            <Input
+              type="number"
+              step="0.1"
+              min="0"
+              max="10"
+              placeholder="1"
+              value={weight === null ? '' : weight}
+              onChange={(e) => {
+                const val = e.target.value;
+                if (val === '') {
+                  setWeight(null);
+                } else {
+                  const num = parseFloat(val);
+                  if (!isNaN(num) && num >= 0 && num <= 10) {
+                    setWeight(num);
+                  }
+                  // sonst ignorieren
+                }
+              }}
+              className="bg-slate-800 border-slate-600"
+            />
+            <p className="text-xs text-muted-foreground">
+              Standard = 1 | Klausur = 3 | Stegreif = 0.5 | mündlich = 1
+            </p>
+          </div>
+          <div>
+            <Label>Noten</Label>
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 mt-1 max-h-[30vh] overflow-y-auto p-2 bg-slate-800/50 rounded-lg">
+              {studentGrades.map((sg, index) => (
+                <div key={sg.student_id} className="flex items-center justify-between p-2 bg-slate-800 rounded">
+                  <Label htmlFor={`grade-${sg.student_id}`} className="flex-1 truncate text-sm" title={sg.name}>{sg.name}</Label>
+                  <Input
+                    id={`grade-${sg.student_id}`}
+                    type="number"
+                    step="0.1"
+                    min="0"
+                    max="6"
+                    value={sg.grade}
+                    onChange={e => {
+                      const newGrades = [...studentGrades];
+                      newGrades[index].grade = e.target.value;
+                      setStudentGrades(newGrades);
+                    }}
+                    className="w-20 bg-slate-700 border-slate-600"
+                  />
+                </div>
+              ))}
             </div>
-          )}
+          </div>
           {mode === 'import' && (
             <div>
               <div className="flex gap-4 my-2">

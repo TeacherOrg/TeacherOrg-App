@@ -5,7 +5,7 @@ import KompetenzenCharts from './KompetenzenCharts';
 import { Button } from "@/components/ui/button";
 import { Activity, Star } from 'lucide-react';
 
-const DiagramTab = ({ students, performances, ueberfachlich, subjects, allCompetencies, activeClassId, onDataChange }) => {
+const DiagramTab = ({ students, performances, ueberfachlich, subjects, allCompetencies, activeClassId, onDataChange, selectedStudentId }) => {
   const [diagramView, setDiagramView] = useState('leistung');
   const [selectedStudents, setSelectedStudents] = useState([]);
   const [selectedSubject, setSelectedSubject] = useState('all');
@@ -13,9 +13,17 @@ const DiagramTab = ({ students, performances, ueberfachlich, subjects, allCompet
   const [showClassAverage, setShowClassAverage] = useState(true);
 
   const competencyOptions = useMemo(() => {
-    if (!Array.isArray(allCompetencies)) return [];
+    if (!Array.isArray(allCompetencies) || allCompetencies.length === 0) return [];
     return allCompetencies.map(c => c.name).filter(Boolean);
   }, [allCompetencies]);
+
+  useEffect(() => {
+    if (selectedStudentId) {
+      setSelectedStudents([selectedStudentId]);
+    } else {
+      setSelectedStudents([]);
+    }
+  }, [selectedStudentId]);
 
   useEffect(() => {
     if (diagramView === 'kompetenzen') {

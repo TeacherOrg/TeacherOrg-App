@@ -15,6 +15,7 @@ import SubjectSettings from './SubjectSettings';
 import ScheduleSettings from './ScheduleSettings';
 import HolidaySettings from './HolidaySettings';
 import SizeSettings from './SizeSettings';
+import HelpSettings from './HelpSettings';
 
 const ProfileSettings = ({
   pendingEmail, setPendingEmail,
@@ -258,11 +259,12 @@ const CATEGORIES = [
   { name: 'Stundenplan', icon: '📅', component: ScheduleSettings },
   { name: 'Ferien', icon: '🏖️', component: HolidaySettings },
   { name: 'Größe', icon: '📏', component: SizeSettings },
+  { name: 'Hilfe', icon: '❓', component: HelpSettings },
   { name: 'Profil', icon: '👤', component: ProfileSettings },
 ];
 
 const SettingsModal = ({ isOpen, onClose }) => {
-  const [activeCategory, setActiveCategory] = useState('Klassen');
+  const [activeCategory, setActiveCategory] = useState('Hilfe');
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState('');
 
@@ -406,6 +408,7 @@ const SettingsModal = ({ isOpen, onClose }) => {
       case 'Stundenplan': return { settings, setSettings, classes, subjects };
       case 'Ferien': return { holidays, refreshData: loadAllData };
       case 'Größe': return { settings, setSettings };
+      case 'Hilfe': return {};
       case 'Profil': return { 
         pendingEmail, setPendingEmail,
         pendingUserSettings, setPendingUserSettings 

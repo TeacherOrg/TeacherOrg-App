@@ -161,14 +161,23 @@ const TimetableGrid = React.forwardRef(
   ({ lessons, onCreateLesson, onEditLesson, timeSlots, currentWeek, holidays, weekInfo, onShowHover, onHideHover, subjects }, ref) => {
     // Remove useCallback - normal function for latest state
     const getLessonForSlot = (day, period) => {
-      return lessons.find(lesson => lesson.day_of_week === day && lesson.period_slot === period);
+      return lessons.find(lesson => 
+        lesson.day_of_week === day && 
+        lesson.period_slot === period &&
+        !lesson.double_master_id  // WICHTIG: Slave-Lessons ausblenden!
+      );
     };
 
     // Remove useCallback
     const isSlotOccupiedByDoubleLesson = (day, period) => {
       if (period === 1) return false;
-      const previousPeriodLesson = getLessonForSlot(day, period - 1);
-      return previousPeriodLesson?.is_double_lesson && previousPeriodLesson.period_slot === period - 1;
+      const previousLesson = lessons.find(l => 
+        l.day_of_week === day && 
+        l.period_slot === period - 1 &&
+        l.is_double_lesson && 
+        !l.double_master_id  // Nur echte Master-Lessons können blockieren
+      );
+      return !!previousLesson;
     };
 
     const getDateForDay = useMemo(() => (dayKey) => {

@@ -7,8 +7,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Badge } from "@/components/ui/badge"; // NEU: Für Badges in der Modal
 import { ResponsiveContainer, LineChart, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Line, BarChart, Bar, RadarChart, PolarGrid, PolarAngleAxis, Radar, ReferenceArea, PolarRadiusAxis, Text } from 'recharts';
 import { BarChart3, ArrowLeft, AlertCircle, ChevronRight, TrendingUp, TrendingDown } from 'lucide-react'; // NEU: TrendingUp/Down hinzugefügt
+import { calculateWeightedGrade } from '@/components/grades/utils/calculateWeightedGrade'; // ← Import hinzugefügt
 
-const CLASS_AVG_COLOR = '#10B981';
+const CLASS_AVG_COLOR = '#3b82f6'; // Changed to blue
 const ASSESSMENT_COLORS = ['#8884d8', '#82ca9d', '#ffc658', '#ff7300', '#a4de6c', '#d0ed57', '#ff9f40', '#ff6384', '#36a2eb', '#ffce56'];
 
 const getAssessmentColor = (index) => ASSESSMENT_COLORS[index % ASSESSMENT_COLORS.length];
@@ -144,7 +145,7 @@ const Leistungscharts = ({ performances, students, subjects, selectedStudents, s
       .map(p => p.grade)
       .filter(g => typeof g === 'number' && g > 0);
     const averageGrade = validGrades.length > 0
-      ? validGrades.reduce((sum, g) => sum + g, 0) / validGrades.length
+      ? calculateWeightedGrade(relevantPerformances) // ← Ersetzt
       : 0;
     const studentAverages = relevantStudents.map(student => {
       const studentGrades = relevantPerformances
@@ -152,7 +153,7 @@ const Leistungscharts = ({ performances, students, subjects, selectedStudents, s
         .map(p => p.grade)
         .filter(g => typeof g === 'number' && g > 0);
       const avg = studentGrades.length > 0
-        ? studentGrades.reduce((sum, g) => sum + g, 0) / studentGrades.length
+        ? calculateWeightedGrade(relevantPerformances.filter(p => p.student_id === student.id)) // ← Ersetzt
         : null;
       const fachbereicheMap = {};
       relevantPerformances
@@ -174,7 +175,7 @@ const Leistungscharts = ({ performances, students, subjects, selectedStudents, s
         });
       const allFachbereiche = Object.entries(fachbereicheMap).map(([name, data]) => ({
         name,
-        average: parseFloat((data.grades.reduce((sum, g) => sum + g, 0) / data.grades.length).toFixed(2)),
+        average: parseFloat((data.grades.reduce((sum, g) => sum + g, 0) / data.grades.length).toFixed(2)), // ← Hier bleibt ungewichtet, da fachbereiche spezifisch
         count: data.grades.length,
         subjects: Array.from(data.subjects).sort()
       })).sort((a, b) => b.average - a.average);
@@ -195,7 +196,7 @@ const Leistungscharts = ({ performances, students, subjects, selectedStudents, s
       criticalStudentsList,
       studentCount: relevantStudents.length
     };
-  }, [students, performances, subjects, selectedStudents, selectedSubject]);
+  }, [performances, students, subjects, selectedStudents, selectedSubject]);
 
   // NEU: Critical Colors basierend auf KPIs
   const criticalColors = getCriticalColor(kpis.criticalStudents);
@@ -245,6 +246,24 @@ const Leistungscharts = ({ performances, students, subjects, selectedStudents, s
       <ResponsiveContainer width="100%" height="100%">
         {isBarChart ? (
           <BarChart data={data} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
+          <defs>
+            <linearGradient id="classAvgGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stopColor="#60a5fa" />
+              <stop offset="100%" stopColor="#3b82f6" />
+            </linearGradient>
+            {selectedStudents.map((studentId, index) => {
+              const student = students.find(s => s && s.id === studentId);
+              if (!student || !student.name) return null;
+              const color = getStudentColor(index);
+              const lighterColor = color.replace('#', '').match(/.{2}/g).map(c => Math.min(255, parseInt(c, 16) + 40).toString(16).padStart(2, '0')).join('');
+              return (
+                <linearGradient key={`studentGradient-${student.id}`} id={`studentGradient-${student.id}`} x1="0%" y1="0%" x2="0%" y2="100%">
+                  <stop offset="0%" stopColor={`#${lighterColor}`} />
+                  <stop offset="100%" stopColor={color} />
+                </linearGradient>
+              );
+            })}
+          </defs>
             <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
             <XAxis
               dataKey="name"
@@ -267,7 +286,7 @@ const Leistungscharts = ({ performances, students, subjects, selectedStudents, s
             {showClassAverage && (
               <Bar
                 dataKey="Klassenschnitt"
-                fill={CLASS_AVG_COLOR}
+                fill="url(#classAvgGradient)"
                 opacity={0.8}
               />
             )}
@@ -278,7 +297,7 @@ const Leistungscharts = ({ performances, students, subjects, selectedStudents, s
                 <Bar
                   key={`bar-student-${student.id}`}
                   dataKey={student.name}
-                  fill={getStudentColor(index)}
+                  fill={`url(#studentGradient-${student.id})`}
                   opacity={0.8}
                 />
               );
@@ -286,6 +305,24 @@ const Leistungscharts = ({ performances, students, subjects, selectedStudents, s
           </BarChart>
         ) : isRadarChart ? (
           <RadarChart data={data} margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
+            <defs>
+              <linearGradient id="classAvgRadarGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+                <stop offset="0%" stopColor="#60a5fa" />
+                <stop offset="100%" stopColor="#3b82f6" />
+              </linearGradient>
+              {selectedStudents.map((studentId, index) => {
+                const student = students.find(s => s && s.id === studentId);
+                if (!student || !student.name) return null;
+                const color = getStudentColor(index);
+                const lighterColor = color.replace('#', '').match(/.{2}/g).map(c => Math.min(255, parseInt(c, 16) + 40).toString(16).padStart(2, '0')).join('');
+                return (
+                  <linearGradient key={`studentRadarGradient-${student.id}`} id={`studentRadarGradient-${student.id}`} x1="0%" y1="0%" x2="0%" y2="100%">
+                    <stop offset="0%" stopColor={`#${lighterColor}`} />
+                    <stop offset="100%" stopColor={color} />
+                  </linearGradient>
+                );
+              })}
+            </defs>
             <PolarGrid stroke="hsl(var(--muted-foreground))" strokeWidth={0.5} strokeDasharray="3 3" />
             <PolarAngleAxis
               dataKey="name"
@@ -297,7 +334,7 @@ const Leistungscharts = ({ performances, students, subjects, selectedStudents, s
                 name="Klassenschnitt"
                 dataKey="Klassenschnitt"
                 stroke={CLASS_AVG_COLOR}
-                fill={CLASS_AVG_COLOR}
+                fill="url(#classAvgRadarGradient)"
                 fillOpacity={0.2}
                 strokeWidth={2}
                 connectNulls={false}
@@ -312,7 +349,7 @@ const Leistungscharts = ({ performances, students, subjects, selectedStudents, s
                   name={student.name}
                   dataKey={student.name}
                   stroke={getStudentColor(index)}
-                  fill={getStudentColor(index)}
+                  fill={`url(#studentRadarGradient-${student.id})`}
                   fillOpacity={0.1}
                   strokeWidth={2}
                   connectNulls={false}
@@ -417,7 +454,7 @@ const Leistungscharts = ({ performances, students, subjects, selectedStudents, s
                 <p className="text-sm text-slate-600 dark:text-slate-400 mb-1">
                   {selectedSubject !== 'all' ? `${subjects.find(s => s.id === selectedSubject)?.name || selectedSubject}-Schnitt` : 'Klassenschnitt'} {/* NEU: Fächernamen holen */}
                 </p>
-                <p className="text-4xl font-bold text-green-600 dark:text-green-400">
+                <p className="text-4xl font-bold text-blue-600 dark:text-blue-400">
                   {kpis.averageGrade > 0 ? kpis.averageGrade.toFixed(2) : '—'}
                 </p>
               </div>
@@ -472,10 +509,10 @@ const Leistungscharts = ({ performances, students, subjects, selectedStudents, s
                     
                     {/* Klassenschnitt */}
                     <div className="text-center">
-                      <p className="text-xs text-green-600 dark:text-green-400 font-medium mb-1">
+                      <p className="text-xs text-blue-600 dark:text-blue-400 font-medium mb-1">
                         Klassenschnitt
                       </p>
-                      <p className="text-3xl font-bold text-green-600 dark:text-green-400">
+                      <p className="text-3xl font-bold text-blue-600 dark:text-blue-400">
                         {classAvg || '—'}
                       </p>
                     </div>
@@ -506,6 +543,17 @@ const Leistungscharts = ({ performances, students, subjects, selectedStudents, s
             {selectedFachbereich 
               ? renderChartContent('bar', fachbereichDetailData, [1, 6], true, true) 
               : renderChartContent(shouldUseBarChartForFachbereich ? 'bar' : 'radar', fachbereichData, [1, 6], true)}
+          </div>
+          {/* NEU: Trennung und Klassenschnitt-Anzeige für Konsistenz */}
+          <div className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-700">
+            <div className="text-center">
+              <p className="text-sm text-slate-600 dark:text-slate-400 mb-1">
+                Fachbereiche Klassenschnitt
+              </p>
+              <p className="text-4xl font-bold text-blue-600 dark:text-blue-400">
+                {fachbereichData.length > 0 ? (fachbereichData.reduce((sum, item) => sum + (item.Klassenschnitt || 0), 0) / fachbereichData.length).toFixed(2) : '—'}
+              </p>
+            </div>
           </div>
         </CardContent>
       </Card>

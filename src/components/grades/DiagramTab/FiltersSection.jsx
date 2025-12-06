@@ -86,7 +86,7 @@ const FiltersSection = ({
                   <SelectItem key={c} value={c}>{c}</SelectItem>
                 ))
               ) : (
-                <SelectItem disabled value="none">Keine Kompetenzen gefunden</SelectItem>
+                <SelectItem disabled value="none">Keine Kompetenzen gefunden - bitte erstellen Sie welche im Modal</SelectItem>
               )}
             </SelectContent>
           </Select>

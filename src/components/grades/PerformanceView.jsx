@@ -13,7 +13,7 @@ const DiagramTab = React.lazy(() => import('./DiagramTab/DiagramTab')); // Korri
 const LeistungenTable = React.lazy(() => import('./LeistungenTable'));
 const UeberfachlichTable = React.lazy(() => import('./UeberfachlichTable'));
 
-const PerformanceView = ({ students = [], performances = [], activeClassId, classes = [], onDataChange }) => {
+const PerformanceView = ({ students = [], performances = [], activeClassId, classes = [], onDataChange, selectedStudentId }) => {
   const { toast } = useToast();
   const [subjects, setSubjects] = useState([]);
   const [allCompetencies, setAllCompetencies] = useState([]);
@@ -415,6 +415,7 @@ const PerformanceView = ({ students = [], performances = [], activeClassId, clas
             allCompetencies={allCompetencies}
             activeClassId={activeClassId}
             onDataChange={onDataChange}
+            selectedStudentId={selectedStudentId}
           />
         )}
         {tab === 'leistungen' && (

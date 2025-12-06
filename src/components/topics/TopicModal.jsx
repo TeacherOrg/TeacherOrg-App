@@ -25,6 +25,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import { LehrplanKompetenz as CurriculumCompetency } from '@/api/entities';
 import { getLehrplanData } from '@/components/curriculum/lehrplanData';
+import { deleteTopicWithLessons } from '@/api/topicService';
 
 const PRESET_COLORS = [
   '#ef4444', '#f97316', '#eab308', '#84cc16', '#22c55e', '#10b981',
@@ -442,9 +443,21 @@ export default function TopicModal({ isOpen, onClose, onSave, onDelete, topic, s
     }
   };
 
-  const handleDelete = () => {
-    if (topic && window.confirm("Möchten Sie dieses Thema wirklich löschen? Es wird von allen zugehörigen Lektionen entfernt.")) {
-      onDelete(topic.id);
+  const handleDelete = async () => {
+    if (!topic?.id) return;
+
+    const confirm = window.confirm(
+      "Möchten Sie dieses Thema wirklich löschen?\n\nAlle zugehörigen Jahreslektionen werden ebenfalls gelöscht!"
+    );
+
+    if (confirm) {
+      try {
+        await deleteTopicWithLessons(topic.id);
+        onDelete(topic.id);   // damit die Eltern-Komponente auch updatet
+        onClose();
+      } catch (err) {
+        // toast schon im Service
+      }
     }
   };
 

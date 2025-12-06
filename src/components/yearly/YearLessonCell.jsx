@@ -20,7 +20,15 @@ function YearLessonCell({
   onMouseEnter = () => {}, 
   onMouseLeave = () => {}, 
   allYearlyLessons = [],
-  densityMode = 'standard'
+  densityMode = 'standard',
+  // === NEU ===
+  lessonSlot,
+  lessonData,
+  onContextMenu,
+  // Drag-Handler Props
+  onDragStart,
+  onDragOver,
+  onDrop,
 }) {
   // Endgültig korrekte handleClick
   const handleClick = (e) => {
@@ -31,6 +39,62 @@ function YearLessonCell({
       onClick();
     }
     // sonst: nichts tun → Bubbling erlaubt → äußere div in YearlyGrid toggelt die Auswahl
+  };
+
+  // === NEU ===
+  const handleContext = (e) => {
+    if (lessonData && onContextMenu) {
+      onContextMenu(e, lessonData, lessonSlot);
+    }
+  };
+
+  // === NEU: Drag-Handler ===
+  const handleDragStart = (e) => {
+    if (!lesson) return;
+
+    // Alt gedrückt → Kopie, sonst Verschieben
+    const isCopy = e.altKey;
+
+    e.dataTransfer.setData('lessonId', lesson.id);
+    e.dataTransfer.setData('isCopy', isCopy.toString());
+    e.dataTransfer.effectAllowed = isCopy ? 'copy' : 'move';
+
+    // Schickes Ghost-Element
+    const ghost = document.createElement('div');
+    ghost.textContent = isCopy ? `+ ${lesson.name}` : lesson.name;
+    ghost.style.cssText = `
+      position: absolute;
+      top: -1000px;
+      background: ${lesson.color || '#3b82f6'};
+      color: white;
+      padding: 8px 12px;
+      border-radius: 8px;
+      font-weight: bold;
+      pointer-events: none;
+      z-index: 9999;
+      opacity: 0.9;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.3);
+    `;
+    document.body.appendChild(ghost);
+    e.dataTransfer.setDragImage(ghost, 20, 20);
+
+    // Ghost nach 100ms entfernen
+    setTimeout(() => document.body.removeChild(ghost), 100);
+
+    onDragStart?.(e, lesson, lessonSlot, isCopy);
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = e.altKey ? 'copy' : 'move';
+    onDragOver?.(e);
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    const lessonId = e.dataTransfer.getData('lessonId');
+    const isCopy = e.dataTransfer.getData('isCopy') === 'true';
+    onDrop?.(lessonId, lessonSlot, isCopy);
   };
 
   // DENSITY-KONFIGURATION (unverändert)
@@ -64,6 +128,7 @@ function YearLessonCell({
   const isTopicActive = activeTopicId === lesson?.topic_id;
   const hasContent = lesson?.steps?.length > 0 || (lesson?.notes && String(lesson?.notes).trim());
   const textColor = getTextColor(bgColor);
+  const hasExam = allYearlyLessons.some(yl => yl.topic_id === lesson?.id && yl.is_exam);
 
   const truncateText = (text, maxLength) => {
     if (!text || text.length <= maxLength) return text;
@@ -133,6 +198,17 @@ function YearLessonCell({
         whileHover={{ scale: 1.05 }}
         whileTap={{ scale: 0.98 }}
         onClick={handleClick}
+        // === NEU ===
+        onContextMenu={handleContext}
+        // Drag-Handler
+        draggable={false}
+        onDragOver={handleDragOver}
+        onDrop={(e) => {
+          e.preventDefault();
+          const lessonId = e.dataTransfer.getData('lessonId');
+          const isCopy = e.dataTransfer.getData('isCopy') === 'true';
+          onDrop?.(lessonId, lessonSlot, isCopy);
+        }}
       >
         {getEmptyCellContent()}
       </motion.div>
@@ -159,6 +235,18 @@ function YearLessonCell({
       onClick={handleClick}
       onMouseEnter={hasContent && typeof onMouseEnter === 'function' ? onMouseEnter : undefined}
       onMouseLeave={hasContent && typeof onMouseLeave === 'function' ? onMouseLeave : undefined}
+      // === NEU ===
+      onContextMenu={handleContext}
+      // Drag-Handler
+      draggable={!!lesson}
+      onDragStart={handleDragStart}
+      onDragOver={handleDragOver}
+      onDrop={(e) => {
+        e.preventDefault();
+        const lessonId = e.dataTransfer.getData('lessonId');
+        const isCopy = e.dataTransfer.getData('isCopy') === 'true';
+        onDrop?.(lessonId, lessonSlot, isCopy);
+      }}
     >
       <div 
         className="absolute inset-0 opacity-0 group-hover:opacity-10 transition-opacity rounded-lg"
@@ -171,6 +259,11 @@ function YearLessonCell({
         </div>
       )}
       {lesson.is_exam && (
+        <div className="absolute top-1 right-1 bg-black/30 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full shadow-md">
+          ❗
+        </div>
+      )}
+      {isTopicBlock && hasExam && (
         <div className="absolute top-1 right-1 bg-black/30 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full shadow-md">
           ❗
         </div>

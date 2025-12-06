@@ -5,11 +5,12 @@ import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Save, X, Trash2, PlusCircle, BookOpen } from "lucide-react";
+import { Save, X, Trash2, PlusCircle, BookOpen, Copy } from "lucide-react";
 import { debounce } from 'lodash';
 import pb from '@/api/pb';
 import { createGradient, getTextColorForBackground } from '@/utils/colorUtils';
 import { YearlyLesson } from '@/api/entities';
+import LessonTemplatePopover from '@/components/lesson-planning/LessonTemplatePopover';
 
 const WORK_FORMS = [
     { value: 'frontal', label: '🗣️ Frontal' },
@@ -182,6 +183,9 @@ export default function LessonModal({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [addSecondLesson, setAddSecondLesson] = useState(false);
   const [secondYearlyLessonId, setSecondYearlyLessonId] = useState('');
+  const [showTemplateSave, setShowTemplateSave] = useState(false);
+  const [templateName, setTemplateName] = useState("");
+
   const isEditing = !!lesson;
 
   const displayLesson = lesson || newLessonSlot;
@@ -258,13 +262,20 @@ export default function LessonModal({
   // Handle double lesson toggle
   const handleDoubleLessonToggle = (checked) => {
     setFormData(prev => ({ ...prev, is_double_lesson: checked }));
+    
     if (checked) {
+      // Automatisch zweiten Teil aktivieren
       setAddSecondLesson(true);
     } else {
+      // Doppellektion deaktivieren → alles zurücksetzen
       setAddSecondLesson(false);
       setSecondSteps([]);
       setSecondYearlyLessonId('');
-      setFormData(prev => ({ ...prev, second_name: '' }));
+      setFormData(prev => ({ 
+        ...prev, 
+        second_name: '',
+        second_yearly_lesson_id: null 
+      }));
     }
   };
 
@@ -273,49 +284,70 @@ export default function LessonModal({
     if (!addSecondLesson) {
       setSecondSteps([]);
       setSecondYearlyLessonId('');
-      setFormData(prev => ({ ...prev, second_name: '' }));
-    } else {
-      if (displayLesson && allYearlyLessons) {
-        const subjectLessonsThisWeek = allYearlyLessons
-          ?.filter(yl => yl.subject === displayLesson.subject && yl.week_number === displayLesson.week_number) || []
-          .sort((a, b) => Number(a.lesson_number) - Number(b.lesson_number));
-
-        const currentNum = Number(displayLesson.lesson_number);
-        let nextLessonCandidate = subjectLessonsThisWeek.find(yl => Number(yl.lesson_number) === currentNum + 1);
-
-        if (!nextLessonCandidate) {
-          console.log('Creating new second YearlyLesson');
-          const newSecondNumber = currentNum + 1;
-          const newSecond = {
-            subject: displayLesson.subject,
-            week_number: displayLesson.week_number,
-            lesson_number: newSecondNumber,
-            school_year: currentYear,
-            steps: [],
-            notes: '',
-            is_double_lesson: true,
-            name: `Lektion ${newSecondNumber}`
-          };
-          nextLessonCandidate = { ...newSecond, id: generateId() };
-          setFormData(prev => ({ ...prev, second_yearly_lesson_id: nextLessonCandidate.id, second_name: newSecond.name }));
-        } else {
-          setFormData(prev => ({ ...prev, second_name: nextLessonCandidate.name || `Lektion ${currentNum + 1}` }));
-        }
-
-        if (nextLessonCandidate) {
-          setSecondYearlyLessonId(nextLessonCandidate.id);
-          const nextSteps = nextLessonCandidate.steps?.map(step => ({ ...step, id: `second-${step.id || generateId()}` })) || [];
-          setSecondSteps(nextSteps);
-        } else {
-          setSecondYearlyLessonId('');
-          setSecondSteps([]);
-        }
-      } else {
-        setSecondYearlyLessonId('');
-        setSecondSteps([]);
-      }
+      setFormData(prev => ({ ...prev, second_name: '', second_yearly_lesson_id: null }));
+      return;
     }
-  }, [addSecondLesson, allYearlyLessons, displayLesson, currentYear]);
+
+    // Nur ausführen, wenn wir ein displayLesson haben (also Fach + Woche bekannt)
+    if (!displayLesson || !allYearlyLessons.length === 0) return;
+
+    const subjectLessonsThisWeek = allYearlyLessons
+      .filter(yl => 
+        yl.subject === displayLesson.subject && 
+        yl.week_number === displayLesson.week_number
+      )
+      .sort((a, b) => Number(a.lesson_number) - Number(b.lesson_number));
+
+    const currentNum = Number(displayLesson.lesson_number);
+    const nextLesson = subjectLessonsThisWeek.find(yl => Number(yl.lesson_number) === currentNum + 1);
+
+    if (nextLesson) {
+      // Bestehende nächste Lektion gefunden → verknüpfen
+      setSecondYearlyLessonId(nextLesson.id);
+      setFormData(prev => ({ 
+        ...prev, 
+        second_name: nextLesson.name || `Lektion ${currentNum + 1}`,
+        second_yearly_lesson_id: nextLesson.id
+      }));
+
+      const loadedSteps = (nextLesson.steps || []).map(step => ({
+        ...step,
+        id: `second-${step.id || generateId()}`
+      }));
+      setSecondSteps(loadedSteps);
+    } else {
+      // Keine nächste Lektion → neue anlegen (wie im weekly-Modal)
+      const newSecond = {
+        subject: displayLesson.subject,
+        week_number: displayLesson.week_number,
+        lesson_number: currentNum + 1,
+        school_year: currentYear,
+        name: `Lektion ${currentNum + 1}`,
+        steps: [],
+        is_double_lesson: true,
+        notes: '',
+        topic_id: formData.topic_id === 'no_topic' ? null : formData.topic_id,
+      };
+
+      // Wir erzeugen nur eine temporäre ID – wird beim Speichern wirklich angelegt
+      const tempId = generateId();
+      setSecondYearlyLessonId(tempId);
+      setFormData(prev => ({ 
+        ...prev, 
+        second_name: newSecond.name,
+        second_yearly_lesson_id: tempId 
+      }));
+      setSecondSteps([]);
+    }
+  }, [addSecondLesson, displayLesson, allYearlyLessons, currentYear, formData.topic_id]);
+
+  // Neu: Cleanup beim Schließen des Modals
+  useEffect(() => {
+    if (!isOpen) {
+      setShowTemplateSave(false);
+      setTemplateName("");
+    }
+  }, [isOpen]);
 
   const handleUpdatePrimaryStep = (id, field, value) => {
     setPrimarySteps(primarySteps.map(step => step.id === id ? { ...step, [field]: value } : step));
@@ -323,6 +355,10 @@ export default function LessonModal({
 
   const handleRemovePrimaryStep = (id) => {
     setPrimarySteps(primarySteps.filter(step => step.id !== id));
+  };
+
+  const handleRemoveSecondStep = (id) => {
+    setSecondSteps(secondSteps.filter(step => step.id !== id));
   };
 
   const handleAddPrimaryStep = () => {
@@ -337,10 +373,6 @@ export default function LessonModal({
 
   const handleUpdateSecondStep = (id, field, value) => {
     setSecondSteps(secondSteps.map(step => step.id === id ? { ...step, [field]: value } : step));
-  };
-
-  const handleRemoveSecondStep = (id) => {
-    setSecondSteps(secondSteps.filter(step => step.id !== id));
   };
 
   const handleAddSecondStep = () => {
@@ -511,6 +543,47 @@ export default function LessonModal({
   const lastPrimaryStepId = primarySteps[primarySteps.length - 1]?.id ?? null;
   const lastSecondStepId = secondSteps[secondSteps.length - 1]?.id ?? null;
 
+  // ← Vor dem return!
+  const handleSaveAsTemplate = async () => {
+    if (!templateName.trim()) return;
+
+    try {
+      await pb.collection('lesson_templates').create({
+        name: templateName.trim(),
+        steps: primarySteps,
+        subject: subjectId || null,
+        user_id: pb.authStore.model.id,
+        is_global: false,
+      });
+      import('react-hot-toast').then(({ toast }) => toast.success("Vorlage gespeichert!"));
+      setShowTemplateSave(false);
+      setTemplateName("");
+    } catch (err) {
+      import('react-hot-toast').then(({ toast }) => toast.error("Fehler beim Speichern"));
+    }
+  };
+
+  const handleSecondLessonSelection = (yearlyLessonId) => {
+    setSelectedSecondLesson(yearlyLessonId);
+    
+    if (!yearlyLessonId) {
+      setSecondSteps([]);
+      return;
+    }
+
+    const selectedYearlyLesson = allYearlyLessons.find(yl => yl.id === yearlyLessonId);
+    if (selectedYearlyLesson && selectedYearlyLesson.steps) {
+      const newSecondLessonSteps = selectedYearlyLesson.steps.map(step => ({
+        ...step,
+        id: `second-${generateId()}-${step.id || generateId()}`
+      }));
+      setSecondSteps(newSecondLessonSteps);
+    }
+  };
+
+  // Einfach immer erlaubt – oder nur prüfen, ob ein Name da ist
+  const isFormValid = formData.name?.trim().length > 0;
+
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent 
@@ -587,14 +660,22 @@ export default function LessonModal({
           {formData.is_double_lesson && (
             <div className="p-3 rounded-lg bg-slate-100/50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 space-y-3">
               <div className="flex items-center gap-2">
-                <Switch id="add-second" checked={addSecondLesson} onCheckedChange={setAddSecondLesson} />
-                <Label htmlFor="add-second" className="text-sm font-semibold text-slate-900 dark:text-white cursor-pointer">Inhalte aus zweiter Lektion verwenden</Label>
+                <Switch 
+                  id="add-second-content" 
+                  checked={addSecondLesson} 
+                  onCheckedChange={setAddSecondLesson}
+                />
+                <Label htmlFor="add-second-content" className="text-sm font-semibold text-slate-900 dark:text-white cursor-pointer">
+                  Inhalte aus zweiter Lektion bearbeiten
+                </Label>
               </div>
-              {addSecondLesson && (
-                <div className="p-3 bg-slate-200/50 dark:bg-slate-700/50 rounded-md text-sm text-slate-500 dark:text-slate-300">
-                  <p>
-                    <span className="font-semibold text-slate-900 dark:text-white">{secondLessonNote}</span>
-                  </p>
+              
+              {addSecondLesson && secondYearlyLessonId && (
+                <div className="text-xs text-slate-600 dark:text-slate-400 pl-8">
+                  Verknüpft mit: <span className="font-medium">
+                    {formData.second_name || `Lektion ${Number(displayLesson?.lesson_number || 0) + 1}`}
+                  </span>
+                  {secondSteps.length > 0 && ` (${secondSteps.length} Schritt${secondSteps.length === 1 ? '' : 'e'})`}
                 </div>
               )}
             </div>
@@ -634,16 +715,30 @@ export default function LessonModal({
                   isLast={step.id === lastPrimaryStepId}
                 />
               ))}
-              <Button type="button" variant="outline" onClick={handleAddPrimaryStep} className="w-full mt-2 border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white bg-white dark:bg-slate-700 hover:bg-slate-100 dark:hover:bg-slate-600">
-                <PlusCircle className="w-4 h-4 mr-2" />
-                <span className="text-slate-900 dark:text-white">Schritt hinzufügen (Lektion 1)</span>
-              </Button>
+              <div className="flex gap-2 mt-2">
+                <Button type="button" variant="outline" onClick={handleAddPrimaryStep} className="w-full mt-2 border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white bg-white dark:bg-slate-700 hover:bg-slate-100 dark:hover:bg-slate-600">
+                  <PlusCircle className="w-4 h-4 mr-2" />
+                  <span className="text-slate-900 dark:text-white">Schritt hinzufügen (Lektion 1)</span>
+                </Button>
+                <LessonTemplatePopover
+                  subjectId={subjectId}
+                  onInsert={(steps, templateName) => {
+                    const withNewIds = steps.map(s => ({ ...s, id: generateId() }));
+                    setPrimarySteps(prev => [...prev, ...withNewIds]);
+
+                    if (templateName) {
+                      setFormData(prev => ({ ...prev, name: templateName }));
+                    }
+                  }}
+                  currentSteps={primarySteps}
+                />
+              </div>
             </div>
           </div>
           
           {formData.is_double_lesson && addSecondLesson && (
             <div className="space-y-4">
-              <Label className="font-semibold text-slate-900 dark:text-white">Zusätzliche Schritte (Lektion 2)</Label>
+              <Label className="font-semibold text-slate-900 dark:text-white">Zweite Lektion – Schritte</Label>
               <div className="space-y-3 p-4 border rounded-lg bg-slate-100/50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700">
                 {secondSteps.map(step => (
                   <StepRow
@@ -656,10 +751,20 @@ export default function LessonModal({
                     isLast={step.id === lastSecondStepId}
                   />
                 ))}
-                <Button type="button" variant="outline" onClick={handleAddSecondStep} className="w-full mt-2 border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white bg-white dark:bg-slate-700 hover:bg-slate-100 dark:hover:bg-slate-600">
-                  <PlusCircle className="w-4 h-4 mr-2" />
-                  <span className="text-slate-900 dark:text-white">Schritt hinzufügen (Lektion 2)</span>
-                </Button>
+                <div className="flex gap-2 mt-2">
+                  <Button type="button" variant="outline" onClick={handleAddSecondStep} className="w-full mt-2 border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white bg-white dark:bg-slate-700 hover:bg-slate-100 dark:hover:bg-slate-600">
+                    <PlusCircle className="w-4 h-4 mr-2" />
+                    <span className="text-slate-900 dark:text-white">Schritt hinzufügen (2. Lektion)</span>
+                  </Button>
+                  <LessonTemplatePopover
+                    subjectId={subjectId}
+                    onInsert={(steps) => {
+                      const withNewIds = steps.map(s => ({ ...s, id: generateId() }));
+                      setSecondSteps(prev => [...prev, ...withNewIds]);
+                    }}
+                    currentSteps={secondSteps}
+                  />
+                </div>
               </div>
             </div>
           )}
@@ -679,17 +784,81 @@ export default function LessonModal({
             </div>
             <div className="flex gap-3">
               <Button type="button" variant="outline" onClick={onClose} className="border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white bg-white dark:bg-slate-700 hover:bg-slate-100 dark:hover:bg-slate-600">
-                <X className="w-4 h-4 mr-2" />
                 <span className="text-slate-900 dark:text-white">Abbrechen</span>
               </Button>
               <Button 
                 type="submit"
                 className={`text-${buttonTextColor} shadow-md hover:opacity-90`}
                 style={{ background: modalBackground }}
+                disabled={isSubmitting}
               >
                 <Save className="w-4 h-4 mr-2" />
                 Lektionsplan speichern
               </Button>
+              <div className="relative">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    const defaultName = formData.name?.trim() || 
+                                        lesson?.name?.trim() || 
+                                        "Meine Vorlage";
+                    setTemplateName(defaultName);
+                    setShowTemplateSave(true);
+                  }}
+                >
+                  <Copy className="w-4 h-4 mr-2" />
+                  Als Vorlage speichern
+                </Button>
+
+                {/* Popup als fixed Overlay – ragt über alles hinaus */}
+                {showTemplateSave && (
+                  <div className="fixed inset-0 z-[9999] flex items-center justify-center">
+                    {/* Backdrop */}
+                    <div 
+                      className="absolute inset-0 bg-black/50"
+                      onClick={() => {
+                        setShowTemplateSave(false);
+                        setTemplateName("");
+                      }}
+                    />
+
+                    {/* Dialog */}
+                    <div className="relative bg-white dark:bg-slate-800 rounded-lg shadow-2xl p-6 w-96 max-w-[90vw]">
+                      <h3 className="text-lg font-semibold mb-4">Name der Vorlage</h3>
+                      
+                      <Input
+                        autoFocus
+                        value={templateName}
+                        onChange={(e) => setTemplateName(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && handleSaveAsTemplate()}
+                        placeholder="z. B. Einstieg Photosynthese"
+                        className="mb-4"
+                      />
+
+                      <div className="flex justify-end gap-3">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setShowTemplateSave(false);
+                            setTemplateName("");
+                          }}
+                        >
+                          Abbrechen
+                        </Button>
+                        <Button
+                          size="sm"
+                          onClick={handleSaveAsTemplate}
+                          disabled={!templateName.trim()}
+                        >
+                          Speichern
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </form>

@@ -10,6 +10,7 @@ import CalendarLoader from "../components/ui/CalendarLoader";
 import { useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { toast } from "sonner";
+import { calculateWeightedGrade } from '@/components/grades/utils/calculateWeightedGrade';
 
 export default function StudentsOverview() {
   const [students, setStudents] = useState([]);
@@ -64,15 +65,10 @@ export default function StudentsOverview() {
     const classUeberfachlich = ueberfachlich.filter(u => String(u.class_id) === String(activeClassId));
 
     return classStudents.map(student => {
-      // Noten berechnen
-      const studentGrades = classPerformances
-        .filter(p => p.student_id === student.id)
-        .map(p => p.grade)
-        .filter(g => typeof g === 'number' && g > 0);
-      
-      const average = studentGrades.length > 0
-        ? studentGrades.reduce((sum, g) => sum + g, 0) / studentGrades.length
-        : null;
+      // NEU – gewichteter Durchschnitt!
+      const studentPerformances = classPerformances.filter(p => p.student_id === student.id);
+
+      const average = calculateWeightedGrade(studentPerformances) || null;
 
       // Fachbereiche analysieren
       const fachbereicheMap = {};
@@ -93,7 +89,13 @@ export default function StudentsOverview() {
 
       const allFachbereiche = Object.entries(fachbereicheMap).map(([name, data]) => ({
         name,
-        average: parseFloat((data.grades.reduce((sum, g) => sum + g, 0) / data.grades.length).toFixed(2)),
+        average: calculateWeightedGrade(
+          classPerformances.filter(p => 
+            p.student_id === student.id && 
+            Array.isArray(p.fachbereiche) && 
+            p.fachbereiche.includes(name)
+          )
+        ),
         subjects: Array.from(data.subjects)
       }));
 
@@ -133,7 +135,7 @@ export default function StudentsOverview() {
         strongFachbereiche,
         compAverage,
         criticalComps,
-        totalAssessments: studentGrades.length
+        totalAssessments: studentPerformances.length
       };
     }).filter(card => card.average !== null);
   }, [students, performances, ueberfachlich, activeClassId]);
@@ -292,9 +294,10 @@ export default function StudentsOverview() {
             <CardContent className="p-4">
               <p className="text-xs text-slate-600 dark:text-slate-400 font-medium">Ø Klassenschnitt</p>
               <p className="text-2xl font-bold text-slate-900 dark:text-white">
-                {filteredAndSortedCards.length > 0
-                  ? (filteredAndSortedCards.reduce((sum, c) => sum + c.average, 0) / filteredAndSortedCards.length).toFixed(2)
-                  : '—'}
+                {(() => {
+                  const classPerformances = performances.filter(p => String(p.class_id) === String(activeClassId));
+                  return classPerformances.length > 0 ? calculateWeightedGrade(classPerformances).toFixed(2) : '—';
+                })()}
               </p>
             </CardContent>
           </Card>

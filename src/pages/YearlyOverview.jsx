@@ -21,6 +21,7 @@ import { useLessonStore } from '@/store';
 import pb from '@/api/pb';
 import { Plus } from "lucide-react";
 import toast from 'react-hot-toast';
+import { Calendar, GraduationCap } from 'lucide-react';
 
 const ACADEMIC_WEEKS = 52;
 
@@ -102,6 +103,23 @@ function InnerYearlyOverviewPage() {
   // Neue States für Quick Actions & Density
   const [showQuickActions, setShowQuickActions] = useState(false);
   const [densityMode, setDensityMode] = useState('standard'); // 'compact' | 'standard' | 'spacious'
+
+  // NEU: States für Jahresmodus
+  const [yearViewMode, setYearViewMode] = useState('calendar'); // 'calendar' | 'school'
+  const [schoolYearStartWeek, setSchoolYearStartWeek] = useState(35);
+
+  // NEU: localStorage für yearViewMode
+  useEffect(() => {
+    const saved = localStorage.getItem('yearViewMode');
+    if (saved === 'school' || saved === 'calendar') {
+      setYearViewMode(saved);
+    }
+  }, []);
+
+  // Beim Wechseln speichern
+  useEffect(() => {
+    localStorage.setItem('yearViewMode', yearViewMode);
+  }, [yearViewMode]);
 
   const [hoverLesson, setHoverLesson] = useState(null);
   const [hoverPosition, setHoverPosition] = useState({ top: 0, left: 0 });
@@ -264,6 +282,17 @@ function InnerYearlyOverviewPage() {
           console.error('No subject found for assignSubject:', assignSubject);
         }
       }
+
+      // NEU: Schuljahr-Startwoche aus den Settings holen
+      // Angenommen, du lädst Settings separat oder sie sind in data; passe an, falls nötig
+      // Hier als Beispiel, falls du Setting.list() hinzufügst:
+      // const settingsData = await Setting.list({ user_id: pb.authStore.model?.id });
+      // if (settingsData && settingsData.length > 0) {
+      //   const latestSettings = settingsData.sort((a,b) => new Date(b.updated) - new Date(a.updated))[0];
+      //   setSchoolYearStartWeek(latestSettings.schoolYearStartWeek || 35);
+      // }
+      // Für jetzt: setze Standard
+      setSchoolYearStartWeek(35); // Passe an, wenn Settings geladen werden
     }
     setIsLoading(queryLoading);
   }, [data, queryLoading, assignSubject]);
@@ -338,24 +367,20 @@ function InnerYearlyOverviewPage() {
   const activeClassDisplayName = activeClassId === null ? 'Alle Klassen' : activeClassName;
 
   const lessonsForYear = useMemo(() => {
-    let filtered = yearlyLessons.filter(
-      (lesson) => Number(lesson.school_year) === currentYear || !lesson.school_year
-    );
-
-    if (isAssignMode && assignSubject) {
-      const subjectObj = subjects.find(
-        (s) => s.name.toLowerCase() === assignSubject.toLowerCase()
+    // Im Kalender-Modus: nur aktuelles Kalenderjahr
+    if (yearViewMode === 'calendar') {
+      return yearlyLessons.filter(
+        (lesson) => Number(lesson.school_year) === currentYear || !lesson.school_year
       );
-      if (subjectObj) {
-        // ALLE Lektionen des Fachs anzeigen (nicht nur freie)
-        filtered = filtered.filter((lesson) => lesson.subject === subjectObj.id);
-      } else {
-        filtered = [];
-      }
     }
 
-    return filtered;
-  }, [yearlyLessons, currentYear, isAssignMode, assignSubject, subjects]);
+    // Im Schuljahr-Modus: aktuelles + nächstes Kalenderjahr anzeigen
+    // (weil Schuljahr z. B. 2025/26 = KW 35 2025 bis KW 34 2026)
+    return yearlyLessons.filter((lesson) => {
+      const lessonYear = Number(lesson.school_year);
+      return lessonYear === currentYear || lessonYear === currentYear + 1 || !lesson.school_year;
+    });
+  }, [yearlyLessons, currentYear, yearViewMode]);
 
   const handleLessonClick = useCallback(
     async (lesson, slot) => {
@@ -476,6 +501,7 @@ function InnerYearlyOverviewPage() {
           const newLesson = {
             id: `temp-${Date.now()}`,
             ...slot,
+            subject: subjectId, // ← Konvertiere Name zu ID
             topic_id: activeTopicId,
             school_year: currentYear,
             notes: '',
@@ -490,13 +516,14 @@ function InnerYearlyOverviewPage() {
           try {
             const createdLesson = await YearlyLesson.create({
               ...slot,
+              subject: subjectId, // ← Verwende ID
               topic_id: activeTopicId,
               school_year: currentYear,
               name: 'Neue Lektion',
               description: '',
               user_id: pb.authStore.model.id,
               class_id: activeClassId, // Sicherstellen, dass class_id gesetzt ist
-              subject: subjectId,
+              subject: subjectId, // ← Verwende ID
               notes: '',
               is_double_lesson: false,
               second_yearly_lesson_id: null,
@@ -511,7 +538,7 @@ function InnerYearlyOverviewPage() {
             let tempUpdatedPrev = [...yearlyLessons, { ...createdLesson, lesson_number: Number(createdLesson.lesson_number) }];
 
             const weekLessons = tempUpdatedPrev
-              .filter(l => l.week_number === slot.week_number && l.subject === slot.subject && l.topic_id === activeTopicId)
+              .filter(l => l.week_number === slot.week_number && l.subject === subjectId && l.topic_id === activeTopicId) // ← Verwende subjectId
               .sort((a, b) => Number(a.lesson_number) - Number(b.lesson_number));
 
             if (weekLessons.length > 1) {
@@ -524,6 +551,7 @@ function InnerYearlyOverviewPage() {
                   const gapLesson = {
                     id: `temp-gap-${Date.now() + num}`,
                     ...gapSlot,
+                    subject: subjectId, // ← Verwende ID
                     topic_id: activeTopicId,
                     notes: '',
                     is_double_lesson: false,
@@ -533,6 +561,7 @@ function InnerYearlyOverviewPage() {
 
                   const createPromise = YearlyLesson.create({
                     ...gapSlot,
+                    subject: subjectId, // ← Verwende ID
                     topic_id: activeTopicId,
                     notes: '',
                     is_double_lesson: false,
@@ -541,7 +570,7 @@ function InnerYearlyOverviewPage() {
                     description: '',
                     user_id: pb.authStore.model.id,
                     class_id: activeClassId, // Sicherstellen, dass class_id gesetzt ist
-                    subject: subjectId
+                    subject: subjectId // ← Verwende ID
                   }).then(gapCreated => {
                     optimisticUpdateYearlyLessons(gapLesson, false, true);
                     optimisticUpdateYearlyLessons(gapCreated, true);
@@ -600,6 +629,7 @@ function InnerYearlyOverviewPage() {
           setEditingLesson(null);
           setNewLessonSlot({ 
             ...slot, 
+            subject: subjects.find(s => s.name === slot.subject)?.id, // ← Konvertiere Name zu ID
             school_year: currentYear,
             class_id: activeClassId // Hinzufügen von class_id
           });
@@ -888,9 +918,24 @@ function InnerYearlyOverviewPage() {
               <ChevronsLeft className="w-4 h-4" />
             </Button>
 
-            <div className="bg-blue-600 text-white px-6 py-3 rounded-lg font-semibold text-lg shadow-md">
-              Schuljahr {currentYear}/{currentYear + 1}
-            </div>
+            {/* NEU: Umschaltbarer Jahr-Button */}
+            <Button
+              variant="default"
+              className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 rounded-lg font-semibold text-lg shadow-md flex items-center gap-3 min-w-[300px] justify-center"
+              onClick={() => setYearViewMode(prev => prev === 'calendar' ? 'school' : 'calendar')}
+            >
+              {yearViewMode === 'calendar' ? (
+                <>
+                  <Calendar className="w-5 h-5" />
+                  Kalenderjahr {currentYear}/{currentYear + 1}
+                </>
+              ) : (
+                <>
+                  <GraduationCap className="w-5 h-5" />
+                  Schuljahr {currentYear}/{currentYear + 1}
+                </>
+              )}
+            </Button>
 
             <Button
               variant="outline"
@@ -996,6 +1041,10 @@ function InnerYearlyOverviewPage() {
                     onSelectLesson={handleSelectLesson}
                     classes={classes}
                     onSelectClass={setActiveClassId}
+                    yearViewMode={yearViewMode}
+                    schoolYearStartWeek={schoolYearStartWeek}
+                    refetch={refetch}
+                    optimisticUpdateYearlyLessons={optimisticUpdateYearlyLessons}  // ← NEU!
                   />
                 )}
               </>

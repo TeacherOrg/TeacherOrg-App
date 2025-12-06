@@ -1,8 +1,13 @@
-import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback, useLayoutEffect } from 'react';
 import YearLessonCell from './YearLessonCell';
 import { adjustColor } from '@/utils/colorUtils';
 import { Checkbox } from '@/components/ui/checkbox';
 import ClassSelectorBar from './ClassSelectorBar';
+import LessonContextMenu from './LessonContextMenu';
+import WeekPickerModal from './WeekPickerModal';
+import SlotPickerModal from './SlotPickerModal';
+import toast from 'react-hot-toast'; 
+import { YearlyLesson } from '@/api/entities';
 
 const ACADEMIC_WEEKS = 52;
 
@@ -85,7 +90,6 @@ const YearlyGrid = React.memo(({
   activeClassId,
   activeTopicId,
   currentYear,
-  activeClassName,
   holidays = [],
   onShowHover,
   onHideHover,
@@ -95,7 +99,11 @@ const YearlyGrid = React.memo(({
   selectedLessons = [],
   onSelectLesson,
   classes,
-  onSelectClass
+  onSelectClass,
+  yearViewMode = 'calendar',
+  schoolYearStartWeek = 35,
+  refetch, 
+  optimisticUpdateYearlyLessons, // ← hinzufügen
 }) => {
   const containerRef = useRef(null);
   const subjectHeaderRef = useRef(null);
@@ -105,6 +113,13 @@ const YearlyGrid = React.memo(({
   const horizontalPadding = 48;
 
   const [availableWidth, setAvailableWidth] = useState(0);
+  // === NEU ===
+  const [contextMenu, setContextMenu] = useState(null); // { x, y, lesson, slot }
+  const [pendingOperation, setPendingOperation] = useState(null); // { mode, lesson, fromSlot }
+  const [weekPicker, setWeekPicker] = useState(null); // { mode, lesson, fromSlot }
+  const [slotPicker, setSlotPicker] = useState(null); // { week, year }
+  // Drag-Logik
+  const [dragOverSlot, setDragOverSlot] = useState(null);
 
   // Breite updaten
   useEffect(() => {
@@ -124,12 +139,14 @@ const YearlyGrid = React.memo(({
   }, []);
 
   const lessonsByWeek = useMemo(() => {
-    const result = lessons.reduce((acc, lesson) => {
+    const result = {};
+    lessons.forEach(lesson => {
       const subjectObj = subjects.find(s => s.id === lesson.subject) || { name: 'Unbekannt', color: '#3b82f6' };
-      const key = `${lesson.week_number}-${subjectObj.name}-${Number(lesson.lesson_number)}`;
-      acc[key] = { ...lesson, subjectName: subjectObj.name };
-      return acc;
-    }, {});
+      const weekNum = Number(lesson.week_number);
+      const lessonNum = Number(lesson.lesson_number);
+      const key = `${weekNum}-${subjectObj.name}-${lessonNum}`;
+      result[key] = { ...lesson, subjectName: subjectObj.name };
+    });
     return result;
   }, [lessons, subjects]);
 
@@ -183,7 +200,41 @@ const YearlyGrid = React.memo(({
   const totalWidth = weekColumnWidth + subjectBlockWidths.reduce((a, b) => a + b, 0);
   const rowHeight = densityMode === 'compact' ? 48 : densityMode === 'spacious' ? 80 : 68;
 
-  const weeks = useMemo(() => Array.from({ length: academicWeeks }, (_, i) => i + 1), [academicWeeks]);
+  const weeks = useMemo(() => {
+    if (yearViewMode === 'calendar') {
+      return Array.from({ length: 52 }, (_, i) => ({
+        id: `cal-${i + 1}`,
+        week: i + 1,
+        display: i + 1,
+        year: currentYear
+      }));
+    }
+
+    // Schuljahr-Modus
+    const start = schoolYearStartWeek;
+    const list = [];
+
+    for (let w = start; w <= 52; w++) {
+      list.push({
+        id: `school-${currentYear}-${w}`,
+        week: w,
+        display: w,
+        year: currentYear
+      });
+    }
+
+    const remaining = 52 - list.length;
+    for (let w = 1; w <= remaining; w++) {
+      list.push({
+        id: `school-${currentYear + 1}-${w}`,
+        week: w,
+        display: w,
+        year: currentYear + 1
+      });
+    }
+
+    return list;
+  }, [yearViewMode, schoolYearStartWeek, currentYear]);
 
   const currentWeek = getCurrentWeek();
 
@@ -194,26 +245,450 @@ const YearlyGrid = React.memo(({
     }
   }, []);
 
-  // Scroll to current week
-  useEffect(() => {
-    if (containerRef.current && !hasScrolledToCurrentWeek.current && currentYear === new Date().getFullYear()) {
-      setTimeout(() => {
-        const target = (currentWeek - 1) * rowHeight;
-        containerRef.current.scrollTop = target;
+  // ────── EINZIGEN Scroll-to-current-Week Effect (ersetzt alle anderen!) ──────
+  useLayoutEffect(() => {
+    if (!containerRef.current || hasScrolledToCurrentWeek.current) return;
+
+    const scrollToCurrentWeek = () => {
+      if (!containerRef.current) return;
+
+      const now = new Date();
+      const currentWeekNum = getCurrentWeek();           // KW 1–52
+      const currentYearActual = now.getFullYear();
+
+      let targetRowIndex = -1;
+
+      if (yearViewMode === 'calendar') {
+        // Nur scrollen, wenn das angezeigte Jahr = aktuelles Jahr
+        if (currentYear === currentYearActual) {
+          targetRowIndex = currentWeekNum - 1;
+        }
+      } else {
+        // ────── SCHULJAHR-Modus ──────
+        const startWeek = schoolYearStartWeek; // z. B. 35
+
+        if (currentWeekNum >= startWeek) {
+          // Aktuelle Woche liegt im "alten" Jahr (ab KW 35)
+          targetRowIndex = currentWeekNum - startWeek;
+        } else {
+          // Aktuelle Woche liegt im neuen Jahr (KW 1 bis schoolYearStartWeek-1)
+          const weeksInOldYear = 52 - startWeek + 1;
+          targetRowIndex = weeksInOldYear + (currentWeekNum - 1);
+        }
+      }
+
+      if (targetRowIndex >= 0 && targetRowIndex < weeks.length) {
+        const targetScrollTop = targetRowIndex * rowHeight;
+
+        containerRef.current.scrollTop = targetScrollTop;
         hasScrolledToCurrentWeek.current = true;
-      }, 300);
+      }
+    };
+
+    // useLayoutEffect + rAF = garantiert nach Layout, vor Paint
+    requestAnimationFrame(() => {
+      requestAnimationFrame(scrollToCurrentWeek);
+    });
+  }, [
+    yearViewMode,
+    weeks,              // ← ändert sich bei Moduswechsel
+    rowHeight,
+    currentYear,
+    schoolYearStartWeek,
+    currentWeek         // von getCurrentWeek()
+  ]);
+
+  // Bonus: Flag beim Jahrwechsel zurücksetzen (optional, aber sinnvoll)
+  useEffect(() => {
+    hasScrolledToCurrentWeek.current = false;
+  }, [yearViewMode, currentYear, activeClassId]); // auch bei Klassenwechsel zurücksetzen
+
+  // === ALLE HANDLER GANZ OBEN ===
+  const handleDeleteLesson = useCallback(async (lessonId) => {
+    if (!confirm('Diese Jahreslektion wirklich löschen?')) return;
+
+    try {
+      // Optimistic UI
+      optimisticUpdateYearlyLessons?.({ id: lessonId }, false, true);
+
+      await YearlyLesson.delete(lessonId);
+      toast.success('Lektion gelöscht');
+
+      // Aktualisiere Grid
+      refetch?.();
+    } catch (err) {
+      console.error(err);
+      toast.error('Fehler beim Löschen');
+      // Rollback falls nötig
+      refetch?.();
     }
-  }, [currentWeek, rowHeight, currentYear, uniqueSubjects.length]);
+  }, [refetch, optimisticUpdateYearlyLessons]);
+
+  // Drag-Handler
+  const handleDragStart = (e, lesson, slot, isCopy) => {
+    // Optional: visuelles Feedback
+  };
+
+  const handleDragOver = (e, slot) => {
+    e.preventDefault();
+    setDragOverSlot(slot);
+  };
+
+  const handleDragLeave = () => {
+    setDragOverSlot(null);
+  };
+
+  const handleDrop = async (sourceLessonId, targetSlot, isCopy) => {
+    setDragOverSlot(null);
+
+    if (!sourceLessonId || !targetSlot) return;
+
+    const lesson = allYearlyLessons.find(l => l.id === sourceLessonId);
+    if (!lesson) return;
+
+    try {
+      if (isCopy) {
+        const { id, ...data } = lesson;
+        await YearlyLesson.create({
+          ...data,
+          week_number: targetSlot.week_number,
+          school_year: targetSlot.school_year,
+          lesson_number: targetSlot.lesson_number,
+          subject: subjects.find(s => s.name === targetSlot.subject)?.id,
+          name: data.name + ' (Kopie)',
+          is_copy: true,
+        });
+        toast.success('Lektion kopiert');
+      } else {
+        await YearlyLesson.update(lesson.id, {
+          week_number: targetSlot.week_number,
+          school_year: targetSlot.school_year,
+          lesson_number: targetSlot.lesson_number,
+          subject: subjects.find(s => s.name === targetSlot.subject)?.id,
+        });
+        toast.success('Lektion verschoben');
+      }
+      refetch?.();
+    } catch (err) {
+      toast.error('Fehler beim Drag & Drop');
+    }
+  };
+
+  const checkNextSlotAvailable = (lesson, fromSlot) => {
+    if (!lesson || !fromSlot) return false;
+    const subjectId = subjects.find(s => s.name === fromSlot.subject)?.id;
+    if (!subjectId) return false;
+
+    const sameSubjectLessons = lessons
+      .filter(l => l.subject === subjectId && l.week_number === fromSlot.week_number && Number(l.school_year) === currentYear)
+      .map(l => Number(l.lesson_number));
+
+    const currentNum = fromSlot.lesson_number;
+    const maxLessons = subjects.find(s => s.id === subjectId)?.lessons_per_week || 4;
+
+    for (let i = currentNum + 1; i <= maxLessons; i++) {
+      if (!sameSubjectLessons.includes(i)) return true;
+    }
+    return false;
+  };
+
+  const checkPrevSlotAvailable = (lesson, fromSlot) => {
+    if (!lesson || !fromSlot) return false;
+    const subjectId = subjects.find(s => s.name === fromSlot.subject)?.id;
+    if (!subjectId) return false;
+
+    const sameSubjectLessons = lessons
+      .filter(l => l.subject === subjectId && l.week_number === fromSlot.week_number && Number(l.school_year) === currentYear)
+      .map(l => Number(l.lesson_number));
+
+    const currentNum = fromSlot.lesson_number;
+
+    for (let i = currentNum - 1; i >= 1; i--) {
+      if (!sameSubjectLessons.includes(i)) return true;
+    }
+    return false;
+  };
+
+  const handleDuplicateNext = async (lesson, fromSlot) => {
+    const subjectId = subjects.find(s => s.name === fromSlot.subject)?.id;
+    if (!subjectId) {
+      toast.error('Fach nicht gefunden');
+      return;
+    }
+
+    // Alle Lektionen dieses Fachs in dieser Woche
+    const sameSubjectLessons = lessons
+      .filter(l =>
+        l.subject === subjectId &&
+        l.week_number === fromSlot.week_number &&
+        Number(l.school_year) === currentYear
+      )
+      .map(l => Number(l.lesson_number))
+      .sort((a, b) => a - b);
+
+    const currentNum = fromSlot.lesson_number;
+    const maxLessons = subjects.find(s => s.id === subjectId)?.lessons_per_week || 4;
+
+    // Finde die nächste mögliche Stunde (1 bis maxLessons), die noch NICHT belegt ist
+    let targetNumber = null;
+    for (let i = currentNum + 1; i <= maxLessons; i++) {
+      if (!sameSubjectLessons.includes(i)) {
+        targetNumber = i;
+        break;
+      }
+    }
+
+    if (!targetNumber) {
+      toast('Keine freie Stunde danach in diesem Fach', { icon: 'Info' });
+      return;
+    }
+
+    try {
+      const { id, ...data } = lesson;
+      await YearlyLesson.create({
+        ...data,
+        lesson_number: targetNumber,
+        name: data.name + ' (Wdh.)',
+        is_copy: true,
+      });
+      toast.success(`Dupliziert in ${targetNumber}. Stunde`);
+      refetch?.();
+    } catch (err) {
+      console.error(err);
+      toast.error('Fehler beim Duplizieren');
+    }
+  };
+
+  const handleDuplicatePrev = async (lesson, fromSlot) => {
+    const subjectId = subjects.find(s => s.name === fromSlot.subject)?.id;
+    if (!subjectId) return;
+
+    const sameSubjectLessons = lessons
+      .filter(l => l.subject === subjectId && l.week_number === fromSlot.week_number && Number(l.school_year) === currentYear)
+      .map(l => Number(l.lesson_number));
+
+    const currentNum = fromSlot.lesson_number;
+
+    let targetNumber = null;
+    for (let i = currentNum - 1; i >= 1; i--) {
+      if (!sameSubjectLessons.includes(i)) {
+        targetNumber = i;
+        break;
+      }
+    }
+
+    if (!targetNumber) {
+      toast('Keine freie Stunde davor in diesem Fach', { icon: 'Info' });
+      return;
+    }
+
+    try {
+      const { id, ...data } = lesson;
+      await YearlyLesson.create({
+        ...data,
+        lesson_number: targetNumber,
+        name: data.name + ' (Wdh.)',
+        is_copy: true,
+      });
+      toast.success(`Dupliziert in ${targetNumber}. Stunde`);
+      refetch?.();
+    } catch (err) {
+      console.error(err);
+      toast.error('Fehler beim Duplizieren');
+    }
+  };
+
+  const handleContextMenu = useCallback((e, lesson, slot) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    setContextMenu({
+      x: e.clientX,
+      y: e.clientY,
+      lesson,
+      slot,
+    });
+  }, []);
+
+  const closeContextMenu = useCallback(() => {
+    setContextMenu(null);
+  }, []);
+
+  const openWeekPicker = (mode, lesson, fromSlot) => {
+    setPendingOperation({ mode, lesson, fromSlot }); // ← hier speichern
+    setWeekPicker(true); // nur boolean, damit Modal öffnet
+  };
+
+  const handleWeekSelected = (week, year) => {
+    setSlotPicker({ week, year });
+    setWeekPicker(null);
+  };
+
+  const handleSlotSelected = async (target) => {
+    // weekPicker ist jetzt leer → wir haben die Info in einem separaten State gespeichert
+    if (!pendingOperation?.lesson) {
+      toast.error('Fehler: Keine Lektion zum Verschieben/Kopieren ausgewählt');
+      setSlotPicker(null);
+      return;
+    }
+
+    const { mode, lesson } = pendingOperation;
+
+    try {
+      if (mode === 'move') {
+        await YearlyLesson.update(lesson.id, {
+          week_number: target.week_number,
+          school_year: target.school_year,
+          lesson_number: target.lesson_number,
+          subject: target.subject,
+        });
+        toast.success(`Verschoben → ${target.subjectName} – ${target.lessonNumber}. Stunde`);
+      } else {
+        const { id, ...data } = lesson;
+        await YearlyLesson.create({
+          ...data,
+          week_number: target.week_number,
+          school_year: target.school_year,
+          lesson_number: target.lesson_number,
+          subject: target.subject,
+          name: data.name + ' (Kopie)',
+          is_copy: true,
+        });
+        toast.success(`Kopiert → ${target.subjectName} – ${target.lessonNumber}. Stunde`);
+      }
+      refetch?.();
+    } catch (err) {
+      console.error(err);
+      toast.error('Fehler beim Verschieben/Kopieren');
+    } finally {
+      // WICHTIG: Alles zurücksetzen!
+      setPendingOperation(null);
+      setSlotPicker(null);
+    }
+  };
+
+  // === useEffect mit Shortcuts kommt DANACH ===
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      // Nur reagieren, wenn kein Input/Textarea fokussiert ist
+      if (
+        e.target instanceof HTMLElement &&
+        (e.target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName))
+      ) {
+        return;
+      }
+
+      const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+      const cmdOrCtrl = isMac ? e.metaKey : e.ctrlKey;
+
+      // Rechtsklick-Menü muss offen sein, damit Shortcut Sinn macht
+      if (!contextMenu?.lesson) {
+        // Optional: auch ohne Kontextmenü z. B. Delete erlauben, wenn eine Zelle fokussiert ist
+        // → später erweiterbar
+        return;
+      }
+
+      // ESC – alles schließen
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        closeContextMenu();
+        setWeekPicker(null);
+        setSlotPicker(null);
+        setPendingOperation(null);
+        return;
+      }
+
+      // Löschen mit Entf / Backspace / ⌫
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        e.preventDefault();
+        handleDeleteLesson(contextMenu.lesson.id);
+        closeContextMenu();
+        return;
+      }
+
+      // Cmd/Ctrl + D → In nächste freie Stunde duplizieren
+      if (cmdOrCtrl && e.key.toLowerCase() === 'd') {
+        e.preventDefault();
+        handleDuplicateNext(contextMenu.lesson, contextMenu.slot);
+        closeContextMenu();
+
+        // Zeige nur beim ersten Mal einen kleinen Tipp
+        if (!localStorage.getItem('tip_duplicate_shortcut')) {
+          toast('Tipp: ⌘/Strg + D = schnell duplizieren', { 
+            icon: 'Rocket', 
+            duration: 4000 
+          });
+          localStorage.setItem('tip_duplicate_shortcut', 'seen');
+        }
+        return;
+      }
+
+      // Cmd/Ctrl + C → Kopieren nach… öffnen
+      if (cmdOrCtrl && e.key.toLowerCase() === 'c') {
+        e.preventDefault();
+        openWeekPicker('copy', contextMenu.lesson, contextMenu.slot);
+        return;
+      }
+
+      // Cmd/Ctrl + X → Ausschneiden (Verschieben nach…) – Bonus für Power-User
+      if (cmdOrCtrl && e.key.toLowerCase() === 'x') {
+        e.preventDefault();
+        openWeekPicker('move', contextMenu.lesson, contextMenu.slot);
+        return;
+      }
+
+      // Strg + Pfeil nach oben → nächste freie Stunde
+      if (cmdOrCtrl && e.key === 'ArrowUp') {
+        e.preventDefault();
+        if (checkNextSlotAvailable(contextMenu.lesson, contextMenu.slot)) {
+          handleDuplicateNext(contextMenu.lesson, contextMenu.slot);
+          closeContextMenu();
+        } else {
+          toast('Keine freie Stunde danach', { icon: 'Blocked' });
+        }
+        return;
+      }
+
+      // Strg + Pfeil nach unten → vorherige freie Stunde
+      if (cmdOrCtrl && e.key === 'ArrowDown') {
+        e.preventDefault();
+        if (checkPrevSlotAvailable(contextMenu.lesson, contextMenu.slot)) {
+          handleDuplicatePrev(contextMenu.lesson, contextMenu.slot);
+          closeContextMenu();
+        } else {
+          toast('Keine freie Stunde davor', { icon: 'Blocked' });
+        }
+        return;
+      }
+
+      // Cmd/Ctrl + V → In aktuelle Woche + nächste freie Stunde einfügen (später erweiterbar)
+      // (kann man später mit Clipboard simulieren oder direkt einfügen)
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [
+    contextMenu,
+    handleDeleteLesson,
+    handleDuplicateNext,
+    handleDuplicatePrev,
+    checkNextSlotAvailable,
+    checkPrevSlotAvailable,
+    openWeekPicker,
+    closeContextMenu,
+  ]);
 
   const getWeekDateRange = useCallback((weekNumber, year) => {
-    const jan1 = new Date(year, 0, 1);
+    const weekNum = typeof weekNumber === 'object' ? weekNumber.week : weekNumber;
+    const yearToUse = typeof weekNumber === 'object' && weekNumber.isNextYear ? year + 1 : year;
+    const jan1 = new Date(yearToUse, 0, 1);
     const dayOfWeekJan1 = jan1.getDay();
     const daysToFirstThursday = (4 - dayOfWeekJan1 + 7) % 7;
     const firstThursday = new Date(jan1.getFullYear(), jan1.getMonth(), jan1.getDate() + daysToFirstThursday);
     const dayOfWeekFirstThursday = firstThursday.getDay();
     const diffToMondayOfFirstWeek = (dayOfWeekFirstThursday + 6) % 7;
     const mondayOfFirstWeek = new Date(firstThursday.getFullYear(), firstThursday.getMonth(), firstThursday.getDate() - diffToMondayOfFirstWeek);
-    const mondayOfWeek = new Date(mondayOfFirstWeek.getFullYear(), mondayOfFirstWeek.getMonth(), mondayOfFirstWeek.getDate() + (weekNumber - 1) * 7);
+    const mondayOfWeek = new Date(mondayOfFirstWeek.getFullYear(), mondayOfFirstWeek.getMonth(), mondayOfFirstWeek.getDate() + (weekNum - 1) * 7);
     const fridayOfWeek = new Date(mondayOfWeek.getFullYear(), mondayOfWeek.getMonth(), mondayOfWeek.getDate() + 4);
     const mondayStr = mondayOfWeek.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' });
     const fridayStr = fridayOfWeek.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' });
@@ -222,12 +697,13 @@ const YearlyGrid = React.memo(({
 
   const getHolidayForWeek = useCallback((weekNumber) => {
     if (!holidays || holidays.length === 0) return null;
+    const weekNum = typeof weekNumber === 'object' ? weekNumber.week : weekNumber;
     // Verwende die gleiche Logik wie getCurrentWeek für mondayOfWeek1
     const jan4 = new Date(currentYear, 0, 4);
     const daysToMonday = (jan4.getDay() + 6) % 7;
     const mondayOfWeek1 = new Date(jan4.getTime() - daysToMonday * 86400000);
     const weekStart = new Date(mondayOfWeek1);
-    weekStart.setDate(mondayOfWeek1.getDate() + (weekNumber - 1) * 7);
+    weekStart.setDate(mondayOfWeek1.getDate() + (weekNum - 1) * 7);
     weekStart.setHours(0, 0, 0, 0);
     const weekEnd = new Date(weekStart);
     weekEnd.setDate(weekStart.getDate() + 6);
@@ -248,63 +724,9 @@ const YearlyGrid = React.memo(({
     onLessonClick(lesson, slot);
   }, [onLessonClick]);
 
-  const [classHeaderHeight, setClassHeaderHeight] = useState(50);
-  const [subjectHeaderHeight, setSubjectHeaderHeight] = useState(rowHeight);
-
-  useEffect(() => {
-    setSubjectHeaderHeight(rowHeight);
-  }, [rowHeight]);
-
-  useEffect(() => {
-    const updateDimensions = () => {
-      if (subjectHeaderRef.current) {
-        setClassHeaderHeight(subjectHeaderRef.current.getBoundingClientRect().height);
-      }
-    };
-
-    const observer = new ResizeObserver(updateDimensions);
-    if (containerRef.current) observer.observe(containerRef.current);
-
-    updateDimensions(); // Initial call
-
-    return () => observer.disconnect();
-  }, [densityMode, uniqueSubjects.length]);
-
-  useEffect(() => {
-    if (
-      containerRef.current && 
-      !hasScrolledToCurrentWeek.current && 
-      uniqueSubjects.length > 0 && 
-      currentYear === new Date().getFullYear()
-    ) {
-      const timer = setTimeout(() => {
-        if (containerRef.current) {
-          const target = (currentWeek - 1) * rowHeight;
-          containerRef.current.scrollTop = target;
-          hasScrolledToCurrentWeek.current = true;
-        }
-      }, 600);
-
-      return () => clearTimeout(timer);
-    }
-  }, [currentWeek, rowHeight, currentYear, uniqueSubjects.length]);
-
-  useEffect(() => {
-    hasScrolledToCurrentWeek.current = false;
-  }, [activeClassId, densityMode]);
-
-  if (!subjects || subjects.length === 0 || uniqueSubjects.length === 0) {
-    return (
-      <div className="flex items-center justify-center h-64 text-gray-500 dark:text-slate-400 bg-white dark:bg-slate-800 rounded-xl border border-gray-400 dark:border-slate-700">
-        Keine Fächer für diese Klasse gefunden. Überprüfen Sie die Datenladung in YearlyOverview oder entities.js.
-      </div>
-    );
-  }
-
-  const selectedSet = useMemo(() => new Set(selectedLessons), [selectedLessons]);
-
   const renderWeekRow = (week) => {
-    const isCurrentWeek = week === currentWeek && currentYear === new Date().getFullYear();
+    const weekNum = typeof week === 'object' ? week.week : week;
+    const isCurrentWeek = weekNum === currentWeek && (typeof week === 'object' && week.isNextYear ? currentYear + 1 : currentYear) === new Date().getFullYear();
     const weekDates = getWeekDateRange(week, currentYear);
     const holiday = getHolidayForWeek(week);
     const holidayDisplay = getHolidayDisplay(holiday);
@@ -320,17 +742,17 @@ const YearlyGrid = React.memo(({
         if (renderedSlots.has(lessonNumber)) continue;
 
         // Immer mit subject **Name** → konsistent mit selectedLessons
-        const key = `${week}-${subject}-${lessonNumber}`;
+        const key = `${weekNum}-${subject}-${lessonNumber}`;
         const lesson = lessonsByWeek[key] || null;
 
         const slot = {
-          week_number: week,
+          week_number: weekNum,
           subject: subject,           // ← Name!
           lesson_number: lessonNumber,
           school_year: currentYear
         };
 
-        const isSelected = selectedSet.has(key);
+        const isSelected = isAssignMode ? selectedSet.has(key) : false;
         const hasTopic = !!lesson?.topic_id;
 
         // ================ LEERE SLOTS ================
@@ -340,11 +762,29 @@ const YearlyGrid = React.memo(({
               key={key}
               className={`
                 relative border border-gray-200 dark:border-slate-700 p-0.5
-                ${isAssignMode ? 'cursor-pointer hover:bg-green-50 dark:hover:bg-green-900/30' : ''}
+                ${isAssignMode ? 'cursor-pointer hover:bg-green-50 dark:hover:bg-green-900/30' : 'cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-900/30'}
                 ${isSelected ? 'ring-4 ring-green-500 ring-inset bg-green-50 dark:bg-green-900/30' : ''}
+                ${dragOverSlot?.week_number === weekNum && 
+                  dragOverSlot?.subject === subject && 
+                  dragOverSlot?.lesson_number === lessonNumber
+                    ? 'ring-4 ring-emerald-400 ring-inset bg-emerald-100 dark:bg-emerald-900/40 scale-105 z-10' 
+                    : ''
+                }
               `}
               style={{ width: `${cellWidth}px`, height: `${rowHeight}px` }}
-              onClick={() => isAssignMode && onSelectLesson(slot)}
+              onClick={() => isAssignMode ? onSelectLesson(slot) : onLessonClick(null, slot)}
+              onDragOver={(e) => {
+                e.preventDefault();
+                handleDragOver(e, slot);
+              }}
+              onDragLeave={handleDragLeave}
+              onDrop={(e) => {
+                e.preventDefault();
+                e.stopPropagation(); // wichtig!
+                const lessonId = e.dataTransfer.getData('lessonId');
+                const isCopy = e.dataTransfer.getData('isCopy') === 'true';
+                handleDrop(lessonId, slot, isCopy);
+              }}
             >
               {isAssignMode && (
                 <Checkbox
@@ -358,6 +798,10 @@ const YearlyGrid = React.memo(({
                 activeTopicId={activeTopicId}
                 defaultColor={subjectColor}
                 densityMode={densityMode}
+                // === NEU ===
+                lessonSlot={slot}
+                lessonData={lesson}
+                onContextMenu={handleContextMenu}
               />
             </div>
           );
@@ -374,7 +818,7 @@ const YearlyGrid = React.memo(({
 
             let j = lessonNumber + 1;                // mit dem NÄCHSTEN Slot weitermachen
             while (j <= lessonSlotsCount) {
-              const checkKey = `${week}-${subject}-${j}`;
+              const checkKey = `${weekNum}-${subject}-${j}`;
               const check = lessonsByWeek[checkKey];
               if (check && check.topic_id === lesson.topic_id) {
                 topicLessons.push(check);
@@ -402,6 +846,18 @@ const YearlyGrid = React.memo(({
                 style={{ width: `${topicWidth}px`, height: `${rowHeight}px` }}
                 onMouseEnter={(e) => onShowHover({ ...lesson, topic_id: topic.id, color: topic.color || subjectColor, mergedLessons: topicLessons }, e)}
                 onMouseLeave={onHideHover}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  handleDragOver(e, slot);
+                }}
+                onDragLeave={handleDragLeave}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation(); // wichtig!
+                  const lessonId = e.dataTransfer.getData('lessonId');
+                  const isCopy = e.dataTransfer.getData('isCopy') === 'true';
+                  handleDrop(lessonId, slot, isCopy);
+                }}
               >
                 <div
                   className="h-full w-full cursor-pointer flex items-center justify-center text-center rounded-md"
@@ -441,9 +897,27 @@ const YearlyGrid = React.memo(({
                 relative border border-gray-200 dark:border-slate-700 p-0.5
                 ${isAssignMode && !hasTopic ? 'cursor-pointer hover:bg-green-50 dark:hover:bg-green-900/30' : ''}
                 ${isSelected ? 'ring-4 ring-green-500 ring-inset bg-green-50 dark:bg-green-900/30' : ''}
+                ${dragOverSlot?.week_number === weekNum && 
+                  dragOverSlot?.subject === subject && 
+                  dragOverSlot?.lesson_number === lessonNumber
+                    ? 'ring-4 ring-emerald-400 ring-inset bg-emerald-100 dark:bg-emerald-900/40 scale-105 z-10' 
+                    : ''
+                }
               `}
               style={{ width: `${doubleWidth}px`, height: `${rowHeight}px` }}
               onClick={() => isAssignMode && !hasTopic && onSelectLesson(slot)}
+              onDragOver={(e) => {
+                e.preventDefault();
+                handleDragOver(e, slot);
+              }}
+              onDragLeave={handleDragLeave}
+              onDrop={(e) => {
+                e.preventDefault();
+                e.stopPropagation(); // wichtig!
+                const lessonId = e.dataTransfer.getData('lessonId');
+                const isCopy = e.dataTransfer.getData('isCopy') === 'true';
+                handleDrop(lessonId, slot, isCopy);
+              }}
             >
               {isAssignMode && !hasTopic && (
                 <Checkbox checked={isSelected} className="absolute top-2 left-2 z-50 pointer-events-none" />
@@ -455,6 +929,10 @@ const YearlyGrid = React.memo(({
                 defaultColor={subjectColor}
                 densityMode={densityMode}
                 isDoubleLesson={true}
+                // === NEU ===
+                lessonSlot={slot}
+                lessonData={lesson}
+                onContextMenu={handleContextMenu}
               />
             </div>
           );
@@ -469,9 +947,27 @@ const YearlyGrid = React.memo(({
               relative border border-gray-200 dark:border-slate-700 p-0.5
               ${isAssignMode && !hasTopic ? 'cursor-pointer hover:bg-green-50 dark:hover:bg-green-900/30' : ''}
               ${isSelected ? 'ring-4 ring-green-500 ring-inset bg-green-50 dark:bg-green-900/30' : ''}
+              ${dragOverSlot?.week_number === weekNum && 
+                dragOverSlot?.subject === subject && 
+                dragOverSlot?.lesson_number === lessonNumber
+                  ? 'ring-4 ring-emerald-400 ring-inset bg-emerald-100 dark:bg-emerald-900/40 scale-105 z-10' 
+                  : ''
+              }
             `}
             style={{ width: `${cellWidth}px`, height: `${rowHeight}px` }}
             onClick={() => isAssignMode && !hasTopic && onSelectLesson(slot)}
+            onDragOver={(e) => {
+              e.preventDefault();
+              handleDragOver(e, slot);
+            }}
+            onDragLeave={handleDragLeave}
+            onDrop={(e) => {
+              e.preventDefault();
+              e.stopPropagation(); // wichtig!
+              const lessonId = e.dataTransfer.getData('lessonId');
+              const isCopy = e.dataTransfer.getData('isCopy') === 'true';
+              handleDrop(lessonId, slot, isCopy);
+            }}
           >
             {isAssignMode && !hasTopic && (
               <Checkbox
@@ -488,6 +984,14 @@ const YearlyGrid = React.memo(({
               onMouseLeave={onHideHover}
               allYearlyLessons={allYearlyLessons}
               densityMode={densityMode}
+              // === NEU ===
+              lessonSlot={slot}
+              lessonData={lesson}
+              onContextMenu={handleContextMenu}
+              // Drag-Handler
+              onDragStart={handleDragStart}
+              onDragOver={(e) => handleDragOver(e, slot)}
+              onDrop={(lessonId, targetSlot, isCopy) => handleDrop(lessonId, targetSlot, isCopy)}
             />
           </div>
         );
@@ -529,7 +1033,8 @@ const YearlyGrid = React.memo(({
           }}
         >
           <div className={`text-sm ${densityMode === 'compact' ? 'text-xs' : ''}`}>
-            KW {week}
+            KW {typeof week === 'object' ? week.display : week}
+            {typeof week === 'object' && week.isNextYear && <span className="text-xs opacity-70"> ({currentYear + 1})</span>}
           </div>
           <div className={`text-xs text-gray-500 dark:text-slate-400 ${densityMode === 'compact' ? 'hidden' : ''}`}>
             {weekDates.mondayStr} - {weekDates.fridayStr}
@@ -539,6 +1044,20 @@ const YearlyGrid = React.memo(({
       </div>
     );
   };
+
+  if (!subjects || subjects.length === 0 || uniqueSubjects.length === 0) {
+    return (
+      <div className="flex items-center justify-center h-64 text-gray-500 dark:text-slate-400 bg-white dark:bg-slate-800 rounded-xl border border-gray-400 dark:border-slate-700">
+        Keine Fächer für diese Klasse gefunden. Überprüfen Sie die Datenladung in YearlyOverview oder entities.js.
+      </div>
+    );
+  }
+
+  // ────── SICHERE selectedSet Definition (ab ca. Zeile 440) ──────
+  const selectedSet = useMemo(() => {
+    // Nur im Assign-Modus relevant – sonst immer leer
+    return isAssignMode && selectedLessons ? new Set(selectedLessons) : new Set();
+  }, [isAssignMode, selectedLessons]);
 
   return (
     <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm h-full flex flex-col">
@@ -598,13 +1117,87 @@ const YearlyGrid = React.memo(({
 
         {/* Wochen */}
         <div style={{ minWidth: `${totalWidth}px` }}>
-          {weeks.map(week => (
-            <React.Fragment key={week}>
-              {renderWeekRow(week)}
+          {weeks.map(weekObj => (
+            <React.Fragment key={weekObj.id}> {/* STABILER KEY! */}
+              {renderWeekRow(weekObj)}
             </React.Fragment>
           ))}
         </div>
       </div>
+      {/* === NEU === */}
+      {contextMenu && (
+        <LessonContextMenu
+          isOpen={!!contextMenu}
+          onClose={closeContextMenu}
+          position={{ x: contextMenu.x, y: contextMenu.y }}
+          onMove={() => openWeekPicker('move', contextMenu.lesson, contextMenu.slot)}
+          onCopy={() => openWeekPicker('copy', contextMenu.lesson, contextMenu.slot)}
+          
+          // === NEU: Mit Verfügbarkeits-Check ===
+          onDuplicateNext={() => {
+            const available = checkNextSlotAvailable(contextMenu.lesson, contextMenu.slot);
+            if (available) {
+              handleDuplicateNext(contextMenu.lesson, contextMenu.slot);
+            } else {
+              toast('Keine freie Stunde danach', { icon: 'Blocked' });
+            }
+            closeContextMenu();
+          }}
+          nextSlotAvailable={checkNextSlotAvailable(contextMenu.lesson, contextMenu.slot)}
+
+          onDuplicatePrev={() => {
+            const available = checkPrevSlotAvailable(contextMenu.lesson, contextMenu.slot);
+            if (available) {
+              handleDuplicatePrev(contextMenu.lesson, contextMenu.slot);
+            } else {
+              toast('Keine freie Stunde davor', { icon: 'Blocked' });
+            }
+            closeContextMenu();
+          }}
+          prevSlotAvailable={checkPrevSlotAvailable(contextMenu.lesson, contextMenu.slot)}
+
+          onEdit={() => {
+            handleCellClick(contextMenu.lesson, contextMenu.slot);
+            closeContextMenu();
+          }}
+          onDelete={() => {
+            handleDeleteLesson(contextMenu.lesson.id);
+            closeContextMenu();
+          }}
+        />
+      )}
+
+      {weekPicker && (
+        <WeekPickerModal
+          isOpen={!!weekPicker}
+          onClose={() => setWeekPicker(null)}
+          onWeekSelect={handleWeekSelected}
+          currentYear={currentYear}
+          yearViewMode={yearViewMode}
+          schoolYearStartWeek={schoolYearStartWeek}
+          currentWeek={getCurrentWeek()}
+        />
+      )}
+
+      {slotPicker && (
+        <SlotPickerModal
+          isOpen={!!slotPicker}
+          onClose={() => setSlotPicker(null)}
+          onSelect={handleSlotSelected}
+          week={slotPicker.week}
+          year={slotPicker.year}
+          subjects={subjects.map(s => ({
+            id: s.id,
+            name: s.name,
+            lessons_per_week: s.lessons_per_week || 4, // ← hier!
+          }))}
+          occupiedSlots={new Set(
+            lessons
+              .filter(l => l.week_number === slotPicker.week && Number(l.school_year) === slotPicker.year)
+              .map(l => `${l.subject}-${l.lesson_number}`)
+          )}
+        />
+      )}
     </div>
   );
 });

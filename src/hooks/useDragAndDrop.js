@@ -175,31 +175,28 @@ const useDragAndDrop = (lessonsForCurrentWeek, allLessons, allerleiLessons, curr
         optimisticUpdateAllLessons(newLesson, true); // true indicates addition
         console.log('Debug: Created lesson:', newLesson);
 
+        // NEU – Nur Master anlegen, Slave nur verlinken
         if (isDoubleLesson && availableYearly.second_yearly_lesson_id) {
-          const secondYearly = yearlyLessons.find(yl => yl.id === availableYearly.second_yearly_lesson_id);
-          if (secondYearly) {
-            const secondTimeSlot = timeSlots.find(ts => ts.period === finalTarget.period + 1);
-            if (!secondTimeSlot) {
-              console.error('No time slot for second period of double lesson:', finalTarget.period + 1);
-              toast.error('Kein Zeitfenster für zweite Periode der Doppellektion.');
-              throw new Error('No time slot for second period');
-            }
-            const secondLessonData = {
-              ...newLessonData,
+          // Suche, ob die zweite YearlyLesson schon irgendwo geplant ist
+          const existingSlave = allLessons.find(l => 
+            l.yearly_lesson_id === availableYearly.second_yearly_lesson_id &&
+            l.week_number === currentWeek
+          );
+
+          if (existingSlave) {
+            // Verlinke sie als Slave der neuen Master-Lesson
+            await Lesson.update(existingSlave.id, {
+              double_master_id: newLesson.id,
               period_slot: finalTarget.period + 1,
-              yearly_lesson_id: secondYearly.id,
-              second_yearly_lesson_id: availableYearly.id,
-              topic_id: secondYearly.topic_id || null,
-              is_exam: secondYearly.is_exam || false,
-              is_half_class: secondYearly.is_half_class || false,
-              start_time: secondTimeSlot.start || '08:45',
-              end_time: secondTimeSlot.end || '09:30',
-            };
-            console.log('Debug: Creating second lesson for double lesson:', secondLessonData);
-            const secondLesson = await Lesson.create(secondLessonData);
-            optimisticUpdateAllLessons(secondLesson, true);
-            console.log('Debug: Created second lesson:', secondLesson);
+              day_of_week: finalTarget.day
+            });
+            optimisticUpdateAllLessons(existingSlave.id, {
+              double_master_id: newLesson.id,
+              period_slot: finalTarget.period + 1,
+              day_of_week: finalTarget.day
+            });
           }
+          // Falls keine existiert → einfach ignorieren (wird später beim Auflösen sichtbar)
         }
 
         // Reassign and update order for the affected subject
@@ -295,6 +292,17 @@ const useDragAndDrop = (lessonsForCurrentWeek, allLessons, allerleiLessons, curr
           console.log('Debug: Updating second lesson for double lesson:', { lessonId: secondLesson.id, secondUpdate });
           optimisticUpdateAllLessons(secondLesson.id, secondUpdate);
           await Lesson.update(secondLesson.id, secondUpdate);
+        }
+      }
+      // In handleDragEnd, wenn is_double_lesson:
+      if (draggedLesson.is_double_lesson && !draggedLesson.double_master_id) {
+        // Das ist der Master → Slave mitverschieben
+        const slave = allLessons.find(l => l.double_master_id === draggedLesson.id);
+        if (slave) {
+          await Lesson.update(slave.id, {
+            day_of_week: finalTarget.day,
+            period_slot: finalTarget.period + 1
+          });
         }
       }
 

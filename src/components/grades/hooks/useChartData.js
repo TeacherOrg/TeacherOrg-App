@@ -228,7 +228,7 @@ export const useLeistungsChartData = ({
   }, [performances, students, selectedSubject, selectedStudents, showClassAverage, selectedFachbereich]);
 
   const getStudentColor = (index) => {
-    const colors = ['#8884d8', '#82ca9d', '#ffc658', '#ff7300', '#a4de6c'];
+    const colors = ['#10B981', '#82ca9d', '#ffc658', '#ff7300', '#a4de6c']; // Changed first color to green
     return colors[index % colors.length];
   };
 

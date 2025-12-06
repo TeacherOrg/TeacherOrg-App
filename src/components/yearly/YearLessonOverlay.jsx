@@ -24,14 +24,26 @@ const YearLessonOverlay = memo(({ lesson, overlayRef, position, onMouseLeave, le
         return les.name && les.name !== 'Neue Lektion' ? les.name : `Lektion ${numberFallback}`;
     };
 
-    const renderLessonSection = (les, idx, stepsKey = 'steps') => {
+    const renderLessonSection = (les, idx, stepsKey = 'steps', showSteps = true) => {
         const title = getLessonTitle(les, les.lesson_number || idx + 1);
         const steps = les[stepsKey] || [];
 
         return (
             <div key={idx} className="mb-4 border-b border-slate-700 pb-4 last:border-0">
-                <h4 className="font-bold mb-2 text-center text-white">{title}</h4>
-                {steps.length > 0 ? (
+                <h4 className="font-bold mb-2 text-center text-white flex items-center justify-center">
+                    {title}
+                    {les.is_half_class && (
+                        <span className="ml-2 bg-black/30 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full shadow-md">
+                            1/2
+                        </span>
+                    )}
+                    {les.is_exam && (
+                        <span className="ml-2 bg-black/30 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full shadow-md">
+                            ❗
+                        </span>
+                    )}
+                </h4>
+                {showSteps && steps.length > 0 ? (
                     <div className="overflow-x-auto">
                         <table className="text-sm w-full border-collapse">
                             <thead>
@@ -70,25 +82,25 @@ const YearLessonOverlay = memo(({ lesson, overlayRef, position, onMouseLeave, le
                             </tbody>
                         </table>
                     </div>
-                ) : (
+                ) : showSteps ? (
                     <p className="text-sm text-slate-400 text-center py-4">
                         Keine Ablaufinformationen verfügbar
                     </p>
-                )}
+                ) : null}
             </div>
         );
     };
 
     let content;
     if (lesson?.mergedLessons) {
-        content = lesson.mergedLessons.map((subLesson, idx) => renderLessonSection(subLesson, idx));
+        content = lesson.mergedLessons.map((subLesson, idx) => renderLessonSection(subLesson, idx, 'steps', false));
     } else if (lesson?.is_double_lesson && lesson?.second_yearly_lesson_id && lesson.expand?.second_yearly_lesson_id) {
         content = [
-            renderLessonSection(lesson, 0),
-            renderLessonSection(lesson.expand.second_yearly_lesson_id, 1, 'steps')
+            renderLessonSection(lesson, 0, 'steps', false),
+            renderLessonSection(lesson.expand.second_yearly_lesson_id, 1, 'steps', false)
         ];
     } else {
-        content = renderLessonSection(lesson, 0);
+        content = renderLessonSection(lesson, 0, 'steps', true);
     }
 
     const overlayContent = (

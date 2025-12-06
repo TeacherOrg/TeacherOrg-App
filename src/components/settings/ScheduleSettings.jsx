@@ -36,6 +36,25 @@ export default function ScheduleSettings({ settings, setSettings, classes, subje
                 />
             </div>
 
+            {/* === NEU: Schuljahr-Startwoche === */}
+            <div className="flex items-center space-x-4 rounded-lg border border-slate-300 dark:border-slate-600 p-4">
+                <Label htmlFor="schoolYearStartWeek" className="flex-1">
+                    <span className="font-semibold">Startwoche des Schuljahres</span>
+                    <p className="text-sm text-slate-600 dark:text-slate-400">
+                        Woche, ab der das Schuljahr in der Jahresansicht beginnt (1–52)
+                    </p>
+                </Label>
+                <Input
+                    id="schoolYearStartWeek"
+                    type="number"
+                    min="1"
+                    max="52"
+                    value={settings.schoolYearStartWeek || 35} // typisch KW 35 in DE/AT/CH
+                    onChange={(e) => handleSettingChange('schoolYearStartWeek', Number(e.target.value))}
+                    className="w-20 text-center"
+                />
+            </div>
+
             {settings.scheduleType === 'fixed' && (
                 <div className="space-y-4">
                     <h4 className="text-md font-semibold">Vorlagen-Editor für fixen Stundenplan</h4>

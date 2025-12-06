@@ -7,8 +7,9 @@ export const CONFIG = {
 };
 
 export const STUDENT_COLORS = [
-  '#FF6B6B', '#4ECDC4', '#45B7D1', '#FFA07A', '#98D8C8', '#F7DC6F',
-  '#BB8FCE', '#85C1E9', '#F8C471', '#82E0AA', '#F1998A', '#85CDFD',
+  '#10B981', // Changed to green for first student
+  '#4ECDC4', '#45B7D1', '#FFA07A', '#98D8C8', '#F7DC6F',
+  '#BB8FCE', '#85C1E9', '#F1998A', '#82E0AA', '#F8C471', '#85CDFD',
   '#FFB84D', '#A8E6CF', '#FFD93D', '#6C5CE7', '#FD79A8', '#00B894',
   '#E17055', '#81ECEC', '#FDCB6E', '#6C5CE7', '#FF7675', '#74B9FF'
 ];

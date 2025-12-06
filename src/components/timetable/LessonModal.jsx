@@ -16,6 +16,7 @@ import { createGradient } from '@/utils/colorUtils';
 import pb from '@/api/pb';
 import { allerleiService } from '@/components/timetable/hooks/allerleiService';
 import { useLessonStore } from '@/store';
+import LessonTemplatePopover from '@/components/lesson-planning/LessonTemplatePopover';
 
 const WORK_FORMS = [
   { value: 'frontal', label: '🗣️ Frontal' },
@@ -86,6 +87,8 @@ export default function LessonModal({
   const [validationError, setValidationError] = useState(null);
   const [integratedOriginalData, setIntegratedOriginalData] = useState({});
   const [wasAllerlei, setWasAllerlei] = useState(!!lesson?.collectionName === 'allerlei_lessons');
+  const [showTemplateSave, setShowTemplateSave] = useState(false);
+  const [templateName, setTemplateName] = useState("");
 
   const isEditing = !!lesson;
   const isNew = !lesson;
@@ -526,7 +529,7 @@ export default function LessonModal({
   const handleAddPrimaryStep = () => setPrimarySteps([...primarySteps, { id: generateId(), time: null, workForm: '', activity: '', material: '' }]);
 
   // Handlers for Second Steps
-  const handleUpdateSecondStep = (id, field, value) => setSecondSteps(secondSteps.map(step => step.id === id ? { ...step, [field]: value } : step));
+  const handleUpdateSecondStep = (id, field, value) => setSecondSteps(secondSteps.map((step) => step.id === id ? { ...step, [field]: value } : step));
   const handleRemoveSecondStep = (id) => setSecondSteps(secondSteps.filter(step => step.id !== id));
   const handleAddSecondStep = () => setSecondSteps([...secondSteps, { id: `second-${generateId()}`, time: null, workForm: '', activity: '', material: '' }]);
 
@@ -600,22 +603,35 @@ export default function LessonModal({
           toDeleteIds.push(lessonOnGridToDelete.id);
         }
       } else if (isEditing && !formData.is_double_lesson && lesson?.is_double_lesson) {
+        // Doppellektion wird aufgelöst → Slave-Lesson freigeben
+
+        // 1. Master auf normal setzen
         if (lesson.yearly_lesson_id) {
           await YearlyLesson.update(lesson.yearly_lesson_id, {
             is_double_lesson: false,
             second_yearly_lesson_id: null
           });
         }
-        if (lesson.second_yearly_lesson_id) {
-          await YearlyLesson.update(lesson.second_yearly_lesson_id, { is_double_lesson: false });
-        }
-        const nextPeriodLesson = allLessons.find(l =>
-          l.day_of_week === lesson.day_of_week &&
-          l.period_slot === lesson.period_slot + 1 &&
+
+        // 2. Slave-Lesson suchen und freigeben
+        const slaveLesson = allLessons.find(l => 
+          l.double_master_id === lesson.id &&
           l.week_number === currentWeek
         );
-        if (nextPeriodLesson) {
-          toDeleteIds.push(nextPeriodLesson.id);
+
+        if (slaveLesson) {
+          await Lesson.update(slaveLesson.id, {
+            double_master_id: null,
+            is_double_lesson: false,
+            second_yearly_lesson_id: null
+          });
+
+          // Optional: Auch deren YearlyLesson bereinigen
+          if (slaveLesson.yearly_lesson_id) {
+            await YearlyLesson.update(slaveLesson.yearly_lesson_id, {
+              is_double_lesson: false
+            });
+          }
         }
       }
 
@@ -782,6 +798,22 @@ export default function LessonModal({
           }
           const newLesson = await Lesson.create(lessonData);
           lessonData.id = newLesson.id;
+          // Statt zwei Lessons anzulegen → nur eine Master-Lesson + Slave verlinken
+          if (formData.is_double_lesson && addSecondLesson && selectedSecondLesson) {
+            // Wir haben bereits eine Master-Lesson (die gerade erstellt wird)
+            // Jetzt nur die zweite Lesson als Slave markieren
+            const existingSecondLesson = allLessons.find(l => 
+              l.yearly_lesson_id === selectedSecondLesson &&
+              l.week_number === currentWeek
+            );
+
+            if (existingSecondLesson) {
+              await Lesson.update(existingSecondLesson.id, {
+                double_master_id: newLesson.id,  // ← Verlinkung!
+                period_slot: slotInfo.period + 1
+              });
+            }
+          }
         }
       }
       await onSave(lessonData, toDeleteIds);
@@ -797,11 +829,17 @@ export default function LessonModal({
     }
   };
 
-  const handleDeleteClick = () => {
-    if (isEditing && window.confirm("Sind Sie sicher, dass Sie diese Lektion löschen möchten?")) {
-      onDelete(lesson.id);
-      onClose(); // Neu: Schließe Modal nach Löschen
+  const handleDeleteClick = async () => {
+    if (!isEditing || !window.confirm("Lektion wirklich löschen?")) return;
+
+    // Slave-Lesson suchen und mitlöschen
+    const slave = allLessons.find(l => l.double_master_id === lesson.id);
+    if (slave) {
+      await Lesson.delete(slave.id);
     }
+
+    onDelete(lesson.id);
+    onClose();
   };
 
   const [displayModalColor, setDisplayModalColor] = useState(subjectColor || '#3b82f6');
@@ -825,6 +863,25 @@ export default function LessonModal({
       setDisplayModalColor(createGradient(singleColor, -20, '135deg'));
     }
   }, [isAllerlei, allerleiSubjects, selectedSubject, selectedLessons, allYearlyLessons, subjects, subjectColor]);
+
+  const handleSaveAsTemplate = async () => {
+    if (!templateName.trim()) return;
+
+    try {
+      await pb.collection('lesson_templates').create({
+        name: templateName.trim(),
+        steps: primarySteps,
+        subject: selectedSubject || null,
+        user_id: pb.authStore.model.id,
+        is_global: false,
+      });
+      import('react-hot-toast').then(({ toast }) => toast.success("Vorlage gespeichert!"));
+      setShowTemplateSave(false);
+      setTemplateName("");
+    } catch (err) {
+      import('react-hot-toast').then(({ toast }) => toast.error("Fehler beim Speichern"));
+    }
+  };
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -1029,10 +1086,25 @@ export default function LessonModal({
               {primarySteps.map(step => (
                 <StepRow key={step.id} step={step} onUpdate={(f, v) => handleUpdatePrimaryStep(step.id, f, v)} onRemove={() => handleRemovePrimaryStep(step.id)} maxTime={45} />
               ))}
-              <Button type="button" variant="outline" onClick={handleAddPrimaryStep} className="w-full mt-2 border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white bg-white dark:bg-slate-700 hover:bg-slate-100 dark:hover:bg-slate-600">
-                <PlusCircle className="w-4 h-4 mr-2" />
-                <span className="text-slate-900 dark:text-white">Schritt hinzufügen</span>
-              </Button>
+              <div className="flex gap-2 mt-2">
+                <Button type="button" variant="outline" onClick={handleAddPrimaryStep} className="w-full border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white bg-white dark:bg-slate-700 hover:bg-slate-100 dark:hover:bg-slate-600">
+                  <PlusCircle className="w-4 h-4 mr-2" />
+                  <span className="text-slate-900 dark:text-white">Schritt hinzufügen</span>
+                </Button>
+                <LessonTemplatePopover
+                  subjectId={selectedSubject}
+                  onInsert={(steps, templateName) => {  // ← templateName als zweiter Parameter
+                    const withNewIds = steps.map(s => ({ ...s, id: generateId() }));
+                    setPrimarySteps(prev => [...prev, ...withNewIds]);
+
+                    // Titel der Vorlage übernehmen (falls vorhanden)
+                    if (templateName) {
+                      setFormData(prev => ({ ...prev, name: templateName }));
+                    }
+                  }}
+                  currentSteps={primarySteps}
+                />
+              </div>
             </div>
           </div>
 
@@ -1043,10 +1115,20 @@ export default function LessonModal({
                 {secondSteps.map(step => (
                   <StepRow key={step.id} step={step} onUpdate={(f, v) => handleUpdateSecondStep(step.id, f, v)} onRemove={() => handleRemoveSecondStep(step.id)} maxTime={45} />
                 ))}
-                <Button type="button" variant="outline" onClick={handleAddSecondStep} className="w-full mt-2 border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white bg-white dark:bg-slate-700 hover:bg-slate-100 dark:hover:bg-slate-600">
-                  <PlusCircle className="w-4 h-4 mr-2" />
-                  <span className="text-slate-900 dark:text-white">Schritt hinzufügen</span>
-                </Button>
+                <div className="flex gap-2 mt-2">
+                  <Button type="button" variant="outline" onClick={handleAddSecondStep} className="w-full border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white bg-white dark:bg-slate-700 hover:bg-slate-100 dark:hover:bg-slate-600">
+                    <PlusCircle className="w-4 h-4 mr-2" />
+                    <span className="text-slate-900 dark:text-white">Schritt hinzufügen</span>
+                  </Button>
+                  <LessonTemplatePopover
+                    subjectId={selectedSubject}
+                    onInsert={(steps) => {
+                      const withNewIds = steps.map(s => ({ ...s, id: generateId() }));
+                      setSecondSteps(prev => [...prev, ...withNewIds]);
+                    }}
+                    currentSteps={secondSteps}
+                  />
+                </div>
               </div>
             </div>
           )}
@@ -1054,14 +1136,9 @@ export default function LessonModal({
           <div className="flex justify-between items-center gap-3 pt-6 border-t border-slate-200/50 dark:border-slate-700/50">
             <div className="flex gap-2">
               {isEditing && (
-                <>
-                  <Button type="button" variant="destructive" onClick={handleDeleteClick}>
-                    <Trash2 className="w-4 h-4 mr-2" />Löschen
-                  </Button>
-                  <Button type="button" variant="outline" onClick={() => onDuplicate(lesson)} className="border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white bg-white dark:bg-slate-700 hover:bg-slate-100 dark:hover:bg-slate-600">
-                    <Copy className="w-4 h-4 mr-2" />Kopieren
-                  </Button>
-                </>
+                <Button type="button" variant="destructive" onClick={handleDeleteClick}>
+                  <Trash2 className="w-4 h-4 mr-2" />Löschen
+                </Button>
               )}
             </div>
             <div className="flex gap-3">
@@ -1079,6 +1156,70 @@ export default function LessonModal({
                 <Save className="w-4 h-4 mr-2" />
                 {isEditing ? "Änderungen speichern" : "Lektion planen"}
               </Button>
+              <div className="relative">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    const defaultName = formData.name?.trim() || 
+                                        lesson?.name?.trim() || 
+                                        "Meine Vorlage";
+                    setTemplateName(defaultName);
+                    setShowTemplateSave(true);
+                  }}
+                >
+                  <Copy className="w-4 h-4 mr-2" />
+                  Als Vorlage speichern
+                </Button>
+
+                {/* Popup als fixed Overlay – ragt über alles hinaus */}
+                {showTemplateSave && (
+                  <div className="fixed inset-0 z-[9999] flex items-center justify-center">
+                    {/* Backdrop */}
+                    <div 
+                      className="absolute inset-0 bg-black/50"
+                      onClick={() => {
+                        setShowTemplateSave(false);
+                        setTemplateName("");
+                      }}
+                    />
+
+                    {/* Dialog */}
+                    <div className="relative bg-white dark:bg-slate-800 rounded-lg shadow-2xl p-6 w-96 max-w-[90vw]">
+                      <h3 className="text-lg font-semibold mb-4">Name der Vorlage</h3>
+                      
+                      <Input
+                        autoFocus
+                        value={templateName}
+                        onChange={(e) => setTemplateName(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && handleSaveAsTemplate()}
+                        placeholder="z. B. Einstieg Photosynthese"
+                        className="mb-4"
+                      />
+
+                      <div className="flex justify-end gap-3">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setShowTemplateSave(false);
+                            setTemplateName("");
+                          }}
+                        >
+                          Abbrechen
+                        </Button>
+                        <Button
+                          size="sm"
+                          onClick={handleSaveAsTemplate}
+                          disabled={!templateName.trim()}
+                        >
+                          Speichern
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </form>

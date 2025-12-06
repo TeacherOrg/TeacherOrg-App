@@ -59,6 +59,24 @@ const KompetenzenCharts = ({ ueberfachlich, students, selectedStudents, showClas
       <ResponsiveContainer width="100%" height="100%">
         {isBarChart ? (
           <BarChart data={data} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
+          <defs>
+            <linearGradient id="classAvgGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stopColor="#60a5fa" />
+              <stop offset="100%" stopColor="#3b82f6" />
+            </linearGradient>
+            {selectedStudents.map((studentId, index) => {
+              const student = students.find(s => s && s.id === studentId);
+              if (!student || !student.name) return null;
+              const color = getStudentColor(index);
+              const lighterColor = color.replace('#', '').match(/.{2}/g).map(c => Math.min(255, parseInt(c, 16) + 40).toString(16).padStart(2, '0')).join('');
+              return (
+                <linearGradient key={`studentGradient-${student.id}`} id={`studentGradient-${student.id}`} x1="0%" y1="0%" x2="0%" y2="100%">
+                  <stop offset="0%" stopColor={`#${lighterColor}`} />
+                  <stop offset="100%" stopColor={color} />
+                </linearGradient>
+              );
+            })}
+          </defs>
             <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
             <XAxis
               dataKey="name"
@@ -79,7 +97,7 @@ const KompetenzenCharts = ({ ueberfachlich, students, selectedStudents, showClas
             {showClassAverage && (
               <Bar
                 dataKey="Klassenschnitt"
-                fill="#10B981"
+                fill="url(#classAvgGradient)"
                 opacity={0.8}
               />
             )}
@@ -90,7 +108,7 @@ const KompetenzenCharts = ({ ueberfachlich, students, selectedStudents, showClas
                 <Bar
                   key={`bar-student-${student.id}`}
                   dataKey={student.name}
-                  fill={getStudentColor(index)}
+                  fill={`url(#studentGradient-${student.id})`}
                   opacity={0.8}
                 />
               );
@@ -98,6 +116,24 @@ const KompetenzenCharts = ({ ueberfachlich, students, selectedStudents, showClas
           </BarChart>
         ) : isRadarChart ? (
           <RadarChart data={data} margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
+            <defs>
+              <linearGradient id="classAvgRadarGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+                <stop offset="0%" stopColor="#60a5fa" />
+                <stop offset="100%" stopColor="#3b82f6" />
+              </linearGradient>
+              {selectedStudents.map((studentId, index) => {
+                const student = students.find(s => s && s.id === studentId);
+                if (!student || !student.name) return null;
+                const color = getStudentColor(index);
+                const lighterColor = color.replace('#', '').match(/.{2}/g).map(c => Math.min(255, parseInt(c, 16) + 40).toString(16).padStart(2, '0')).join('');
+                return (
+                  <linearGradient key={`studentRadarGradient-${student.id}`} id={`studentRadarGradient-${student.id}`} x1="0%" y1="0%" x2="0%" y2="100%">
+                    <stop offset="0%" stopColor={`#${lighterColor}`} />
+                    <stop offset="100%" stopColor={color} />
+                  </linearGradient>
+                );
+              })}
+            </defs>
             <PolarGrid stroke="hsl(var(--border))" />
             <PolarAngleAxis
               dataKey="name"
@@ -107,8 +143,8 @@ const KompetenzenCharts = ({ ueberfachlich, students, selectedStudents, showClas
               <Radar
                 name="Klassenschnitt"
                 dataKey="Klassenschnitt"
-                stroke="#10B981"
-                fill="#10B981"
+                stroke="#3b82f6" // Changed to blue
+                fill="url(#classAvgRadarGradient)"
                 fillOpacity={0.2}
                 strokeWidth={2}
                 connectNulls={false}
@@ -123,7 +159,7 @@ const KompetenzenCharts = ({ ueberfachlich, students, selectedStudents, showClas
                   name={student.name}
                   dataKey={student.name}
                   stroke={getStudentColor(index)}
-                  fill={getStudentColor(index)}
+                  fill={`url(#studentRadarGradient-${student.id})`}
                   fillOpacity={0.1}
                   strokeWidth={2}
                   connectNulls={false}
@@ -165,7 +201,7 @@ const KompetenzenCharts = ({ ueberfachlich, students, selectedStudents, showClas
               <Line
                 type="monotone"
                 dataKey="Klassenschnitt"
-                stroke="#10B981"
+                stroke="#3b82f6" // Changed to blue
                 strokeWidth={2}
                 dot={{ r: 4 }}
                 connectNulls={false}
@@ -206,6 +242,17 @@ const KompetenzenCharts = ({ ueberfachlich, students, selectedStudents, showClas
           <div style={{ width: '100%', height: 300 }}>
             {renderChartContent('line', ueberfachlichProgressionData, [1, 5], false)}
           </div>
+          {/* NEU: Trennung und Klassenschnitt-Anzeige für Konsistenz */}
+          <div className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-700">
+            <div className="text-center">
+              <p className="text-sm text-slate-600 dark:text-slate-400 mb-1">
+                Kompetenz Klassenschnitt
+              </p>
+              <p className="text-4xl font-bold text-blue-600 dark:text-blue-400">
+                {ueberfachlichProgressionData.length > 0 ? (ueberfachlichProgressionData.reduce((sum, item) => sum + (item.Klassenschnitt || 0), 0) / ueberfachlichProgressionData.length).toFixed(2) : '—'}
+              </p>
+            </div>
+          </div>
         </CardContent>
       </Card>
       <Card className="bg-white dark:bg-slate-800 text-black dark:text-white border-slate-200 dark:border-slate-700">
@@ -220,6 +267,17 @@ const KompetenzenCharts = ({ ueberfachlich, students, selectedStudents, showClas
         <CardContent>
           <div style={{ width: '100%', height: 300 }}>
             {renderChartContent(shouldUseUeberfachlichBarChart ? 'bar' : 'radar', ueberfachlichData, [1, 5], false)}
+          </div>
+          {/* NEU: Trennung und Klassenschnitt-Anzeige für Konsistenz */}
+          <div className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-700">
+            <div className="text-center">
+              <p className="text-sm text-slate-600 dark:text-slate-400 mb-1">
+                Kompetenzübersicht Klassenschnitt
+              </p>
+              <p className="text-4xl font-bold text-blue-600 dark:text-blue-400">
+                {ueberfachlichData.length > 0 ? (ueberfachlichData.reduce((sum, item) => sum + (item.Klassenschnitt || 0), 0) / ueberfachlichData.length).toFixed(2) : '—'}
+              </p>
+            </div>
           </div>
         </CardContent>
       </Card>

@@ -5,6 +5,7 @@ import { Plus, GraduationCap, FileText, BarChart3, Users } from "lucide-react";
 import { motion } from "framer-motion";
 import PerformanceView from "../components/grades/PerformanceView";
 import CalendarLoader from "../components/ui/CalendarLoader";
+import { useSearchParams } from "react-router-dom";
 
 export default function GradesPage() {
   const [students, setStudents] = useState([]);
@@ -14,6 +15,8 @@ export default function GradesPage() {
   const [activeClassId, setActiveClassId] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [searchParams] = useSearchParams();
+  const selectedStudentId = searchParams.get('studentId');
 
   const loadData = useCallback(async () => {
     setIsLoading(true);
@@ -137,6 +140,7 @@ export default function GradesPage() {
               activeClassId={activeClassId}
               classes={classes}
               onDataChange={handleDataChange}
+              selectedStudentId={selectedStudentId}
             />
           ) : (
             <div className="text-center py-20">

@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { format } from "date-fns";
+import { calculateWeightedGrade } from '@/components/grades/utils/calculateWeightedGrade';
 
 export const useLeistungsChartData = ({
   performances = [],
@@ -50,8 +51,7 @@ export const useLeistungsChartData = ({
           .map(perf => perf.grade)
           .filter(g => typeof g === 'number' && g > 0);
         if (validGrades.length > 0) {
-          const avgGrade = validGrades.reduce((sum, perf) => sum + perf, 0) / validGrades.length;
-          point['Klassenschnitt'] = parseFloat(avgGrade.toFixed(2));
+          point['Klassenschnitt'] = calculateWeightedGrade(sameAssessments) || null;
         } else {
           point['Klassenschnitt'] = null;
         }
@@ -90,16 +90,7 @@ export const useLeistungsChartData = ({
         subjectMap[subjectName] = { name: subjectName };
       }
       if (showClassAverage) {
-        const allGrades = filteredPerfs
-          .filter(p => getSubjectId(p.subject) === subjectId)
-          .map(p => p.grade)
-          .filter(g => typeof g === 'number' && g > 0);
-        if (allGrades.length > 0) {
-          const avgGrade = allGrades.reduce((sum, grade) => sum + grade, 0) / allGrades.length;
-          subjectMap[subjectName]['Klassenschnitt'] = parseFloat(avgGrade.toFixed(2));
-        } else {
-          subjectMap[subjectName]['Klassenschnitt'] = null;
-        }
+        subjectMap[subjectName]['Klassenschnitt'] = calculateWeightedGrade(filteredPerfs.filter(p => getSubjectId(p.subject) === subjectId)) || null;
       }
       selectedStudents.forEach((studentId) => {
         const student = students.find(s => s && s.id === studentId);
@@ -112,8 +103,7 @@ export const useLeistungsChartData = ({
               .map(p => p.grade)
               .filter(g => typeof g === 'number' && g > 0);
             if (grades.length > 0) {
-              const avgGrade = grades.reduce((sum, grade) => sum + grade, 0) / grades.length;
-              subjectMap[subjectName][student.name || 'Unnamed'] = parseFloat(avgGrade.toFixed(2));
+              subjectMap[subjectName][student.name || 'Unnamed'] = calculateWeightedGrade(studentPerfsForSubject) || null;
             } else {
               subjectMap[subjectName][student.name || 'Unnamed'] = null;
             }
@@ -145,16 +135,7 @@ export const useLeistungsChartData = ({
             fachbereichMap[fachbereich] = { name: fachbereich };
           }
           if (showClassAverage) {
-            const allGrades = filteredPerfs
-              .filter(p => Array.isArray(p.fachbereiche) && p.fachbereiche.includes(fachbereich))
-              .map(p => p.grade)
-              .filter(g => typeof g === 'number' && g > 0);
-            if (allGrades.length > 0) {
-              const avgGrade = allGrades.reduce((sum, grade) => sum + grade, 0) / allGrades.length;
-              fachbereichMap[fachbereich]['Klassenschnitt'] = parseFloat(avgGrade.toFixed(2));
-            } else {
-              fachbereichMap[fachbereich]['Klassenschnitt'] = null;
-            }
+            fachbereichMap[fachbereich]['Klassenschnitt'] = calculateWeightedGrade(filteredPerfs.filter(p => Array.isArray(p.fachbereiche) && p.fachbereiche.includes(fachbereich))) || null;
           }
           selectedStudents.forEach((studentId) => {
             const student = students.find(s => s && s.id === studentId);
@@ -167,8 +148,7 @@ export const useLeistungsChartData = ({
                   .map(p => p.grade)
                   .filter(g => typeof g === 'number' && g > 0);
                 if (grades.length > 0) {
-                  const avgGrade = grades.reduce((sum, grade) => sum + grade, 0) / grades.length;
-                  fachbereichMap[fachbereich][student.name || 'Unnamed'] = parseFloat(avgGrade.toFixed(2));
+                  fachbereichMap[fachbereich][student.name || 'Unnamed'] = calculateWeightedGrade(studentPerfsForFachbereich) || null;
                 } else {
                   fachbereichMap[fachbereich][student.name || 'Unnamed'] = null;
                 }
@@ -206,16 +186,7 @@ export const useLeistungsChartData = ({
         };
       }
       if (showClassAverage) {
-        const allGrades = filteredPerfs
-          .filter(p => p.assessment_name === perf.assessment_name && p.date === perf.date)
-          .map(p => p.grade)
-          .filter(g => typeof g === 'number' && g > 0);
-        if (allGrades.length > 0) {
-          const avgGrade = allGrades.reduce((sum, grade) => sum + grade, 0) / allGrades.length;
-          assessmentMap[key]['Klassenschnitt'] = parseFloat(avgGrade.toFixed(2));
-        } else {
-          assessmentMap[key]['Klassenschnitt'] = null;
-        }
+        assessmentMap[key]['Klassenschnitt'] = calculateWeightedGrade(filteredPerfs.filter(p => p.assessment_name === perf.assessment_name && p.date === perf.date)) || null;
       }
       selectedStudents.forEach((studentId) => {
         const student = students.find(s => s && s.id === studentId);

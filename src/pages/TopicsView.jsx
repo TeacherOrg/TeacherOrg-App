@@ -132,7 +132,15 @@ const TopicsView = () => {
         toast.success('Thema erstellt');
       }
       handleCloseAddModal(subjectId);
-      await loadData();
+      // Entfernt: await loadData();
+      // Stattdessen: Cache direkt updaten
+      queryClient.setQueryData(['topics'], (old = []) => {
+        const exists = old.find(t => t.id === savedTopic.id);
+        if (exists) {
+          return old.map(t => t.id === savedTopic.id ? savedTopic : t);
+        }
+        return [...old, savedTopic];
+      });
       return savedTopic;
     } catch (error) {
       console.error('Error saving topic:', error);
@@ -141,13 +149,25 @@ const TopicsView = () => {
   };
 
   const handleDeleteTopic = async (topicId) => {
+    // 1. Optimistic Update – Thema sofort aus UI entfernen
+    queryClient.setQueryData(['topics'], (oldTopics = []) => 
+      oldTopics.filter(t => t.id !== topicId)
+    );
+
+    // Optional: auch aus allTopics im lokalen State entfernen (falls du das noch irgendwo nutzt)
+    setAllTopics(prev => prev.filter(t => t.id !== topicId));
+
     try {
+      // 2. Jetzt wirklich löschen (inkl. Cascade über deinen Service!)
       await Topic.delete(topicId);
-      toast.success('Thema gelöscht');
-      await loadData();
+
+      toast.success('Thema und alle Lektionen gelöscht');
     } catch (error) {
-      console.error('Error deleting topic:', error);
-      toast.error('Fehler beim Löschen des Themas');
+      // Falls was schiefgeht → zurückrollen
+      toast.error('Löschen fehlgeschlagen – wird wieder angezeigt');
+      
+      // Cache wiederherstellen
+      queryClient.invalidateQueries(['topics']);
     }
   };
 

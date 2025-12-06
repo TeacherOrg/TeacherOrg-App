@@ -25,15 +25,23 @@ const UpdateModal = ({ isOpen, onClose, version }) => {
         {
           subcategory: 'Jahresansicht',
           items: [
-            { text: 'Fixe Fachzeile', type: 'fixed' },
-            { text: 'Fachzeile mit Fachfarben', type: 'fixed' },
-            { text: 'Skalierungsanpassungen', type: 'fixed' },
+            { text: 'Rechtsklick auf Zelle öffnet Menü zum Verschieben + Kopieren', type: 'fixed' },
+            { text: 'Shortcuts für Lektionszellen ohne Themen (Verschieben, Kopieren)', type: 'fixed' },
           ],
         },
         {
           subcategory: 'Themenansicht',
           items: [
             { text: 'Themenzuweisung bestehender Lektionen', type: 'fixed' },
+            { text: 'Themenspezifische Materialien speichern für Bearbeitungsmenü', type: 'fixed' },
+            { text: 'Thema löschen = Löschen aller zugehörigen Lektionen', type: 'fixed' },
+          ],
+        },
+        {
+          subcategory: 'Lektionsbearbeitungsmenü',
+          items: [
+            { text: 'Materialien aus Thema stehen bei den Schritten zur Verfügung ', type: 'fixed' },
+            { text: 'Lektionstemplates können erstellt werden und erlauben hinzufügen neuer Lektionen', type: 'fixed' },
           ],
         },
         {
@@ -43,9 +51,16 @@ const UpdateModal = ({ isOpen, onClose, version }) => {
           ],
         },
         {
+          subcategory: 'Hilfebereich',
+          items: [
+            { text: 'Kurzanleitungen in Einstellungsmenü "Hilfe"', type: 'fixed' },
+            { text: 'Shortcuts für häufige Aktionen aufgeführt', type: 'fixed' },
+          ],
+        },
+        {
           subcategory: 'Lehrplankompetenzen',
           items: [
-            { text: 'Überfachliche Kompetenzen Bugfix', type: 'fixed' },
+            { text: 'Testphase', type: 'warning' },
           ],
         },
       ],
@@ -83,31 +98,34 @@ const UpdateModal = ({ isOpen, onClose, version }) => {
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>TeacherOrg Update: Version Alpha 2</DialogTitle>
+          <DialogTitle>TeacherOrg Update: Version Alpha 3.6.9</DialogTitle>
           <DialogDescription>
             Hier sind die neuesten Änderungen:
-            {updates.map((section, sectionIndex) => (
-              <div key={sectionIndex} className="mt-4">
-                <h3 className="font-bold text-lg">{section.category}</h3>
-                <ul className="list-disc pl-5 mt-2">
-                  {section.subcategories.map((subcat, subcatIndex) => (
-                    <li key={subcatIndex}>
-                      <span className="font-semibold">{subcat.subcategory}:</span>
-                      <ul className="list-disc pl-5 mt-1">
-                        {subcat.items.map((item, itemIndex) => (
-                          <li key={itemIndex}>
-                            {getIcon(item.type)}
-                            {item.text}
-                          </li>
-                        ))}
-                      </ul>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ))}
           </DialogDescription>
         </DialogHeader>
+        {/* Inhalt außerhalb von DialogDescription */}
+        <div className="mt-4 space-y-6">
+          {updates.map((section, sectionIndex) => (
+            <div key={sectionIndex}>
+              <h3 className="font-bold text-lg">{section.category}</h3>
+              <ul className="list-disc pl-5 mt-2 space-y-2">
+                {section.subcategories.map((subcat, subcatIndex) => (
+                  <li key={subcatIndex}>
+                    <span className="font-semibold">{subcat.subcategory}:</span>
+                    <ul className="list-disc pl-5 mt-1">
+                      {subcat.items.map((item, itemIndex) => (
+                        <li key={itemIndex}>
+                          {getIcon(item.type)}
+                          {item.text}
+                        </li>
+                      ))}
+                    </ul>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
         <Button onClick={onClose}>Verstanden</Button>
       </DialogContent>
     </Dialog>
