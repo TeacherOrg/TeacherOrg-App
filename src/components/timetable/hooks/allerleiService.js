@@ -200,5 +200,56 @@ export const allerleiService = {
     }
     // Optional: Existenz prüfen (async, wenn nötig)
     return true;
+  },
+
+  restoreYearlyLessons: async (
+    yearlyLessonIds,
+    allLessons,
+    timeSlots,
+    currentWeek,
+    day_of_week,
+    period_slot
+  ) => {
+    const restored = [];
+
+    for (const ylId of yearlyLessonIds) {
+      // Prüfen, ob schon eine sichtbare Lesson existiert
+      const existing = allLessons.find(
+        l => l.yearly_lesson_id === ylId && l.week_number === currentWeek && !l.is_hidden
+      );
+
+      if (existing) {
+        restored.push(existing);
+        continue;
+      }
+
+      // YearlyLesson holen, um das Fach zu bekommen
+      const yearlyLesson = await YearlyLesson.findById(ylId);
+      if (!yearlyLesson) {
+        console.warn(`YearlyLesson ${ylId} nicht gefunden beim Wiederherstellen.`);
+        continue;
+      }
+
+      const timeSlot = timeSlots.find(ts => ts.period === period_slot) || { start: '07:25', end: '08:10' };
+
+      const newLesson = await Lesson.create({
+        yearly_lesson_id: ylId,
+        week_number: currentWeek,
+        day_of_week,
+        period_slot,
+        start_time: timeSlot.start,
+        end_time: timeSlot.end,
+        is_hidden: false,
+        user_id: pb.authStore.model.id,
+        // WICHTIG: subject aus der YearlyLesson übernehmen!
+        subject: yearlyLesson.subject,
+        // Optional: falls du expand benutzt, auch subject_name setzen
+        // subject_name: yearlyLesson.expand?.subject?.name || yearlyLesson.subject_name,
+      });
+
+      restored.push(newLesson);
+    }
+
+    return restored;
   }
 };

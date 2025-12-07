@@ -74,7 +74,7 @@ const MaterialQuickAdd = ({ step, onUpdate, topicMaterials = [], topicColor }) =
   );
 };
 
-const StepRow = ({ step, onUpdate, onRemove, topicMaterials = [], topicColor, isLast = false }) => {
+const StepRow = ({ step, onUpdate, onRemove, topicMaterials = [], topicColor, isLast = false, isUnifiedDouble }) => {
   const [isMaterialFocused, setIsMaterialFocused] = useState(false);
 
   const showQuickAdd = topicMaterials.length > 0 && (isLast || isMaterialFocused);
@@ -89,6 +89,7 @@ const StepRow = ({ step, onUpdate, onRemove, topicMaterials = [], topicColor, is
         placeholder="Zeit"
         className="text-center bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600"
         min="0"
+        max={isUnifiedDouble ? 90 : 45}  // ← dynamisch!
       />
 
       {/* Arbeitsform */}
@@ -164,7 +165,8 @@ export default function LessonModal({
   allYearlyLessons = [], 
   currentWeek = null, 
   currentYear = new Date().getFullYear(),
-  autoAssignTopicId
+  autoAssignTopicId,
+  onSaveAndNext // new prop
 }) {
   const [formData, setFormData] = useState({
     name: '',
@@ -185,6 +187,8 @@ export default function LessonModal({
   const [secondYearlyLessonId, setSecondYearlyLessonId] = useState('');
   const [showTemplateSave, setShowTemplateSave] = useState(false);
   const [templateName, setTemplateName] = useState("");
+  const [isUnifiedDouble, setIsUnifiedDouble] = useState(false); // neu!
+  const [saveAndNext, setSaveAndNext] = useState(false); // new state
 
   const isEditing = !!lesson;
 
@@ -276,6 +280,7 @@ export default function LessonModal({
         second_name: '',
         second_yearly_lesson_id: null 
       }));
+      setIsUnifiedDouble(false); // neu: reset unified mode
     }
   };
 
@@ -401,9 +406,9 @@ export default function LessonModal({
         ...data,
         topic_id: data.topic_id === 'no_topic' ? null : data.topic_id,
         steps: cleanStepsData(primarySteps),
-        secondSteps: addSecondLesson ? cleanStepsData(secondSteps) : [],
-        is_double_lesson: data.is_double_lesson,
-        second_yearly_lesson_id: addSecondLesson ? secondYearlyLessonId : null,
+        secondSteps: isUnifiedDouble ? [] : (addSecondLesson ? cleanStepsData(secondSteps) : []),
+        is_double_lesson: data.is_double_lesson, // bleibt true!
+        second_yearly_lesson_id: isUnifiedDouble || !addSecondLesson ? null : secondYearlyLessonId,
         notes: data.notes
       };
 
@@ -489,6 +494,13 @@ export default function LessonModal({
       import('react-hot-toast').then(({ toast }) => {
         toast.success('Lektion erfolgreich gespeichert');
       });
+
+      // new logic for save and next
+      if (saveAndNext) {
+        const nextNumber = Number(displayLesson.lesson_number) + 1;
+        onSaveAndNext?.(nextNumber);
+        setSaveAndNext(false);
+      }
     } catch (error) {
       setIsSubmitting(false);
       console.error('Error in handleSubmit:', error);
@@ -681,6 +693,34 @@ export default function LessonModal({
             </div>
           )}
 
+          {formData.is_double_lesson && (
+            <div className="p-3 rounded-lg bg-slate-100/50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 space-y-3 mt-4">
+              <div className="flex items-center gap-2">
+                <Switch 
+                  id="unified-double" 
+                  checked={isUnifiedDouble} 
+                  onCheckedChange={(checked) => {
+                    setIsUnifiedDouble(checked);
+                    if (checked) {
+                      // Wenn wir auf "eine 90-Min-Lektion" umstellen → zweite Steps in erste mergen
+                      setPrimarySteps(prev => [...prev, ...secondSteps.map(s => ({ ...s, id: generateId() }))]);
+                      setSecondSteps([]);
+                      setAddSecondLesson(false); // Zweiter Block wird ausgeblendet
+                    }
+                  }}
+                />
+                <Label htmlFor="unified-double" className="text-sm font-medium cursor-pointer">
+                  Als eine 90-Minuten-Lektion planen (ein Steps-Block)
+                </Label>
+              </div>
+              {isUnifiedDouble && (
+                <p className="text-xs text-slate-600 dark:text-slate-400 pl-8">
+                  Die Zeit-Spalte erlaubt jetzt bis 90 Minuten. Im Stundenplan wird es trotzdem als Doppellektion angezeigt.
+                </p>
+              )}
+            </div>
+          )}
+
           <div className="flex justify-between items-start">
             <div className="flex-1 space-y-2 mr-6">
               <Label className="text-sm font-semibold text-slate-900 dark:text-white">Thema</Label>
@@ -713,6 +753,7 @@ export default function LessonModal({
                   topicMaterials={currentTopic?.materials || []}
                   topicColor={topicColor}
                   isLast={step.id === lastPrimaryStepId}
+                  isUnifiedDouble={isUnifiedDouble}
                 />
               ))}
               <div className="flex gap-2 mt-2">
@@ -736,7 +777,7 @@ export default function LessonModal({
             </div>
           </div>
           
-          {formData.is_double_lesson && addSecondLesson && (
+          {formData.is_double_lesson && addSecondLesson && !isUnifiedDouble && (
             <div className="space-y-4">
               <Label className="font-semibold text-slate-900 dark:text-white">Zweite Lektion – Schritte</Label>
               <div className="space-y-3 p-4 border rounded-lg bg-slate-100/50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700">
@@ -749,6 +790,7 @@ export default function LessonModal({
                     topicMaterials={currentTopic?.materials || []}
                     topicColor={topicColor}
                     isLast={step.id === lastSecondStepId}
+                    isUnifiedDouble={isUnifiedDouble}
                   />
                 ))}
                 <div className="flex gap-2 mt-2">
@@ -794,6 +836,16 @@ export default function LessonModal({
               >
                 <Save className="w-4 h-4 mr-2" />
                 Lektionsplan speichern
+              </Button>
+              <Button
+                type="button"
+                variant="default"
+                className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                onClick={() => setSaveAndNext(true)}
+                disabled={isSubmitting}
+              >
+                <Save className="w-4 h-4 mr-2" />
+                Speichern & nächste
               </Button>
               <div className="relative">
                 <Button

@@ -8,8 +8,8 @@ import { Badge } from "@/components/ui/badge"; // NEU: Für Badges in der Modal
 import { ResponsiveContainer, LineChart, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Line, BarChart, Bar, RadarChart, PolarGrid, PolarAngleAxis, Radar, ReferenceArea, PolarRadiusAxis, Text } from 'recharts';
 import { BarChart3, ArrowLeft, AlertCircle, ChevronRight, TrendingUp, TrendingDown } from 'lucide-react'; // NEU: TrendingUp/Down hinzugefügt
 import { calculateWeightedGrade } from '@/components/grades/utils/calculateWeightedGrade'; // ← Import hinzugefügt
+import { CLASS_AVG_COLOR } from '@/components/grades/utils/constants'; // ← Neu: Zentraler Import für CLASS_AVG_COLOR
 
-const CLASS_AVG_COLOR = '#3b82f6'; // Changed to blue
 const ASSESSMENT_COLORS = ['#8884d8', '#82ca9d', '#ffc658', '#ff7300', '#a4de6c', '#d0ed57', '#ff9f40', '#ff6384', '#36a2eb', '#ffce56'];
 
 const getAssessmentColor = (index) => ASSESSMENT_COLORS[index % ASSESSMENT_COLORS.length];
@@ -467,7 +467,7 @@ const Leistungscharts = ({ performances, students, subjects, selectedStudents, s
                 });
                 
                 const classAvg = allClassPerfs.length > 0
-                  ? (allClassPerfs.reduce((sum, p) => sum + p.grade, 0) / allClassPerfs.length).toFixed(2)
+                  ? calculateWeightedGrade(allClassPerfs).toFixed(2)
                   : null;
                 
                 const diff = classAvg && kpis.averageGrade > 0

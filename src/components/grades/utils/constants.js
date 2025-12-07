@@ -7,11 +7,12 @@ export const CONFIG = {
 };
 
 export const STUDENT_COLORS = [
-  '#10B981', // Changed to green for first student
-  '#4ECDC4', '#45B7D1', '#FFA07A', '#98D8C8', '#F7DC6F',
-  '#BB8FCE', '#85C1E9', '#F1998A', '#82E0AA', '#F8C471', '#85CDFD',
-  '#FFB84D', '#A8E6CF', '#FFD93D', '#6C5CE7', '#FD79A8', '#00B894',
-  '#E17055', '#81ECEC', '#FDCB6E', '#6C5CE7', '#FF7675', '#74B9FF'
+  '#16A34A', // 1. Schüler: kräftiges Grün → perfekt!
+  '#EA580C', '#0D9488', '#8B5CF6', '#EC4899', '#14B8A6',
+  '#F59E0B', '#6366F1', '#EF4444', '#06B6D4', '#FBBF24',
+  '#A78BFA', '#10B981', '#F97316', '#3B82F6'
 ];
+
+export const CLASS_AVG_COLOR = '#2563EB'; // Etwas dunkleres Blau (blue-600) – noch klarer vom Grün getrennt
 
 export const getStudentColor = (index) => STUDENT_COLORS[index % STUDENT_COLORS.length];

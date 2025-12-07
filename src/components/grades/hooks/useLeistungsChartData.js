@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { format } from "date-fns";
 import { calculateWeightedGrade } from '@/components/grades/utils/calculateWeightedGrade';
+import { getStudentColor } from '@/components/grades/utils/constants';
 
 export const useLeistungsChartData = ({
   performances = [],
@@ -201,11 +202,6 @@ export const useLeistungsChartData = ({
 
     return Object.values(assessmentMap);
   }, [performances, students, selectedSubject, selectedStudents, showClassAverage, selectedFachbereich]);
-
-  const getStudentColor = (index) => {
-    const colors = ['#8884d8', '#82ca9d', '#ffc658', '#ff7300', '#a4de6c'];
-    return colors[index % colors.length];
-  };
 
   return { lineData, subjectData, fachbereichData, fachbereichDetailData, getStudentColor };
 };

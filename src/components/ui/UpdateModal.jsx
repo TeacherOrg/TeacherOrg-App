@@ -23,6 +23,15 @@ const UpdateModal = ({ isOpen, onClose, version }) => {
           ],
         },
         {
+          subcategory: 'Leistungsansicht',
+          items: [
+            { text: 'Achtung: Prüfungsgewichtung muss eingegeben werden', type: 'warning' },
+            { text: 'Notenschnittberechnungen korrigiert', type: 'fixed' },
+            { text: 'Klassendurchschnittsfarbe angepasst für bessere Lesbarkeit', type: 'fixed' },
+            { text: 'Weitere Leistungsansicht-Verbesserungen', type: 'fixed' },
+          ],
+        },
+        {
           subcategory: 'Jahresansicht',
           items: [
             { text: 'Rechtsklick auf Zelle öffnet Menü zum Verschieben + Kopieren', type: 'fixed' },
@@ -48,6 +57,7 @@ const UpdateModal = ({ isOpen, onClose, version }) => {
           subcategory: 'Neue Schüleransicht',
           items: [
             { text: 'Zeigt Überblick der Schüler mit den Stärken und Schwächen', type: 'fixed' },
+            { text: 'Notenschnittberechnungen korrigiert', type: 'fixed' },
           ],
         },
         {
@@ -96,15 +106,15 @@ const UpdateModal = ({ isOpen, onClose, version }) => {
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent>
+      <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>TeacherOrg Update: Version Alpha 3.6.9</DialogTitle>
+          <DialogTitle>TeacherOrg Update: Version Alpha 4.2.0</DialogTitle>
           <DialogDescription>
             Hier sind die neuesten Änderungen:
           </DialogDescription>
         </DialogHeader>
-        {/* Inhalt außerhalb von DialogDescription */}
-        <div className="mt-4 space-y-6">
+        {/* Scrollbar-Bereich */}
+        <div className="mt-4 max-h-[60vh] overflow-y-auto space-y-6 pr-2">
           {updates.map((section, sectionIndex) => (
             <div key={sectionIndex}>
               <h3 className="font-bold text-lg">{section.category}</h3>
@@ -126,7 +136,12 @@ const UpdateModal = ({ isOpen, onClose, version }) => {
             </div>
           ))}
         </div>
-        <Button onClick={onClose}>Verstanden</Button>
+        {/* Button bleibt unten fixiert */}
+        <div className="mt-6">
+          <Button onClick={onClose} className="w-full sm:w-auto">
+            Verstanden
+          </Button>
+        </div>
       </DialogContent>
     </Dialog>
   );
