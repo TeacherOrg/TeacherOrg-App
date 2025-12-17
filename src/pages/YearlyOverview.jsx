@@ -657,8 +657,8 @@ function InnerYearlyOverviewPage() {
     ]
   );
 
-  const handleSaveLesson = useCallback(async (lessonData) => {
-    const originalLesson = editingLesson;
+  const handleSaveLesson = useCallback(async (lessonData, originalLessonOverride) => {
+    const originalLesson = originalLessonOverride || editingLesson;
     const wasDoubleLesson = originalLesson?.is_double_lesson || false;
     const oldSecondYearlyId = originalLesson?.second_yearly_lesson_id;
 
