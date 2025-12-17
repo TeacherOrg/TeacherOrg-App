@@ -12,7 +12,7 @@ import { useAllerleiLogic } from '@/components/timetable/allerlei/useAllerleiLog
 import { AllerleiSubjectSelector, AllerleiToggleSection } from '@/components/timetable/allerlei/AllerleiComponents';
 import { calculateAllerleiGradient, prepareAllerleiForPersist } from '@/components/timetable/allerlei/AllerleiUtils';
 import { findFreeSlot } from '@/utils/slotUtils';
-import { createGradient } from '@/utils/colorUtils';
+import { createGradient, createMixedSubjectGradient } from '@/utils/colorUtils';
 import pb from '@/api/pb';
 import { allerleiService } from '@/components/timetable/hooks/allerleiService';
 import { useLessonStore } from '@/store';
@@ -74,12 +74,21 @@ export default function LessonModal({
   isOpen, onClose, onSave, onDelete, onDuplicate,
   lesson, copiedLesson, slotInfo, currentWeek, allLessons, allYearlyLessons, timeSlots,
   subjectColor, initialSubject, subjects, topics, activeClassId, setEditingLesson,
-  setIsModalOpen, currentYear // Add this line
+  setIsModalOpen, currentYear,
+  formData: propFormData = {} // Rename prop to propFormData
 }) {
   const { setAllLessons } = useLessonStore();  // Korrigiert: Hook an Top-Level
   const queryClient = useQueryClient();
 
-  const [formData, setFormData] = useState({});
+  // Direkt nach den Props
+  const [formData, setFormData] = useState(() => {
+    // Wenn formData von außen kommt (z.B. beim Allerlei-Drag), dann verwenden
+    if (propFormData && Object.keys(propFormData).length > 0) {
+      return propFormData;
+    }
+    // Sonst normal initialisieren
+    return {};
+  });
   const [primarySteps, setPrimarySteps] = useState([]);
   const [secondSteps, setSecondSteps] = useState([]);
   const [addSecondLesson, setAddSecondLesson] = useState(false);
@@ -572,6 +581,26 @@ export default function LessonModal({
         validateAllerleiSelection();
       }
 
+      // Optional: Prüfung, ob Folgeslots frei sind
+      if (isAllerlei && (formData.period_span || 1) > 1) {
+        const span = formData.period_span || 1;
+        const startPeriod = slotInfo?.period || lesson.period_slot;
+        const endPeriod = startPeriod + span - 1;
+
+        const conflicting = allLessons.some(l => 
+          l.week_number === currentWeek &&
+          l.day_of_week === (slotInfo?.day || lesson.day_of_week) &&
+          l.period_slot > startPeriod &&
+          l.period_slot <= endPeriod &&
+          !l.is_hidden
+        );
+
+        if (conflicting) {
+          setValidationError(`Die folgenden ${span - 1} Perioden sind nicht frei. Bitte wähle einen freien Block.`);
+          return;
+        }
+      }
+
       let lessonData = null;
       let toDeleteIds = [];
       const finalSubject = selectedSubject || lesson?.subject;
@@ -584,17 +613,19 @@ export default function LessonModal({
       if (isEditing && wasAllerlei && !isAllerlei) {
         try {
           const primaryId = dissolvingPrimaryId || getAllerleiYearlyLessonIds()[0];
+          
           if (!primaryId) {
             setValidationError('Primäre Lektion konnte nicht ermittelt werden.');
             return;
           }
 
+          // IDs zum Wiederherstellen
           const ylIdsToRestore = dissolvingPrimaryId 
             ? [dissolvingPrimaryId, ...getAllerleiYearlyLessonIds().slice(1)]
             : getAllerleiYearlyLessonIds();
 
-          // Wiederherstellen + Allerlei löschen
-          await allerleiService.restoreYearlyLessons(
+          // Normale Lessons aus YearlyLessons erstellen
+          const restoredLessons = await allerleiService.restoreYearlyLessons(
             ylIdsToRestore,
             allLessons,
             timeSlots,
@@ -603,38 +634,40 @@ export default function LessonModal({
             lesson.period_slot
           );
 
-          await AllerleiLesson.delete(lesson.id);
+          // WICHTIG: Die Allerlei-Lektion nur löschen, wenn sie noch existiert
+          try {
+            await AllerleiLesson.delete(lesson.id);
+            console.log('Allerlei-Lektion erfolgreich gelöscht:', lesson.id);
+          } catch (err) {
+            if (err.status === 404) {
+              console.log('Allerlei-Lektion war bereits gelöscht – das ist ok.');
+            } else {
+              throw err; // Nur bei echtem Fehler weiterwerfen
+            }
+          }
 
-          // Alle relevanten Queries invalidieren
+          // Refetch + invalidate
+          const updatedLessons = await Lesson.find({ week_number: currentWeek, user_id: pb.authStore.model.id });
+          setAllLessons(updatedLessons);
+
           await queryClient.invalidateQueries({ queryKey: ['lessons', currentWeek] });
           await queryClient.invalidateQueries({ queryKey: ['yearlyLessons'] });
-          await queryClient.invalidateQueries({ queryKey: ['allerleiLessons'] });
 
-          // WICHTIG: Warten, bis die Daten wirklich neu geladen sind
-          await queryClient.refetchQueries({ queryKey: ['lessons', currentWeek] });
-          await queryClient.refetchQueries({ queryKey: ['yearlyLessons'] });
-
-          // Jetzt erst das Modal neu öffnen
-          const updatedLessons = queryClient.getQueryData(['lessons', currentWeek]) || [];
-          const updatedYearly = queryClient.getQueryData(['yearlyLessons']) || [];
-
-          const restoredPrimary = updatedLessons.find(l => l.yearly_lesson_id === primaryId && !l.is_hidden);
+          const restoredPrimary = restoredLessons.find(l => l.yearly_lesson_id === primaryId) ||
+                                  updatedLessons.find(l => l.yearly_lesson_id === primaryId && !l.is_hidden);
 
           if (restoredPrimary) {
             setEditingLesson(restoredPrimary);
             onClose();
-            // Kurz warten, damit alles gerendert ist
-            setTimeout(() => {
-              setIsModalOpen(true);
-            }, 150);
+            setTimeout(() => setIsModalOpen(true), 150);
           } else {
-            setValidationError('Primäre Lektion nicht gefunden nach Refetch.');
+            setValidationError('Primäre Lektion konnte nach Auflösung nicht gefunden werden.');
           }
 
           setDissolvingPrimaryId(null);
         } catch (error) {
-          console.error('Fehler beim Auflösen:', error);
-          setValidationError(error.message || 'Fehler beim Auflösen der Allerlei-Lektion.');
+          console.error('Fehler beim Auflösen der Allerlei-Lektion:', error);
+          setValidationError('Fehler beim Auflösen. Bitte Seite neu laden und erneut versuchen.');
         }
         return;
       }
@@ -645,6 +678,11 @@ export default function LessonModal({
         if (lessonOnGridToDelete) {
           toDeleteIds.push(lessonOnGridToDelete.id);
         }
+        // Bereinige die zweite YearlyLesson – sie darf KEIN is_double_lesson haben
+        await YearlyLesson.update(selectedSecondLesson, {
+          is_double_lesson: false,
+          second_yearly_lesson_id: null
+        });
       } else if (isEditing && !formData.is_double_lesson && lesson?.is_double_lesson) {
         // Doppellektion wird aufgelöst → Slave-Lesson freigeben
 
@@ -721,6 +759,7 @@ export default function LessonModal({
           primary_yearly_lesson_id: getAllerleiYearlyLessonIds()[0],
           added_yearly_lesson_ids: getAllerleiYearlyLessonIds().slice(1),
           allerlei_subjects: allerleiSubjects,
+          period_span: formData.period_span || 1, // ← NEU
         };
         await AllerleiLesson.update(lesson.id, lessonData);
       } else if (isEditing && lesson.collectionName !== 'allerlei_lessons' && isAllerlei) {  
@@ -741,6 +780,7 @@ export default function LessonModal({
           isNew: true,
           collectionName: 'allerlei_lessons',
           allerlei_subjects: allerleiSubjects,
+          period_span: formData.period_span || 1, // ← NEU
         };
         const newAllerlei = await allerleiService.convertToAllerlei(lesson.id, lessonData);
         lessonData.id = newAllerlei.id;
@@ -766,6 +806,7 @@ export default function LessonModal({
           day_of_week: slotInfo.day,
           period_slot: slotInfo.period,
           allerlei_subjects: allerleiSubjects,
+          period_span: formData.period_span || 1, // ← NEU
         };
         const newAllerlei = await AllerleiLesson.create(lessonData);
         // Neu: Verify creation
@@ -807,7 +848,8 @@ export default function LessonModal({
             await YearlyLesson.update(lessonData.second_yearly_lesson_id, {
               name: preparedFormData.second_name || `Lektion ${Number(allYearlyLessons.find(yl => yl.id === lessonData.yearly_lesson_id)?.lesson_number || 1) + 1}`,
               steps: preparedFormData.steps?.filter(s => s.id?.startsWith('second-')).map(s => ({ ...s, id: s.id.replace('second-', '') })) || [],
-              is_double_lesson: true
+              is_double_lesson: false,  // Bereinigen: Zweite Lektion darf kein Doppelflag haben
+              second_yearly_lesson_id: null
             });
           }
         } else {
@@ -904,23 +946,30 @@ export default function LessonModal({
 
   useEffect(() => {
     if (isAllerlei) {
-      const allSubjectNames = [];
-      const primaryName = subjects.find(s => s.id === selectedSubject)?.name;
-      if (primaryName) allSubjectNames.push(primaryName);
-      Object.values(selectedLessons).forEach(lessonId => {
-        const yl = allYearlyLessons.find(yl => yl.id === lessonId);
-        const name = yl?.expand?.subject?.name || yl?.subject_name || subjects.find(s => s.id === yl?.subject)?.name;
-        if (name && name !== primaryName) allSubjectNames.push(name);
-      });
-      allSubjectNames.push(...allerleiSubjects.filter(Boolean));
-      const uniqueNames = [...new Set(allSubjectNames.filter(Boolean))];
-      const newColor = uniqueNames.length > 1 ? calculateAllerleiGradient(uniqueNames, subjects) : (subjects.find(s => s.name === uniqueNames[0])?.color || '#3b82f6');
-      setDisplayModalColor(newColor);
-    } else {
-      const singleColor = subjects.find(s => s.id === selectedSubject)?.color || subjectColor || '#3b82f6';
-      setDisplayModalColor(createGradient(singleColor, -20, '135deg'));
-    }
-  }, [isAllerlei, allerleiSubjects, selectedSubject, selectedLessons, allYearlyLessons, subjects, subjectColor]);
+    const allSubjectNames = [
+      subjects.find(s => s.id === selectedSubject)?.name,
+      ...Object.values(selectedLessons).map(id => {
+        const yl = allYearlyLessons.find(y => y.id === id);
+        return yl?.expand?.subject?.name || yl?.subject_name || subjects.find(s => s.id === yl?.subject)?.name;
+      }),
+      ...allerleiSubjects
+    ].filter(Boolean);
+
+    const uniqueNames = [...new Set(allSubjectNames)];
+    const colors = uniqueNames
+      .map(name => subjects.find(s => s.name === name)?.color)
+      .filter(Boolean);
+
+    setDisplayModalColor(
+      colors.length > 1 
+        ? createMixedSubjectGradient(colors)
+        : createGradient(colors[0] || '#3b82f6')
+    );
+  } else {
+    const singleColor = subjects.find(s => s.id === selectedSubject)?.color || subjectColor || '#3b82f6';
+    setDisplayModalColor(createGradient(singleColor));
+  }
+  }, [isAllerlei, selectedSubject, selectedLessons, allerleiSubjects, allYearlyLessons, subjects, subjectColor]);
 
   const handleSaveAsTemplate = async () => {
     if (!templateName.trim()) return;
@@ -1148,31 +1197,31 @@ export default function LessonModal({
             </div>
           )}
 
-          {formData.is_double_lesson && (
-            <div className="p-3 rounded-lg bg-slate-100/50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 space-y-3 mt-4">
-              <div className="flex items-center gap-2">
-                <Switch 
-                  id="unified-double" 
-                  checked={isUnifiedDouble} 
-                  onCheckedChange={(checked) => {
-                    setIsUnifiedDouble(checked);
-                    if (checked) {
-                      // Wenn wir auf "eine 90-Minuten-Lektion" umstellen → zweite Steps in erste mergen
-                      setPrimarySteps(prev => [...prev, ...secondSteps.map(s => ({ ...s, id: generateId() }))]);
-                      setSecondSteps([]);
-                      setAddSecondLesson(false); // Zweiter Block wird ausgeblendet
-                    }
-                  }}
-                />
-                <Label htmlFor="unified-double" className="text-sm font-medium cursor-pointer">
-                  Als eine 90-Minuten-Lektion planen (ein Steps-Block)
-                </Label>
-              </div>
-              {isUnifiedDouble && (
-                <p className="text-xs text-slate-600 dark:text-slate-400 pl-8">
-                  Die Zeit-Spalte erlaubt jetzt bis 90 Minuten. Im Stundenplan wird es trotzdem als Doppellektion angezeigt.
-                </p>
-              )}
+          {/* ==================== DAUER DER ALLERLEI-BLOCKSTUNDE ==================== */}
+          {isAllerlei && (
+            <div className="space-y-2 mt-6">
+              <Label className="text-sm font-semibold text-slate-900 dark:text-white">
+                Dauer dieser Allerlei-Lektion
+              </Label>
+              <Select 
+                value={formData.period_span || 1} 
+                onValueChange={(val) => setFormData(prev => ({ ...prev, period_span: Number(val) }))}
+              >
+                <SelectTrigger className="bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={1}>1 Stunde</SelectItem>
+                  <SelectItem value={2}>2 Stunden</SelectItem>
+                  <SelectItem value={3}>3 Stunden</SelectItem>
+                  <SelectItem value={4}>4 Stunden</SelectItem>
+                  <SelectItem value={5}>5 Stunden</SelectItem>
+                  <SelectItem value={6}>6 Stunden</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Die Lektion wird über {formData.period_span || 1} Perioden angezeigt. Die folgenden Slots müssen frei sein.
+              </p>
             </div>
           )}
 

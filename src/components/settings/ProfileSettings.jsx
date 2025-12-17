@@ -1,14 +1,16 @@
 // src/components/settings/ProfileSettings.jsx
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import pb from '@/api/pb'; // PocketBase-Client
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { User as UserIcon, Sun, Moon, Monitor, Home, RotateCcw, Mail, Lock } from 'lucide-react';
+import { User as UserIcon, Sun, Moon, Monitor, Home, RotateCcw, Mail, Lock, Eye } from 'lucide-react';
 
-export default function ProfileSettings() {
+export default function ProfileSettings({ onClose }) {
+    const navigate = useNavigate();
     const [user, setUser] = useState(null);
     const [userSettings, setUserSettings] = useState({
         preferred_theme: 'dark',
@@ -253,6 +255,33 @@ export default function ProfileSettings() {
                             <p className="font-semibold text-slate-800 dark:text-white">{user?.full_name || 'Unbekannt'}</p>
                             <p className="text-sm text-slate-600 dark:text-slate-400">{user?.email || 'Keine E-Mail'}</p>
                         </div>
+                    </div>
+                </CardContent>
+            </Card>
+
+            {/* Landing Page Preview */}
+            <Card className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
+                <CardHeader className="pb-3">
+                    <CardTitle className="flex items-center gap-3 text-slate-800 dark:text-white">
+                        <Eye className="w-5 h-5 text-green-500" />
+                        Landingpage anzeigen
+                    </CardTitle>
+                </CardHeader>
+                <CardContent>
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <p className="font-medium text-slate-800 dark:text-white">Vorschau der Landingpage</p>
+                            <p className="text-sm text-slate-600 dark:text-slate-400">
+                                Öffnen Sie die Landingpage temporär, um die App-Funktionen zu erkunden.
+                            </p>
+                        </div>
+                        <Button 
+                            onClick={() => { onClose(); navigate('/landing'); }}
+                            className="bg-green-600 text-white hover:bg-green-700"
+                        >
+                            <Eye className="w-4 h-4 mr-2" />
+                            Anzeigen
+                        </Button>
                     </div>
                 </CardContent>
             </Card>

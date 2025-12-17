@@ -14,35 +14,51 @@ const CompetencyStatus = ({ status }) => {
   return <Circle className="w-4 h-4 text-slate-500" />;
 };
 
-const CompetencyItem = ({ competency, status, onSelect, isSelectable }) => {
+const CompetencyItem = ({ competency, status, onSelect, isSelectable, selectedCompetencyIds }) => {
+  const isSelected = isSelectable && selectedCompetencyIds?.includes(competency.id);
+
   return (
     <motion.div
       initial={{ opacity: 0, x: -10 }}
       animate={{ opacity: 1, x: 0 }}
-      className={`flex items-start gap-3 p-3 rounded-lg hover:bg-slate-700/50 transition-colors ${
-        isSelectable ? 'cursor-pointer' : ''
+      className={`flex items-start gap-3 p-3 rounded-lg transition-all cursor-pointer ${
+        isSelectable
+          ? isSelected
+            ? 'bg-blue-900/50 border-2 border-blue-500 shadow-lg shadow-blue-500/20'
+            : 'hover:bg-slate-700/50 border-2 border-transparent'
+          : 'cursor-default'
       }`}
-      onClick={() => isSelectable && onSelect && onSelect(competency)}
+      onClick={() => isSelectable && onSelect && onSelect(competency.id)}
     >
-      <CompetencyStatus status={status} />
+      {isSelectable && (
+        <div className="mt-1">
+          {isSelected ? (
+            <CheckCircle2 className="w-5 h-5 text-blue-400" />
+          ) : (
+            <Circle className="w-5 h-5 text-slate-600" />
+          )}
+        </div>
+      )}
+      {!isSelectable && <CompetencyStatus status={status} />}
+      
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 mb-1">
-          <span className="text-xs font-mono text-blue-400">{competency.kompetenz_id}</span>  {/* ← angepasst: kompetenz_id */}
+          <span className="text-xs font-mono text-blue-400">{competency.kompetenz_id}</span>
           <span className={`text-xs px-2 py-0.5 rounded ${
-            competency.zyklus === '1' ? 'bg-yellow-900/30 text-yellow-400' :  // ← angepasst: zyklus
+            competency.zyklus === '1' ? 'bg-yellow-900/30 text-yellow-400' :
             competency.zyklus === '2' ? 'bg-orange-900/30 text-orange-400' :
             'bg-red-900/30 text-red-400'
           }`}>
-            Zyklus {competency.zyklus}  {/* ← angepasst: zyklus */}
+            Zyklus {competency.zyklus}
           </span>
         </div>
-        <p className="text-sm text-slate-300 leading-relaxed">{competency.beschreibung}</p>  {/* ← angepasst: beschreibung */}
+        <p className="text-sm text-slate-300 leading-relaxed">{competency.beschreibung}</p>
       </div>
     </motion.div>
   );
 };
 
-const DomainSection = ({ domain, competencies, getCompetencyStatus, onSelectCompetency, isSelectable }) => {
+const DomainSection = ({ domain, competencies, getCompetencyStatus, onSelectCompetency, isSelectable, selectedCompetencyIds }) => {
   const [isExpanded, setIsExpanded] = useState(false);
 
   return (
@@ -86,6 +102,7 @@ const DomainSection = ({ domain, competencies, getCompetencyStatus, onSelectComp
                   status={getCompetencyStatus(competency.id)}
                   onSelect={onSelectCompetency}
                   isSelectable={isSelectable}
+                  selectedCompetencyIds={selectedCompetencyIds}
                 />
               ))}
             </div>
@@ -106,7 +123,8 @@ try {
 	  topics,
 	  currentWeek,
 	  onSelectCompetency,
-	  isSelectable = false
+	  isSelectable = false,
+	  selectedCompetencyIds = []
 	}) {
 	  const [searchTerm, setSearchTerm] = useState('');
 	  const [selectedCycle, setSelectedCycle] = useState('all');
@@ -158,27 +176,25 @@ try {
 
 	  // Determine competency status (bleibt gleich, da c.id die PB-ID ist)
 	  const getCompetencyStatus = (competencyId) => {
-	    const relatedTopics = topics.filter(t => 
-	      t.competency_ids && t.competency_ids.includes(competencyId)
-	    );
+    const relatedTopics = topics.filter(t =>
+      Array.isArray(t.lehrplan_kompetenz_ids) && t.lehrplan_kompetenz_ids.includes(competencyId)
+    );
 
-	    if (relatedTopics.length === 0) return 'not_started';
+    if (relatedTopics.length === 0) return 'not_started';
 
-	    const hasPlannedLessons = relatedTopics.some(topic =>
-	      yearlyLessons.some(lesson => lesson.topic_id === topic.id)
-	    );
+    const hasAnyLesson = relatedTopics.some(topic =>
+      yearlyLessons.some(lesson => lesson.topic_id === topic.id)
+    );
 
-	    if (!hasPlannedLessons) return 'not_started';
+    if (!hasAnyLesson) return 'not_started';
 
-	    const hasCompletedLessons = relatedTopics.some(topic =>
-	      yearlyLessons.some(lesson => 
-	        lesson.topic_id === topic.id && lesson.week_number < currentWeek
-	      )
-	    );
+    const hasPastLesson = relatedTopics.some(topic =>
+      yearlyLessons.some(lesson =>
+        lesson.topic_id === topic.id && lesson.week_number < currentWeek
+      )
+    );
 
-	    return hasCompletedLessons ? 'completed' : 'planned';
-	  };
-
+    return hasPastLesson ? 'completed' : 'planned';  };
 	  const stats = useMemo(() => {
 	    const total = competencies.length;
 	    const completed = competencies.filter(c => getCompetencyStatus(c.id) === 'completed').length;
@@ -260,6 +276,7 @@ try {
 	              getCompetencyStatus={getCompetencyStatus}
 	              onSelectCompetency={onSelectCompetency}
 	              isSelectable={isSelectable}
+	              selectedCompetencyIds={selectedCompetencyIds}
 	            />
 	          ))
 	        )}

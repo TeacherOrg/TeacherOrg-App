@@ -19,6 +19,15 @@ const useDragAndDrop = (lessonsForCurrentWeek, allLessons, allerleiLessons, curr
   );
 
   const handleDragStart = useCallback((event) => {
+    const { activatorEvent } = event;
+
+    // NEU: Wenn Alt gedrückt → komplett abbrechen
+    if (activatorEvent?.altKey) {
+      event.preventDefault();        // ← verhindert Drag komplett
+      return;
+    }
+
+    // Nur hier normalen Drag starten
     setActiveDragId(event.active.id);
     console.log('Debug: Drag started with ID:', event.active.id);
   }, [setActiveDragId]);
@@ -71,27 +80,53 @@ const useDragAndDrop = (lessonsForCurrentWeek, allLessons, allerleiLessons, curr
       // Find next available yearly lesson for this subject in the current week
       const availableYearly = yearlyLessons
         .filter(yl => {
+          // 1. Subject match
           const matchesSubject = yl.subject === subject.id || yl.expand?.subject?.id === subject.id;
+          // 2. Week match
           const matchesWeek = yl.week_number === currentWeek;
+          // 3. Nicht bereits als normale Lektion geplant
           const lessonCount = allLessons.filter(l => 
-            l.yearly_lesson_id === yl.id && 
+            (l.yearly_lesson_id === yl.id || l.second_yearly_lesson_id === yl.id) && 
+            l.week_number === currentWeek && 
+            !l.is_hidden &&
+            l.collectionName !== 'allerlei_lessons' // ← Nur normale!
+          ).length;
+          // 4. Nicht bereits in Allerlei enthalten
+          const isPlannedInAllerlei = allerleiLessons.some(al => 
+            al.week_number === currentWeek &&
+            (al.primary_yearly_lesson_id === yl.id || 
+             (Array.isArray(al.added_yearly_lesson_ids) && al.added_yearly_lesson_ids.includes(yl.id)))
+          );
+          // 5. Nicht selbst eine Allerlei-YearlyLesson
+          const isNotAllerlei = !yl.is_allerlei;
+          // Neu: Slave in normaler Lektion
+          const isPlannedAsSlave = allLessons.some(l => 
+            l.second_yearly_lesson_id === yl.id && 
             l.week_number === currentWeek && 
             !l.is_hidden
-          ).length;
+          );
+
           console.log('Debug: Checking YearlyLesson availability:', { 
             ylId: yl.id, 
-            subject: yl.expand?.subject?.name || yl.subject_name, 
-            week_number: yl.week_number, 
-            lessonCount, 
-            is_half_class: yl.is_half_class 
+            subjectName: yl.expand?.subject?.name || yl.subject_name,
+            lessonCount,
+            isPlannedInAllerlei,
+            isNotAllerlei,
+            isPlannedAsSlave
           });
-          return matchesSubject && matchesWeek && lessonCount < (yl.is_half_class ? 2 : 1);
+
+          return matchesSubject && 
+                 matchesWeek && 
+                 lessonCount < (yl.is_half_class ? 2 : 1) && 
+                 !isPlannedInAllerlei && 
+                 !isPlannedAsSlave && 
+                 isNotAllerlei;
         })
-        .sort((a, b) => Number(a.lesson_number) - Number(b.lesson_number))[0];
+        .sort((a, b) => Number(a.lesson_number) - Number(b.lesson_number))[0]; // Die früheste verfügbare
 
       if (!availableYearly) {
         console.warn('No available yearly lesson for subject:', subject.name);
-        toast.error(`Keine verfügbaren Lektionen für ${subject.name} in Woche ${currentWeek}`);
+        toast.error(`Keine verfügbare Lektion für ${subject.name} in Woche ${currentWeek}. (Bereits in Allerlei oder geplant)`);
         setActiveDragId(null);
         return;
       }
@@ -103,6 +138,21 @@ const useDragAndDrop = (lessonsForCurrentWeek, allLessons, allerleiLessons, curr
         lesson_number: availableYearly.lesson_number,
         is_half_class: availableYearly.is_half_class
       });
+
+      // Korrekte Master/Slave-Zuordnung
+      let masterYL = availableYearly;
+      let slaveYL = null;
+
+      if (availableYearly.second_yearly_lesson_id) {
+        slaveYL = yearlyLessons.find(yl => yl.id === availableYearly.second_yearly_lesson_id);
+        if (slaveYL && Number(slaveYL.lesson_number) < Number(availableYearly.lesson_number)) {
+          // Tausche
+          masterYL = slaveYL;
+          slaveYL = availableYearly;
+        }
+      }
+
+      const isDoubleLesson = !!slaveYL;
 
       const isOccupied = lessonsForCurrentWeek.some(l => 
         l.day_of_week === targetDay && 
@@ -124,7 +174,6 @@ const useDragAndDrop = (lessonsForCurrentWeek, allLessons, allerleiLessons, curr
       }
 
       // Handle double lesson if applicable
-      const isDoubleLesson = availableYearly.is_double_lesson;
       if (isDoubleLesson) {
         const secondPeriod = finalTarget.period + 1;
         const isSecondOccupied = lessonsForCurrentWeek.some(l => 
@@ -155,13 +204,14 @@ const useDragAndDrop = (lessonsForCurrentWeek, allLessons, allerleiLessons, curr
         period_slot: finalTarget.period,
         week_number: currentWeek,
         school_year: currentYear,
-        yearly_lesson_id: availableYearly.id,
-        topic_id: availableYearly.topic_id || null,
+        yearly_lesson_id: masterYL.id,
+        topic_id: masterYL.topic_id || null,
         is_double_lesson: isDoubleLesson,
-        second_yearly_lesson_id: isDoubleLesson ? availableYearly.second_yearly_lesson_id : null,
-        is_exam: availableYearly.is_exam || false,
-        is_half_class: availableYearly.is_half_class || false,
+        second_yearly_lesson_id: isDoubleLesson ? slaveYL.id : null,
+        is_exam: masterYL.is_exam || false,
+        is_half_class: masterYL.is_half_class || false,
         is_allerlei: false,
+        period_span: isDoubleLesson ? 2 : 1,  // NEU: explizit setzen!
         start_time: timeSlot.start || '08:00',
         end_time: timeSlot.end || '08:45',
         user_id: pb.authStore.model.id, // Use authenticated user ID
@@ -176,10 +226,10 @@ const useDragAndDrop = (lessonsForCurrentWeek, allLessons, allerleiLessons, curr
         console.log('Debug: Created lesson:', newLesson);
 
         // NEU – Nur Master anlegen, Slave nur verlinken
-        if (isDoubleLesson && availableYearly.second_yearly_lesson_id) {
+        if (isDoubleLesson && slaveYL) {
           // Suche, ob die zweite YearlyLesson schon irgendwo geplant ist
           const existingSlave = allLessons.find(l => 
-            l.yearly_lesson_id === availableYearly.second_yearly_lesson_id &&
+            l.yearly_lesson_id === slaveYL.id &&
             l.week_number === currentWeek
           );
 
@@ -188,12 +238,14 @@ const useDragAndDrop = (lessonsForCurrentWeek, allLessons, allerleiLessons, curr
             await Lesson.update(existingSlave.id, {
               double_master_id: newLesson.id,
               period_slot: finalTarget.period + 1,
-              day_of_week: finalTarget.day
+              day_of_week: finalTarget.day,
+              period_span: 1,  // explizit
             });
             optimisticUpdateAllLessons(existingSlave.id, {
               double_master_id: newLesson.id,
               period_slot: finalTarget.period + 1,
-              day_of_week: finalTarget.day
+              day_of_week: finalTarget.day,
+              period_span: 1,  // explizit
             });
           }
           // Falls keine existiert → einfach ignorieren (wird später beim Auflösen sichtbar)
@@ -251,7 +303,7 @@ const useDragAndDrop = (lessonsForCurrentWeek, allLessons, allerleiLessons, curr
       console.log('Debug: Using alternative slot for moved lesson:', finalTarget);
     }
 
-    const isDoubleLesson = draggedLesson.is_double_lesson;
+    const isDoubleLesson = !!draggedLesson.second_yearly_lesson_id;
     if (isDoubleLesson) {
       const secondPeriod = finalTarget.period + 1;
       const isSecondOccupied = lessonsForCurrentWeek.some(l =>
@@ -270,6 +322,7 @@ const useDragAndDrop = (lessonsForCurrentWeek, allLessons, allerleiLessons, curr
     const updateData = {
       day_of_week: finalTarget.day,
       period_slot: finalTarget.period,
+      period_span: draggedLesson.is_double_lesson ? 2 : draggedLesson.period_span || 1,
     };
 
     console.log('Debug: Updating lesson:', { lessonId: draggedLesson.id, updateData });
@@ -288,6 +341,7 @@ const useDragAndDrop = (lessonsForCurrentWeek, allLessons, allerleiLessons, curr
           const secondUpdate = {
             day_of_week: finalTarget.day,
             period_slot: finalTarget.period + 1,
+            period_span: 1,  // explizit
           };
           console.log('Debug: Updating second lesson for double lesson:', { lessonId: secondLesson.id, secondUpdate });
           optimisticUpdateAllLessons(secondLesson.id, secondUpdate);
@@ -301,7 +355,8 @@ const useDragAndDrop = (lessonsForCurrentWeek, allLessons, allerleiLessons, curr
         if (slave) {
           await Lesson.update(slave.id, {
             day_of_week: finalTarget.day,
-            period_slot: finalTarget.period + 1
+            period_slot: finalTarget.period + 1,
+            period_span: 1,  // explizit
           });
         }
       }

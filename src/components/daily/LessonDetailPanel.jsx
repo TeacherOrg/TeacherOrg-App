@@ -3,6 +3,10 @@ import { motion } from "framer-motion";
 import { Clock, User, Users, Users2, Building, ChevronLeft, ChevronRight, Play, Coffee, ChevronsRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { getThemeGradient } from "@/utils/colorDailyUtils";
+import TopicProgressBar from "./TopicProgressBar";
+import { useTopicProgress } from "@/hooks/useTopicProgress";
+import AllTopicsProgressOverview from "./AllTopicsProgressOverview";
+import { useAllActiveTopicsProgress } from "@/hooks/useAllActiveTopicsProgress";
 
 const WORK_FORM_ICONS = {
   'Single': User,
@@ -37,6 +41,8 @@ export default function LessonDetailPanel({
   // Determine what to display
   const displayLesson = lesson || (currentItem?.type === 'lesson' ? currentItem : null);
   const isPause = currentItem?.type === 'break';
+  const { topic, planned, completed } = useTopicProgress(displayLesson);
+  const allProgress = useAllActiveTopicsProgress();
 
   // Anpassung für Allerlei: Nutze lesson.color und isGradient
   const getLessonDisplay = (lesson) => {
@@ -207,31 +213,19 @@ export default function LessonDetailPanel({
   // Pause View
   if (isPause) {
     return (
-      <div className="rounded-2xl shadow-2xl border-2 border-slate-300/40 bg-slate-100/50 dark:bg-slate-800/50 overflow-hidden h-full flex flex-col items-center justify-center text-center p-6">
-        <Coffee className="w-20 h-20 text-slate-500 mb-6" />
-        <h2 className={`${customization.fontSize.title} font-bold text-slate-800 dark:text-slate-200`}>
+      <div className="rounded-2xl shadow-2xl bg-white/95 dark:bg-slate-900/95 overflow-hidden h-full flex flex-col items-center justify-center p-8">
+        <Coffee className="w-24 h-24 text-orange-500 mb-8" />
+        <h2 className="text-4xl font-bold text-slate-800 dark:text-slate-200 mb-12">
           {currentItem.name}
         </h2>
-        <span className={`font-bold tracking-tighter ${timeLeftInPause === "Die Pause ist vorbei!" ? "text-2xl" : "text-4xl"}`}>
-          {timeLeftInPause}
-        </span>
-        
-        {nextLesson && (
-          <div className="mt-8 w-full max-w-md">
-            <p className="text-slate-600 dark:text-slate-400 mb-2 font-semibold">Nächste Lektion:</p>
-            <div className="p-4 rounded-xl border-2 transition-all duration-200" style={{ backgroundColor: nextLesson.subject.color + '20', borderColor: nextLesson.subject.color + '50' }}>
-              <div className="flex items-center justify-between">
-                <div>
-                  <h4 className={`${customization.fontSize.content} font-bold text-slate-800 dark:text-slate-200`}>
-                    {nextLesson.subject.name}
-                  </h4>
-                  <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">
-                    {nextLesson.description}
-                  </p>
-                </div>
-                <ChevronsRight className="w-8 h-8 text-slate-400" style={{ color: nextLesson.subject.color }} />
-              </div>
-            </div>
+
+        <div className="w-full max-w-2xl">
+          <AllTopicsProgressOverview progresses={allProgress} />
+        </div>
+
+        {timeLeftInPause && (
+          <div className="mt-12 text-6xl font-bold tracking-tight text-orange-600">
+            {timeLeftInPause}
           </div>
         )}
       </div>
@@ -280,6 +274,9 @@ export default function LessonDetailPanel({
             )}
           </div>
         </div>
+
+        {/* Topic Progress Bar */}
+        <TopicProgressBar topic={topic} planned={planned} completed={completed} />
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto bg-white/95 dark:bg-slate-900/95">

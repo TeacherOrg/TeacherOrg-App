@@ -424,23 +424,9 @@ export default function TopicModal({ isOpen, onClose, onSave, onDelete, topic, s
       materials: allMaterials // ← neu
     };
 
-    try {
-      let savedTopic;
-      if (topic?.id) {
-        savedTopic = await Topic.update(topic.id, payload);
-        toast.success('Thema aktualisiert');
-      } else {
-        savedTopic = await Topic.create(payload);
-        toast.success('Thema erstellt');
-      }
-      
-      onSave({ ...payload, id: savedTopic.id });
-      localStorage.removeItem('draftTopic');
-      onClose();
-    } catch (error) {
-      console.error('Error saving topic:', error);
-      toast.error('Fehler beim Speichern des Themas');
-    }
+    onSave(payload);
+    localStorage.removeItem('draftTopic');
+    onClose();
   };
 
   const handleDelete = async () => {

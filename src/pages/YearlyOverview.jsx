@@ -516,7 +516,6 @@ function InnerYearlyOverviewPage() {
           try {
             const createdLesson = await YearlyLesson.create({
               ...slot,
-              subject: subjectId, // ← Verwende ID
               topic_id: activeTopicId,
               school_year: currentYear,
               name: 'Neue Lektion',
@@ -561,7 +560,6 @@ function InnerYearlyOverviewPage() {
 
                   const createPromise = YearlyLesson.create({
                     ...gapSlot,
-                    subject: subjectId, // ← Verwende ID
                     topic_id: activeTopicId,
                     notes: '',
                     is_double_lesson: false,
@@ -629,7 +627,7 @@ function InnerYearlyOverviewPage() {
           setEditingLesson(null);
           setNewLessonSlot({ 
             ...slot, 
-            subject: subjects.find(s => s.name === slot.subject)?.id, // ← Konvertiere Name zu ID
+            subject: subjects.find(s => s.name === slot.subject)?.id || slot.subject, // ← fallback auf ID
             school_year: currentYear,
             class_id: activeClassId // Hinzufügen von class_id
           });
@@ -659,13 +657,21 @@ function InnerYearlyOverviewPage() {
     ]
   );
 
-  const handleSaveLesson = useCallback(async (lessonData, lessonContext) => {
-    const originalLesson = lessonContext || editingLesson;
+  const handleSaveLesson = useCallback(async (lessonData) => {
+    const originalLesson = editingLesson;
     const wasDoubleLesson = originalLesson?.is_double_lesson || false;
     const oldSecondYearlyId = originalLesson?.second_yearly_lesson_id;
 
     let finalLessonData = { ...lessonData };
     console.log('Debug: Saving lesson with is_half_class:', finalLessonData.is_half_class); // Debugging hinzufügen
+
+    console.log('handleSaveLesson called with:', {
+      hasOriginalLesson: !!originalLesson,
+      hasNewLessonSlot: !!newLessonSlot,
+      primaryId: originalLesson?.id,
+      subjectId: newLessonSlot?.subject || originalLesson?.subject
+    });
+
     if (finalLessonData.is_double_lesson) {
       const nextLesson = yearlyLessons.find(l => l.id === finalLessonData.second_yearly_lesson_id);
       if (!nextLesson || parseInt(nextLesson.lesson_number) !== parseInt(originalLesson?.lesson_number || newLessonSlot?.lesson_number) + 1) {
@@ -681,7 +687,8 @@ function InnerYearlyOverviewPage() {
             school_year: currentYear,
             steps: finalLessonData.secondSteps || [],
             notes: finalLessonData.notes || '',
-            is_double_lesson: true,
+            is_double_lesson: false,  // Zweite Lektion darf kein Doppelflag haben
+            second_yearly_lesson_id: null,  // explizit!
             name: finalLessonData.second_name || `Lektion ${parseInt(originalLesson?.lesson_number || newLessonSlot?.lesson_number) + 1}`,
             description: '',
             user_id: pb.authStore.model.id,
@@ -699,25 +706,28 @@ function InnerYearlyOverviewPage() {
     }
 
     try {
-      // Entferne id aus finalLessonData für Create
       const { id, ...cleanLessonData } = finalLessonData;
       optimisticUpdateYearlyLessons(cleanLessonData, true);
 
       let primaryId = originalLesson?.id;
 
       if (primaryId) {
-        await YearlyLesson.update(primaryId, { ...cleanLessonData, steps: cleanLessonData.steps });
-      } else if (newLessonSlot) {
-        const subjectId = newLessonSlot.subject;
-        console.log('Debug: Saving lesson with subject', { subject: newLessonSlot.subject, subjectId });
+        // Update bestehende Lektion
+        const updatePayload = {
+          ...cleanLessonData,
+          steps: cleanLessonData.steps,
+          subject: originalLesson.subject
+        };
+        await YearlyLesson.update(primaryId, updatePayload);
+        optimisticUpdateYearlyLessons({ id: primaryId, ...updatePayload }, false);
+      } else {
+        // Neue Lektion → Create
+        // Subject ID aus newLessonSlot oder fallback aus displayLesson in formData
+        const subjectId = newLessonSlot?.subject || 
+                          subjects.find(s => s.id === cleanLessonData.subject || s.name === cleanLessonData.subject)?.id;
+
         if (!subjectId) {
-          throw new Error('No valid subject ID found for ' + newLessonSlot.subject);
-        }
-        if (!activeClassId) {
-          throw new Error('No valid class_id found');
-        }
-        if (!pb.authStore.model?.id) {
-          throw new Error('No authenticated user found');
+          throw new Error('Kein gültiges Fach gefunden – subject fehlt');
         }
 
         const createPayload = {
@@ -725,36 +735,33 @@ function InnerYearlyOverviewPage() {
           ...cleanLessonData,
           steps: cleanLessonData.steps,
           name: cleanLessonData.name || 'Neue Lektion',
-          description: cleanLessonData.description || '',
-          user_id: pb.authStore.model.id,
-          class_id: activeClassId,
           subject: subjectId,
+          class_id: activeClassId,
+          user_id: pb.authStore.model.id,
+          school_year: currentYear,
+          week_number: newLessonSlot?.week_number || cleanLessonData.week_number,
+          lesson_number: newLessonSlot?.lesson_number || cleanLessonData.lesson_number,
           topic_id: cleanLessonData.topic_id || null
         };
-        // Entferne id explizit aus dem Create-Payload
-        delete createPayload.id;
 
         const created = await YearlyLesson.create(createPayload);
         primaryId = created.id;
-        if (created) {
-          optimisticUpdateYearlyLessons({ ...created, lesson_number: Number(created.lesson_number) }, true);
-          console.log('Debug: Created lesson', created);
-        } else {
-          throw new Error('Failed to create lesson: No response from server');
-        }
+        optimisticUpdateYearlyLessons({ ...created, lesson_number: Number(created.lesson_number) }, true);
       }
 
       if (finalLessonData.is_double_lesson && finalLessonData.second_yearly_lesson_id) {
         await YearlyLesson.update(finalLessonData.second_yearly_lesson_id, {
           steps: finalLessonData.secondSteps,
-          is_double_lesson: true,
+          is_double_lesson: false,     // ← false!
+          second_yearly_lesson_id: null, // ← null!
           name: finalLessonData.second_name,
           topic_id: finalLessonData.topic_id || null
         });
         optimisticUpdateYearlyLessons({
           id: finalLessonData.second_yearly_lesson_id,
           steps: finalLessonData.secondSteps,
-          is_double_lesson: true,
+          is_double_lesson: false,     // ← false!
+          second_yearly_lesson_id: null, // ← null!
           name: finalLessonData.second_name,
           topic_id: finalLessonData.topic_id || null
         }, false);
@@ -764,8 +771,8 @@ function InnerYearlyOverviewPage() {
         const primaryYL = yearlyLessons.find(yl => yl.id === primaryId);
         const originalTopicId = primaryYL?.topic_id;
 
-        await YearlyLesson.update(oldSecondYearlyId, { is_double_lesson: false, topic_id: originalTopicId });
-        optimisticUpdateYearlyLessons({ id: oldSecondYearlyId, is_double_lesson: false, topic_id: originalTopicId }, false);
+        await YearlyLesson.update(oldSecondYearlyId, { is_double_lesson: false, second_yearly_lesson_id: null, topic_id: originalTopicId });
+        optimisticUpdateYearlyLessons({ id: oldSecondYearlyId, is_double_lesson: false, second_yearly_lesson_id: null, topic_id: originalTopicId }, false);
         await YearlyLesson.update(primaryId, { is_double_lesson: false, second_yearly_lesson_id: null, topic_id: originalTopicId });
         optimisticUpdateYearlyLessons({ id: primaryId, is_double_lesson: false, second_yearly_lesson_id: null, topic_id: originalTopicId }, false);
       }
@@ -789,11 +796,11 @@ function InnerYearlyOverviewPage() {
         }
       }
 
-      setIsLessonModalOpen(false);
+      // setIsLessonModalOpen(false); // Entfernt: Modal wird nur in handleSubmit geschlossen
       setEditingLesson(null);
       setNewLessonSlot(null);
-      queryClientLocal.invalidateQueries(['yearlyData', currentYear]);
-      queryClientLocal.invalidateQueries(['timetableData']);
+      // queryClientLocal.invalidateQueries(['yearlyData', currentYear]); // Entfernt, da optimistic updates die UI aktualisieren
+      // queryClientLocal.invalidateQueries(['timetableData']);
       import('react-hot-toast').then(({ toast }) => {
         toast.success('Lektion erfolgreich gespeichert');
       });
@@ -819,13 +826,13 @@ function InnerYearlyOverviewPage() {
         setIsLessonModalOpen(false);
         setEditingLesson(null);
         setIsTopicLessonsModalOpen(false);
-        queryClientLocal.invalidateQueries(['yearlyData', currentYear]);
-        queryClientLocal.invalidateQueries(['timetableData']);
+        // queryClientLocal.invalidateQueries(['yearlyData', currentYear]); // Entfernt
+        // queryClientLocal.invalidateQueries(['timetableData']);
       }
     } catch (error) {
       console.error("Error deleting lesson:", error);
-      queryClientLocal.invalidateQueries(['yearlyData', currentYear]);
-      queryClientLocal.invalidateQueries(['timetableData']);
+      // queryClientLocal.invalidateQueries(['yearlyData', currentYear]); // Entfernt
+      // queryClientLocal.invalidateQueries(['timetableData']);
     }
   }, [yearlyLessons, queryClientLocal, currentYear]);
 
@@ -1113,7 +1120,11 @@ function InnerYearlyOverviewPage() {
 
       <LessonModal
         isOpen={isLessonModalOpen}
-        onClose={() => setIsLessonModalOpen(false)}
+        onClose={() => {
+          setIsLessonModalOpen(false);
+          queryClientLocal.invalidateQueries(['yearlyData', currentYear]);
+          queryClientLocal.invalidateQueries(['timetableData']);
+        }}
         onSave={handleSaveLesson}
         onDelete={handleDeleteLesson}
         lesson={editingLesson}
@@ -1123,6 +1134,84 @@ function InnerYearlyOverviewPage() {
         allYearlyLessons={yearlyLessons}
         currentWeek={editingLesson?.week_number || newLessonSlot?.week_number}
         currentYear={currentYear}
+        onSaveAndNext={async (nextLessonNumber) => {
+          const currentWeek = newLessonSlot?.week_number || editingLesson?.week_number;
+          const currentSubjectId = newLessonSlot ? subjects.find(s => s.name === newLessonSlot.subject)?.id : editingLesson?.subject;
+
+          if (!currentWeek || !currentSubjectId) {
+            console.warn('Keine gültige Woche oder Fach-ID für nächste Lektion');
+            return;
+          }
+
+          const nextLesson = yearlyLessons.find(
+            l =>
+              l.week_number === currentWeek &&
+              l.subject === currentSubjectId &&
+              Number(l.lesson_number) === nextLessonNumber
+          );
+
+          if (nextLesson) {
+            // Beide States gleichzeitig setzen
+            setEditingLesson(nextLesson);
+            setNewLessonSlot(null);
+            return;
+          }
+
+          // Prüfe, ob in der aktuellen Woche noch Platz für die nächste Lektion ist
+          const subjectLessonsInWeek = yearlyLessons.filter(
+            l => l.week_number === currentWeek && l.subject === currentSubjectId
+          );
+          const maxLessonNumber = subjectLessonsInWeek.length > 0 
+            ? Math.max(...subjectLessonsInWeek.map(l => Number(l.lesson_number))) 
+            : 0;
+
+          let targetWeek = currentWeek;
+          let targetLessonNumber = nextLessonNumber;
+
+          if (nextLessonNumber <= maxLessonNumber + 1) {
+            // Erstelle in der aktuellen Woche
+          } else {
+            // Kein Platz mehr in dieser Woche → nächste Woche, erste Lektion
+            targetWeek = currentWeek + 1;
+            if (targetWeek > 52) {
+              console.warn('Keine weitere Woche verfügbar für neue Lektion');
+              return;
+            }
+            targetLessonNumber = 1;
+          }
+
+          // Erstelle die neue Lektion automatisch
+          try {
+            const currentLesson = editingLesson || yearlyLessons.find(l => l.id === newLessonSlot?.id);
+            const newLessonData = {
+              subject: currentSubjectId,
+              week_number: targetWeek,
+              lesson_number: targetLessonNumber,
+              school_year: currentYear,
+              class_id: activeClassId,
+              name: `Lektion ${targetLessonNumber}`,
+              description: '',
+              user_id: pb.authStore.model.id,
+              topic_id: currentLesson?.topic_id || null,
+              steps: [],
+              notes: '',
+              is_double_lesson: false,
+              is_exam: false,
+              is_half_class: false,
+              second_yearly_lesson_id: null,
+              allerlei_subjects: []
+            };
+
+            const createdLesson = await YearlyLesson.create(newLessonData);
+            optimisticUpdateYearlyLessons(createdLesson, true);
+
+            // Setze editingLesson auf die neu erstellte Lektion
+            setEditingLesson(createdLesson);
+            setNewLessonSlot(null);
+          } catch (error) {
+            console.error('Fehler beim automatischen Erstellen der nächsten Lektion:', error);
+          }
+        }}
       />
 
       <TopicLessonsModal

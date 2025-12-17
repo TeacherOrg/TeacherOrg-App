@@ -119,7 +119,7 @@ const useTimetableData = (currentYear, currentWeek) => {
 
       console.log('Debug: initializeData running with activeClassId:', activeClassId);
 
-      const hasPendingChanges = allLessons.some(l => l.id && l.id.startsWith('temp-') && l.week_number === currentWeek);
+      const hasPendingChanges = (Array.isArray(allLessons) ? allLessons : []).some(l => l.id && l.id.startsWith('temp-') && l.week_number === currentWeek);
       if (!hasPendingChanges) {
         if (!isEqual(allLessons, data.lessonsData || [])) {
           setAllLessons(data.lessonsData || []);

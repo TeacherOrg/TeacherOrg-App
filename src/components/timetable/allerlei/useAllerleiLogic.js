@@ -53,22 +53,11 @@ export const useAllerleiLogic = ({
       setSelectedLessons(initialSelected);
       setIsAllerlei(true);
 
-      // Fallback: wenn allerlei_subjects fehlt oder zu kurz → aus YearlyLessons extrahieren
-      if (subjectsArray.length === 0 || subjectsArray.length < addedIds.length + 1) {
-        const fallbackSubjects = [];
-        addedIds.forEach(id => {
-          const yl = yearlyLessons.find(yl => yl.id === id);
-          if (yl) {
-            const subjectObj = subjectOptions.find(s => s.id === yl.subject);
-            const subjectName = subjectObj?.name || yl.subject || 'Unbekannt';
-            fallbackSubjects.push(subjectName);
-          }
-        });
-        setAllerleiSubjects(fallbackSubjects);
-        console.log('Debug: Fallback allerlei_subjects aus YearlyLessons:', fallbackSubjects);
-      } else {
-        setAllerleiSubjects(subjectsArray);
-      }
+      // Steps: NUR aus initialData übernehmen, KEIN Fallback mehr!
+      setAllerleiSteps(initialData.allerleiSteps || {});
+
+      // Entferne den Fallback-Block mit "Fallback allerlei_subjects aus YearlyLessons" komplett
+      setAllerleiSubjects(subjectsArray);
 
       createTriggered.current = false;
       return;
@@ -150,7 +139,7 @@ export const useAllerleiLogic = ({
     selectedSubject
   ]);
 
-  // Load steps when lessons are selected (unverändert)
+  // Load steps when lessons are selected (unverändert, aber kein Fallback mehr)
   useEffect(() => {
     if (!isAllerlei) {
       setAllerleiSteps({});
@@ -167,19 +156,27 @@ export const useAllerleiLogic = ({
         return;
       }
 
+      // Wenn bereits Steps vorhanden (aus initialData), nicht überschreiben
+      if (allerleiSteps[idx] && allerleiSteps[idx].length > 0) {
+        newSteps[idx] = allerleiSteps[idx];
+        return;
+      }
+
       const yearlyLesson = yearlyLessons.find(yl => yl.id === lessonId);
       if (yearlyLesson && yearlyLesson.steps) {
         const intIdx = parseInt(idx);
-        if (intIdx > 0) {
+        if (intIdx === 0) {
+          // Primary: direkt übernehmen, KEINE Kopie mit neuen IDs!
+          newSteps[0] = yearlyLesson.steps;  // Referenz oder flache Kopie ohne ID-Änderung
+          hasChanges = true;
+        } else if (intIdx > 0) {
+          // Sekundäre: kopieren mit neuen IDs (wie bisher)
           newSteps[intIdx - 1] = yearlyLesson.steps.map(step => ({
             ...step,
             id: `allerlei-${intIdx - 1}-${generateId()}-${step.id || generateId()}`
           }));
           hasChanges = true;
         }
-      } else {
-        newSteps[idx] = [];
-        hasChanges = true;
       }
     });
 
@@ -187,7 +184,7 @@ export const useAllerleiLogic = ({
       setAllerleiSteps(newSteps);
       onStepsChange?.(newSteps);
     }
-  }, [isAllerlei, selectedLessons, yearlyLessons, generateId]);
+  }, [isAllerlei, selectedLessons, yearlyLessons, generateId]); // allerleiSteps entfernt
 
   const getCurrentLessonPosition = useCallback(() => {
     return currentPosition || { dayOrder: 0, period: 0 };

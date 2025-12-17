@@ -190,24 +190,25 @@ export default function LessonModal({
   const [isUnifiedDouble, setIsUnifiedDouble] = useState(false); // neu!
   const [saveAndNext, setSaveAndNext] = useState(false); // new state
 
+  const prevIsOpenRef = useRef(false);
+
   const isEditing = !!lesson;
 
-  const displayLesson = lesson || newLessonSlot;
+  const displayLesson = lesson || newLessonSlot || {};
 
   // Berechne subjectId und subjectTopics außerhalb von useEffect
   // Robust: topic.subject kann entweder die Subject-ID oder der Subject-Name sein.
   const rawSubject = displayLesson?.subject;
   const subjectId = typeof rawSubject === 'object' ? rawSubject.id : rawSubject;
-  const subjectName = displayLesson?.subject_name || displayLesson?.subjectName || null;
-  const subjectCandidates = [subjectId, subjectName].filter(Boolean).map(s => String(s).toLowerCase());
   const subjectTopics = (topics || []).filter(topic => {
-    const topicSubject = topic?.subject ?? topic?.subject_id ?? topic?.subjectName ?? '';
-    return subjectCandidates.some(candidate => String(topicSubject).toLowerCase() === candidate);
+    const topicSubjectId = topic.subject || topic.subject_id || topic.subjectName;
+    return String(topicSubjectId) === String(subjectId);
   });
 
-  // Initialize form data and steps when the modal opens or lesson changes
+  // Initialize form data and steps when the modal opens
   useEffect(() => {
-    if (isOpen) {
+    if (isOpen && !prevIsOpenRef.current) {
+      // Modal wurde gerade geöffnet → initialisieren
       const currentLesson = lesson || newLessonSlot;
       const hasSecondLesson = !!currentLesson?.second_yearly_lesson_id;
       const secondLesson = hasSecondLesson && allYearlyLessons?.length > 0
@@ -249,7 +250,47 @@ export default function LessonModal({
       console.log('LessonModal init: topics prop =', topics);
       console.log('LessonModal init: subjectTopics (filtered) =', subjectTopics);
     }
-  }, [isOpen, lesson, newLessonSlot, allYearlyLessons, autoAssignTopicId]);
+
+    prevIsOpenRef.current = isOpen;
+  }, [isOpen]);
+
+  // Separate effect for when lesson or newLessonSlot changes while modal is open (e.g., save and next)
+  useEffect(() => {
+    if (isOpen && (lesson || newLessonSlot)) {
+      const currentLesson = lesson || newLessonSlot;
+      const hasSecondLesson = !!currentLesson?.second_yearly_lesson_id;
+      const secondLesson = hasSecondLesson && allYearlyLessons?.length > 0
+        ? allYearlyLessons.find(yl => String(yl.id) === String(currentLesson.second_yearly_lesson_id))
+        : null;
+
+      const initialTopicId = currentLesson?.topic_id || autoAssignTopicId || '';
+      console.log('LessonModal: Re-initializing formData for next lesson with topic_id =', initialTopicId);
+
+      setFormData({
+        name: currentLesson?.name || `Lektion ${currentLesson?.lesson_number || 1}`,
+        second_name: secondLesson?.name || (hasSecondLesson ? `Lektion ${Number(currentLesson?.lesson_number || 1) + 1}` : ''),
+        topic_id: initialTopicId,
+        is_double_lesson: currentLesson?.is_double_lesson || false,
+        is_exam: currentLesson?.is_exam || false,
+        is_half_class: currentLesson?.is_half_class || false,
+        notes: currentLesson?.notes || '',
+        second_yearly_lesson_id: currentLesson?.second_yearly_lesson_id || null,
+        steps: currentLesson?.steps || [],
+        allerlei_subjects: currentLesson?.allerlei_subjects || []
+      });
+
+      setAddSecondLesson(hasSecondLesson);
+      setSecondYearlyLessonId(currentLesson?.second_yearly_lesson_id || '');
+
+      setPrimarySteps(currentLesson?.steps?.map(step => ({ ...step, id: step.id || generateId() })) || []);
+
+      if (currentLesson?.is_double_lesson && hasSecondLesson && secondLesson) {
+        setSecondSteps(secondLesson.steps?.map(step => ({ ...step, id: `second-${step.id || generateId()}` })) || []);
+      } else {
+        setSecondSteps([]);
+      }
+    }
+  }, [lesson, newLessonSlot, allYearlyLessons, autoAssignTopicId, isOpen]);
 
   // Handles keyboard shortcuts for modal actions
   useEffect(() => {
@@ -293,17 +334,17 @@ export default function LessonModal({
       return;
     }
 
-    // Nur ausführen, wenn wir ein displayLesson haben (also Fach + Woche bekannt)
-    if (!displayLesson || !allYearlyLessons.length === 0) return;
+    const currentLesson = lesson || newLessonSlot;
+    if (!currentLesson) return;
 
     const subjectLessonsThisWeek = allYearlyLessons
       .filter(yl => 
-        yl.subject === displayLesson.subject && 
-        yl.week_number === displayLesson.week_number
+        yl.subject === currentLesson.subject && 
+        yl.week_number === currentLesson.week_number
       )
       .sort((a, b) => Number(a.lesson_number) - Number(b.lesson_number));
 
-    const currentNum = Number(displayLesson.lesson_number);
+    const currentNum = Number(currentLesson.lesson_number);
     const nextLesson = subjectLessonsThisWeek.find(yl => Number(yl.lesson_number) === currentNum + 1);
 
     if (nextLesson) {
@@ -321,30 +362,17 @@ export default function LessonModal({
       }));
       setSecondSteps(loadedSteps);
     } else {
-      // Keine nächste Lektion → neue anlegen (wie im weekly-Modal)
-      const newSecond = {
-        subject: displayLesson.subject,
-        week_number: displayLesson.week_number,
-        lesson_number: currentNum + 1,
-        school_year: currentYear,
-        name: `Lektion ${currentNum + 1}`,
-        steps: [],
-        is_double_lesson: true,
-        notes: '',
-        topic_id: formData.topic_id === 'no_topic' ? null : formData.topic_id,
-      };
-
-      // Wir erzeugen nur eine temporäre ID – wird beim Speichern wirklich angelegt
+      // Temporäre neue Lektion
       const tempId = generateId();
       setSecondYearlyLessonId(tempId);
       setFormData(prev => ({ 
         ...prev, 
-        second_name: newSecond.name,
+        second_name: `Lektion ${currentNum + 1}`,
         second_yearly_lesson_id: tempId 
       }));
       setSecondSteps([]);
     }
-  }, [addSecondLesson, displayLesson, allYearlyLessons, currentYear, formData.topic_id]);
+  }, [addSecondLesson, lesson, newLessonSlot, allYearlyLessons, currentYear]);
 
   // Neu: Cleanup beim Schließen des Modals
   useEffect(() => {
@@ -412,69 +440,7 @@ export default function LessonModal({
         notes: data.notes
       };
 
-      let savedLesson;
-      if (isEditing && lesson?.id) {
-        // Update existing lesson
-        savedLesson = await YearlyLesson.update(lesson.id, {
-          ...finalData,
-          subject: displayLesson.subject,
-          week_number: displayLesson.week_number,
-          lesson_number: displayLesson.lesson_number,
-          school_year: currentYear,
-          user_id: pb.authStore.model?.id,
-          class_id: displayLesson.class_id
-        });
-
-        // Update second lesson if double lesson
-        if (finalData.is_double_lesson && secondYearlyLessonId) {
-          const secondLessonData = {
-            name: finalData.second_name || `Lektion ${Number(displayLesson.lesson_number) + 1}`,
-            steps: cleanStepsData(secondSteps),
-            is_double_lesson: true,
-            topic_id: finalData.topic_id,
-            notes: finalData.notes,
-            subject: displayLesson.subject,
-            week_number: displayLesson.week_number,
-            lesson_number: Number(displayLesson.lesson_number) + 1,
-            school_year: currentYear,
-            user_id: pb.authStore.model?.id,
-            class_id: displayLesson.class_id
-          };
-          await YearlyLesson.update(secondYearlyLessonId, secondLessonData);
-        }
-      } else {
-        // Create new lesson
-        savedLesson = await YearlyLesson.create({
-          ...finalData,
-          subject: displayLesson.subject,
-          week_number: displayLesson.week_number,
-          lesson_number: displayLesson.lesson_number,
-          school_year: currentYear,
-          user_id: pb.authStore.model?.id,
-          class_id: displayLesson.class_id
-        });
-
-        // Create second lesson if double lesson
-        if (finalData.is_double_lesson && !secondYearlyLessonId) {
-          const secondLessonData = {
-            name: finalData.second_name || `Lektion ${Number(displayLesson.lesson_number) + 1}`,
-            steps: cleanStepsData(secondSteps),
-            is_double_lesson: true,
-            topic_id: finalData.topic_id,
-            notes: finalData.notes,
-            subject: displayLesson.subject,
-            week_number: displayLesson.week_number,
-            lesson_number: Number(displayLesson.lesson_number) + 1,
-            school_year: currentYear,
-            user_id: pb.authStore.model?.id,
-            class_id: displayLesson.class_id
-          };
-          const secondLesson = await YearlyLesson.create(secondLessonData);
-          finalData.second_yearly_lesson_id = secondLesson.id;
-        }
-      }
-
-      onSave({ ...finalData, id: savedLesson.id });
+      onSave(finalData);
     } catch (error) {
       console.error('Error saving lesson:', error);
       alert('Fehler beim Speichern der Lektion: ' + (error.data?.message || 'Unbekannter Fehler'));
@@ -490,19 +456,17 @@ export default function LessonModal({
 
     try {
       await debouncedSave(formData);
-      setIsSubmitting(false);
-      import('react-hot-toast').then(({ toast }) => {
-        toast.success('Lektion erfolgreich gespeichert');
-      });
 
-      // new logic for save and next
       if (saveAndNext) {
-        const nextNumber = Number(displayLesson.lesson_number) + 1;
-        onSaveAndNext?.(nextNumber);
+        const increment = formData.is_double_lesson ? 2 : 1;
+        const nextNumber = Number(displayLesson.lesson_number) + increment;
+        await onSaveAndNext?.(nextNumber);
         setSaveAndNext(false);
+        // KEIN onClose() hier!
+      } else {
+        onClose(); // Nur beim normalen Speichern schließen
       }
     } catch (error) {
-      setIsSubmitting(false);
       console.error('Error in handleSubmit:', error);
       import('react-hot-toast').then(({ toast }) => {
         const message = error.data?.data?.id?.code === 'validation_not_unique'
@@ -510,6 +474,8 @@ export default function LessonModal({
           : 'Fehler beim Speichern der Lektion: ' + (error.data?.message || error.message || 'Unbekannter Fehler');
         toast.error(message);
       });
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -838,7 +804,7 @@ export default function LessonModal({
                 Lektionsplan speichern
               </Button>
               <Button
-                type="button"
+                type="submit"
                 variant="default"
                 className="bg-emerald-600 hover:bg-emerald-700 text-white"
                 onClick={() => setSaveAndNext(true)}

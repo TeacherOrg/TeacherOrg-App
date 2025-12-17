@@ -1,8 +1,7 @@
 import React from 'react';
-import { adjustColor, createGradient } from '@/utils/colorUtils'; // createGradient importieren
-import { normalizeAllerleiData } from '@/components/timetable/allerlei/AllerleiUtils';
+import { createGradient } from '@/utils/colorUtils';import { normalizeAllerleiData, calculateAllerleiGradient } from '@/components/timetable/allerlei/AllerleiUtils';
 
-const LessonCard = ({ lesson, isDragging, onEdit, onMouseEnter, onMouseLeave, onMouseMove, subjects = [] }) => {
+const LessonCard = ({ lesson, isDragging, onEdit, onMouseEnter, onMouseLeave, onMouseMove, subjects = [], isAltPressed, isSelectingMerge, mergePreview }) => {
   if (!lesson) return null;
 
   const {
@@ -24,7 +23,9 @@ const LessonCard = ({ lesson, isDragging, onEdit, onMouseEnter, onMouseLeave, on
 
   // Gradient für normale Lektionen und Allerlei-Lektionen
   const cardStyle = {
-    background: isGradient ? color : createGradient(color || '#3b82f6', -20, '135deg'), // Gradient für normale Lektionen
+    background: lesson.isGradient && lesson.color
+    ? lesson.color
+    : createGradient(lesson.color || '#3b82f6', -20, '135deg'),
   };
 
   return (
@@ -33,9 +34,23 @@ const LessonCard = ({ lesson, isDragging, onEdit, onMouseEnter, onMouseLeave, on
         w-full h-full rounded-lg p-2 cursor-pointer transition-all duration-150
         shadow-md hover:shadow-lg text-white text-center flex flex-col justify-center relative
         ${isDragging ? 'opacity-90 shadow-2xl scale-105 -rotate-2' : ''}
+        ${isAltPressed ? 'ring-4 ring-purple-400/50 shadow-xl transition-all' : ''}
+        ${isAltPressed && !isSelectingMerge ? 'ring-4 ring-purple-500/60 scale-105 shadow-2xl' : ''}
       `}
       style={cardStyle}
-      onClick={() => onEdit(lesson)}
+      onClick={(e) => {
+        if (isAltPressed) {
+          e.stopPropagation(); // WICHTIG: verhindert, dass DndContext den Drag startet
+          return;
+        }
+        onEdit(lesson);
+      }}
+      onMouseDown={(e) => {
+        if (isAltPressed) {
+          e.stopPropagation();
+          e.preventDefault(); // ← zusätzlich
+        }
+      }}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
       onMouseMove={onMouseMove}

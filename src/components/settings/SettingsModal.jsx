@@ -411,7 +411,8 @@ const SettingsModal = ({ isOpen, onClose }) => {
       case 'Hilfe': return {};
       case 'Profil': return { 
         pendingEmail, setPendingEmail,
-        pendingUserSettings, setPendingUserSettings 
+        pendingUserSettings, setPendingUserSettings,
+        onClose
       };
       default: return {};
     }
