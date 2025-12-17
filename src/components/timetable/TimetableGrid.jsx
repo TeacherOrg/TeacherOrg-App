@@ -62,13 +62,13 @@ const getHolidayDisplay = (holiday) => {
   }
 };
 
-const DraggableItem = ({ id, data, children }) => {
+const DraggableItem = ({ id, data, children, onClick }) => {
   const { attributes, listeners, setNodeRef, transform, transition } = useDraggable({ id, data });
   const style = {
     transform: transform ? `translate3d(${transform.x}px, ${transform.y}px, 0)` : undefined,
     transition,
   };
-  return <div ref={setNodeRef} style={style} {...listeners} {...attributes} className="h-full w-full select-none lesson-card">{children}</div>;
+  return <div ref={setNodeRef} style={style} {...listeners} {...attributes} className="h-full w-full select-none lesson-card" onClick={onClick}>{children}</div>;
 };
 
 const TimetableGrid = React.forwardRef(
@@ -310,14 +310,14 @@ const TimetableGrid = React.forwardRef(
                       />
                     </div>
                   ) : (
-                    <DraggableItem id={lesson.id} data={{ type: 'lesson', lesson }}>
+                    <DraggableItem id={lesson.id} data={{ type: 'lesson', lesson }} onClick={() => onEditLesson(lesson)}>
                       <LessonCard
                         lesson={lesson}
                         isDragging={false}
-                        onEdit={onEditLesson}
                         onMouseEnter={(e) => onShowHover(lesson, e)}
                         onMouseLeave={onHideHover}
                         subjects={subjects}
+                        isAltPressed={isAltPressed}
                       />
                     </DraggableItem>
                   )}
