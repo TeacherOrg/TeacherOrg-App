@@ -299,18 +299,18 @@ const TimetableGrid = React.forwardRef(
                 <div className="h-full w-full relative">
                   {/* Immer die normale LessonCard rendern */}
                   {isAltPressed ? (
-                    <div className="h-full w-full">
+                    <div className="h-full w-full" onClick={() => onEditLesson(lesson.id)}>
                       <LessonCard
                         lesson={lesson}
                         isDragging={false}
-                        onEdit={onEditLesson}
                         onMouseEnter={(e) => onShowHover(lesson, e)}
                         onMouseLeave={onHideHover}
                         subjects={subjects}
+                        isAltPressed={isAltPressed}
                       />
                     </div>
                   ) : (
-                    <DraggableItem id={lesson.id} data={{ type: 'lesson', lesson }} onClick={() => onEditLesson(lesson)}>
+                    <DraggableItem id={lesson.id} data={{ type: 'lesson', lesson }} onClick={() => onEditLesson(lesson.id)}>
                       <LessonCard
                         lesson={lesson}
                         isDragging={false}

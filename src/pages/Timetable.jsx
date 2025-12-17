@@ -453,10 +453,22 @@ function InnerTimetablePage() {
     setIsModalOpen(true);
   };
 
-  const handleEditLesson = (lesson) => {
-    setEditingLesson(lesson);
+  const handleEditLesson = (lessonId) => {
+    // Finde die aktuelle Version der Lektion aus lessonsWithDetails
+    const currentLesson = lessonsWithDetails.find(l => l.id === lessonId);
+    
+    if (!currentLesson) {
+      console.warn('Lesson not found for editing:', lessonId);
+      return;
+    }
+
+    setEditingLesson(currentLesson);
     setInitialSubjectForModal(null);
-    setSlotInfo({ day: lesson.day_of_week, period: lesson.period_slot, week: currentWeek });
+    setSlotInfo({ 
+      day: currentLesson.day_of_week, 
+      period: currentLesson.period_slot, 
+      week: currentWeek 
+    });
     setIsModalOpen(true);
   };
 
@@ -863,6 +875,7 @@ function InnerTimetablePage() {
       />
 
       <LessonModal
+        key={editingLesson?.id || 'new'}
         isOpen={isModalOpen}
         onClose={() => { setIsModalOpen(false); setInitialSubjectForModal(null); setCopiedLesson(null); }}
         onSave={handleSaveLesson}
