@@ -443,13 +443,6 @@ const TimetableGrid = React.forwardRef(
             <span className="text-sm font-bold leading-tight mt-1">{hasHolidayInWeek.name}</span>
           </div>
         )}
-        {/* DEBUG: Immer sichtbar machen */}
-        <div className="fixed top-4 left-4 bg-red-500 text-white p-4 z-50 rounded">
-          mergePreview: {mergePreview ? 'JA' : 'NEIN'}<br/>
-          Anzahl: {mergePreview?.lessons.length || 0}<br/>
-          Day: {mergePreview?.day}<br/>
-          Start: {mergePreview?.startPeriod}
-        </div>
       </div>
     );
   }
