@@ -32,6 +32,12 @@ const UpdateModal = ({ isOpen, onClose, version }) => {
           ],
         },
         {
+          subcategory: 'Wochenansicht',
+          items: [
+            { text: 'Allerleierstellung bestehender Lektionen mit alt+Drag', type: 'fixed' },
+          ],
+        },
+        {
           subcategory: 'Jahresansicht',
           items: [
             { text: 'Rechtsklick auf Zelle öffnet Menü zum Verschieben + Kopieren', type: 'fixed' },
