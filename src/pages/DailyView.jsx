@@ -1,19 +1,22 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { Lesson, YearlyLesson, Subject, Holiday, Setting, Class, Announcement, Chore, ChoreAssignment, Student } from "@/api/entities";
+import { Lesson, YearlyLesson, Subject, Holiday, Setting, Class, Announcement, Chore, ChoreAssignment, Student, Topic, AllerleiLesson } from "@/api/entities";
 import { Button } from "@/components/ui/button";
-import { ChevronLeft, ChevronRight, Maximize, Settings, Calendar, Users, Home, Zap } from "lucide-react";
+import { ChevronLeft, ChevronRight, Maximize, Settings, Calendar, Users, Home, Zap, Coffee } from "lucide-react";
 import { motion } from "framer-motion";
 import CalendarLoader from "../components/ui/CalendarLoader";
 import LessonOverviewPanel from "../components/daily/LessonOverviewPanel";
 import LessonDetailPanel from "../components/daily/LessonDetailPanel";
 import CustomizationPanel from "../components/daily/CustomizationPanel";
 import ChoresDisplay from "../components/daily/ChoresDisplay";
+import AllTopicsProgressOverview from "../components/daily/AlltopicsProgressOverview";
 import { createPageUrl } from "@/utils";
 import { getThemeGradient } from "@/utils/colorDailyUtils";
 import { normalizeAllerleiData } from "@/components/timetable/allerlei/AllerleiUtils";
 import { CustomizationSettings } from "@/api/entities";
 import pb from "@/api/pb";
+import { useLessonStore, useAllerleiLessons } from "@/store";
+import { useAllActiveTopicsProgress } from "@/hooks/useAllActiveTopicsProgress";
 
 // Utility functions
 function getCurrentWeek(date) {
@@ -124,10 +127,17 @@ export default function DailyView({ currentDate, onDateChange }) {
   const [choreAssignments, setChoreAssignments] = useState([]);
   const [students, setStudents] = useState([]);
   const [announcements, setAnnouncements] = useState([]);
+  const [topics, setTopics] = useState([]);
+
+  // Store setters
+  const { setAllYearlyLessons, setAllerleiLessons } = useLessonStore();
+  const allAllerleiLessons = useAllerleiLessons(); // ← korrekter Selector
 
   // New feature states
   const [manualStepIndex, setManualStepIndex] = useState(null);
   const [showChoresView, setShowChoresView] = useState(false);
+  // Temporärer Pausen-Button-State
+  const [forcePauseView, setForcePauseView] = useState(false);
   
   // Customization settings
   const [customization, setCustomization] = useState({
@@ -136,7 +146,10 @@ export default function DailyView({ currentDate, onDateChange }) {
     theme: 'default', // Fallback auf 'default'
     autoFocusCurrentLesson: true,
     showOverview: true,
-    audio: { enabled: false, volume: 0.5 }
+    audio: { enabled: false, volume: 0.5 },
+    transparencyMode: false,
+    forceDarkText: false,
+    forceLightText: false,
   });
 
   // Current time state
@@ -191,6 +204,9 @@ export default function DailyView({ currentDate, onDateChange }) {
               enabled: loaded.audio_enabled,
               volume: loaded.audio_volume,
             },
+            transparencyMode: loaded.transparency_mode || false,
+            forceDarkText: loaded.force_dark_text || false,
+            forceLightText: loaded.force_light_text || false,
           });
         }
       } catch (error) {
@@ -238,6 +254,9 @@ export default function DailyView({ currentDate, onDateChange }) {
           compact_mode: customization.compactMode,
           audio_enabled: customization.audio.enabled,
           audio_volume: customization.audio.volume,
+          transparency_mode: customization.transparencyMode,
+          force_dark_text: customization.forceDarkText,
+          force_light_text: customization.forceLightText,
         };
 
         if (settings && settings.length > 0) {
@@ -255,7 +274,7 @@ export default function DailyView({ currentDate, onDateChange }) {
   const loadAllData = async () => {
     setIsLoading(true);
     try {
-      const [lessonsData, yearlyLessonsData, subjectsData, holidaysData, settingsData, classesData, choresData, assignmentsData, announcementsData, studentsData] = await Promise.all([
+      const [lessonsData, yearlyLessonsData, subjectsData, holidaysData, settingsData, classesData, choresData, assignmentsData, announcementsData, studentsData, topicsData, allerleiLessonsData] = await Promise.all([
         Lesson.list(),
         YearlyLesson.list(),
         Subject.list(),
@@ -265,7 +284,9 @@ export default function DailyView({ currentDate, onDateChange }) {
         Chore.list(),
         ChoreAssignment.list(),
         Announcement.list(),
-        Student.list() // Hinzugefügt
+        Student.list(), // Hinzugefügt
+        Topic.list(), // Hinzugefügt
+        AllerleiLesson.list() // ← NEU: Allerlei-Lektionen laden
       ]);
       
       setAllLessons(lessonsData || []);
@@ -277,7 +298,17 @@ export default function DailyView({ currentDate, onDateChange }) {
       setChoreAssignments(assignmentsData || []);
       setStudents(studentsData || []);
       setAnnouncements(announcementsData || []);
-      
+      setTopics(topicsData || []);
+      setAllYearlyLessons(yearlyLessonsData || []); // Komplette Liste speichern // Hinzugefügt
+      setAllerleiLessons(allerleiLessonsData || []); // ← NEU: Allerlei-Lektionen in Store speichern
+
+      // Debug: Logge die geladenen Subjects
+      console.log("Debug: Loaded Subjects", subjectsData?.map(s => ({
+        id: s.id,
+        name: s.name,
+        color: s.color
+      })));
+
       if (settingsData && settingsData.length > 0) {
         setSettings(settingsData[0]);
       } else {
@@ -314,12 +345,33 @@ export default function DailyView({ currentDate, onDateChange }) {
   const lessonsForDate = useMemo(() => {
     if (!dayOfWeek || dayOfWeek === 'sunday' || dayOfWeek === 'saturday') return [];
     
-    const lessonsForDay = allLessons.filter(lesson => 
+    // Normale Lektionen
+    const normalLessons = allLessons.filter(lesson => 
       lesson.day_of_week === dayOfWeek && 
       lesson.week_number === currentWeek
     );
 
+    // Allerlei-Lektionen (separat gespeichert)
+    const allerleiLessons = allAllerleiLessons.filter(allerlei => 
+      allerlei.day_of_week === dayOfWeek && 
+      allerlei.week_number === currentWeek
+    );
+
+    // Kombiniere beide
+    const lessonsForDay = [...normalLessons, ...allerleiLessons];
+
     console.log("Debug: Subjects in DailyView", subjects); // Debug subjects
+    console.log("Debug: Lessons for date", lessonsForDay.length, "lessons found");
+    console.log("Debug: Current week", currentWeek, "dayOfWeek", dayOfWeek);
+
+    // Debug: Logge die ersten paar Lessons mit ihren Subject-IDs
+    lessonsForDay.slice(0, 3).forEach(lesson => {
+      console.log("Debug: Lesson subject mapping", {
+        lessonId: lesson.id,
+        subjectId: lesson.subject,
+        subjectName: lesson.subject_name
+      });
+    });
 
     return lessonsForDay.map(lesson => {
       const yearlyLesson = lesson.yearly_lesson_id ? 
@@ -332,58 +384,211 @@ export default function DailyView({ currentDate, onDateChange }) {
 
       let steps = [];
       let description = '';
-      
-      if (lesson.is_allerlei) {
-        // Allerlei-Lektionen normalisieren
-        const normalized = normalizeAllerleiData(lesson, subjects);
-        steps = normalized.steps || [];
-        description = normalized.description || 'Allerlei-Lektion';
-        return {
-          ...lesson,
-          type: 'lesson',
-          yearlyLesson,
-          secondYearlyLesson,
-          subject: subject ? {
-            ...subject,
-            name: subject.name || lesson.subject_name || 'Unbekannt',
-            color: subject.color || '#3b82f6'
-          } : { name: lesson.subject_name || 'Unbekannt', color: '#3b82f6' },
-          timeSlot,
-          steps,
-          description,
-          progress: timeSlot ? calculateProgress(timeSlot.start, timeSlot.end) : 0,
-          color: normalized.color, // Gradient oder Farbe
-          isGradient: normalized.isGradient
-        };
-      } else if (lesson.is_double_lesson && yearlyLesson && secondYearlyLesson) {
-        steps = [...(yearlyLesson.steps || []), ...(secondYearlyLesson.steps || [])];
-        description = `${yearlyLesson.notes || ''} + ${secondYearlyLesson.notes || ''}`.trim();
-      } else if (yearlyLesson) {
-        steps = yearlyLesson.steps || [];
-        description = yearlyLesson.notes || `Lektion ${yearlyLesson.lesson_number}`;
-      } else {
-        steps = lesson.steps || [];
-        description = lesson.description || 'Keine Beschreibung';
+      let topicName = '';
+
+      // Deklariere allerleiTopicIds hier am Anfang!
+      let allerleiTopicIds = [];
+      let primaryTopicId = undefined;
+
+      // 1. Topic-Name (nur wenn expandiert)
+      if (yearlyLesson?.expand?.topic?.name) {
+        topicName = yearlyLesson.expand.topic.name;
+      } else if (secondYearlyLesson?.expand?.topic?.name) {
+        topicName = secondYearlyLesson.expand.topic.name;
+      }
+      // Fallback: direkte Felder aus yearlyLesson (wie in alter Version)
+      else if (yearlyLesson?.topic_name) {
+        topicName = yearlyLesson.topic_name;
       }
 
-      // Add unique IDs to steps if they don't have one
-      steps = steps.map((step, index) => ({ ...step, id: step.id || `${lesson.id}-step-${index}` }));
+      // 2. Steps
+      if (yearlyLesson?.steps?.length > 0) {
+        steps = yearlyLesson.steps;
+      } else if (secondYearlyLesson?.steps?.length > 0) {
+        steps = secondYearlyLesson.steps;
+      }
+
+      // 3. Description/Titel
+      if (yearlyLesson?.title) {
+        description = yearlyLesson.title;
+      } else if (yearlyLesson?.name) {
+        description = yearlyLesson.name;
+      } else if (yearlyLesson?.notes) {
+        description = yearlyLesson.notes;
+      } else if (secondYearlyLesson?.title || secondYearlyLesson?.name || secondYearlyLesson?.notes) {
+        description = secondYearlyLesson.title || secondYearlyLesson.name || secondYearlyLesson.notes;
+      } else {
+        description = 'Lektion';
+      }
+
+      // Thema + Titel kombinieren
+      if (topicName && description !== 'Lektion') {
+        description = `${topicName}: ${description}`;
+      } else if (topicName) {
+        description = topicName;
+      }
+
+      // Steps IDs sicherstellen
+      steps = steps.map((step, index) => ({
+        ...step,
+        id: step.id || `${lesson.id}-step-${index}`
+      }));
+
+      // Initialisiere mit Default-Werten (nicht überschreiben!)
+      let displayTimeSlot = timeSlot;
+      let spansSlots = 1;
+      let allerleiColors = [];
+      let isAllerlei = false;
+
+      // WICHTIG: steps, description und topicName NUR hier setzen, nicht vorher überschreiben!
+      // Für normale Lektionen bleiben die oben gesetzten Werte erhalten
+      // Für Allerlei werden sie im Block überschrieben
+
+      // --- ALLERLEI LOGIK ---
+      if (lesson.primary_yearly_lesson_id || lesson.expand?.primary_yearly_lesson_id?.id) {
+        isAllerlei = true;
+
+        // Sicherstellen, dass wir die expand-Daten haben
+        const primary = lesson.expand?.primary_yearly_lesson_id || yearlyLessons.find(yl => yl.id === lesson.primary_yearly_lesson_id);
+        primaryTopicId = primary ? (primary.topic_id || primary.expand?.topic?.id) : undefined;
+        const addedRaw = lesson.expand?.added_yearly_lesson_ids || [];
+        const added = addedRaw.length > 0 ? addedRaw : (lesson.added_yearly_lesson_ids || []).map(id => yearlyLessons.find(yl => yl.id === id)).filter(Boolean);
+
+        const allYL = [primary, ...added].filter(Boolean);
+
+        if (allYL.length > 0) {
+          // Jetzt sicher innerhalb
+          allerleiTopicIds = [...new Set(
+            allYL
+              .map(yl => yl?.topic_id || yl?.expand?.topic?.id)
+              .filter(Boolean)
+          )];
+          // 1. Farben sammeln – sehr robust
+          allerleiColors = allYL
+            .map(yl => {
+              if (!yl) return null;
+              // Verschiedene mögliche Quellen für die Farbe
+              return yl.expand?.subject?.color || yl.subject_color || yl.subject?.color || '#94a3b8';
+            })
+            .filter(color => color && color.startsWith('#'));
+
+          // Fallback-Farben, falls gar keine gefunden
+          if (allerleiColors.length === 0) {
+            allerleiColors = ['#8b5cf6', '#3b82f6', '#10b981', '#f59e0b'];
+          }
+
+          // 2. Spanning: Anzahl der YearlyLessons
+          spansSlots = allYL.length;
+
+          // 3. Zeit anpassen
+          const periods = allYL.map(yl => yl.period_slot || lesson.period_slot).filter(Boolean);
+          if (periods.length > 1) {
+            periods.sort((a, b) => a - b);
+            const lastPeriod = periods[periods.length - 1];
+            const lastTimeSlot = timeSlots.find(ts => ts.period === lastPeriod);
+            if (lastTimeSlot) {
+              displayTimeSlot = {
+                ...timeSlot,
+                end: lastTimeSlot.end
+              };
+            }
+          }
+
+          // 4. Steps aus ALLEN YearlyLessons sammeln und zusammenführen
+          steps = [];
+
+          allYL.forEach((yl, ylIndex) => {
+            if (yl?.steps && yl.steps.length > 0) {
+              const ylSteps = yl.steps.map((step, index) => ({
+                ...step,
+                id: step.id || `${lesson.id}-yl${ylIndex}-step-${index}`,
+                // Optional: Merke dir, aus welchem Fach der Step kommt (für spätere Anzeige)
+                _sourceYearlyLesson: yl.id,
+                _sourceSubjectName: yl.expand?.subject?.name || yl.subject_name || 'Unbekannt',
+              }));
+              steps = steps.concat(ylSteps);
+            }
+          });
+
+          // Falls gar keine Steps → leeren Array lassen oder Fallback
+          if (steps.length === 0) {
+            steps = []; // oder [{ activity: "Freie Arbeit", time: "45", workForm: "Group" }]
+          }
+
+          // Nach dem Sammeln der Farben
+          const subjectNames = allYL
+            .map(yl => yl.expand?.subject?.name || yl.subject_name || 'Unbekannt')
+            .filter((name, index, arr) => arr.indexOf(name) === index); // unique
+
+          if (subjectNames.length > 1) {
+            description = `Allerlei: ${subjectNames.join(' + ')}`;
+          } else if (subjectNames.length === 1) {
+            description = `Allerlei: ${subjectNames[0]}`;
+          } else {
+            description = 'Allerlei';
+          }
+
+          // Topic aus primary behalten (falls vorhanden)
+          if (primary?.expand?.topic?.name) {
+            const topicName = primary.expand.topic.name;
+            description = `${topicName}: ${description}`;
+          } else if (primary?.topic_name) {
+            description = `${primary.topic_name}: ${description}`;
+          }
+        }
+      }
+      // --- DOPPELLEKTION (normal) ---
+      else if (lesson.is_double_lesson) {
+        const nextPeriod = lesson.period_slot + 1;
+        const nextTimeSlot = timeSlots.find(ts => ts.period === nextPeriod);
+        if (nextTimeSlot) {
+          spansSlots = 2;
+          displayTimeSlot = { ...timeSlot, end: nextTimeSlot.end };
+        }
+      }
 
       const enrichedLesson = {
         ...lesson,
         type: 'lesson',
-        yearlyLesson,
-        secondYearlyLesson,
+        // WICHTIG: subject NICHT überschreiben mit fester Farbe!
+        // Behalte das echte subject (falls vorhanden), aber bei Allerlei ignorieren wir es eh
         subject: subject ? {
           ...subject,
           name: subject.name || lesson.subject_name || 'Unbekannt',
-          color: subject.color || '#3b82f6'
-        } : { name: lesson.subject_name || 'Unbekannt', color: '#3b82f6' },
-        timeSlot,
+          color: subject.color || '#3b82f6' // nur als Fallback, wird bei normalen Lektionen verwendet
+        } : null,
+
+        timeSlot: displayTimeSlot,
         steps,
         description,
-        progress: timeSlot ? calculateProgress(timeSlot.start, timeSlot.end) : 0
+        progress: displayTimeSlot ? calculateProgress(displayTimeSlot.start, displayTimeSlot.end) : 0,
+        spansSlots,                    // ← jetzt korrekt >1 bei Allerlei
+        allerleiColors,                // ← gefüllt bei Allerlei
+        is_allerlei: isAllerlei,
+
+        // Neu: Für TopicProgress
+        allerleiTopicIds: isAllerlei ? allerleiTopicIds : undefined,
+
+        // Optional: Auch die primary Topic-ID separat, falls du sie brauchst
+        primaryTopicId,
+
+        // Optional: Für Konsistenz auch hier Name/Emoji setzen
+        displayName: isAllerlei ? 'Allerlei' : (subject?.name || lesson.subject_name || 'Unbekannt'),
+        displayEmoji: isAllerlei ? '🌈' : (subject?.emoji || '📚'),
       };
+
+      // Debug: Logge Fachfarbe für jede Lesson – null-sicher!
+      console.log("Debug Fachfarbe für Lesson", lesson.id, {
+        subjectId: lesson.subject,
+        foundSubject: subject ? `Found: ${subject.name} (${subject.color})` : 'Kein Subject (Allerlei oder fehlt)',
+        finalColor: enrichedLesson.subject?.color || 'N/A (Allerlei → Gradient)',
+        subjectInEnriched: !!enrichedLesson.subject,
+        displayName: enrichedLesson.displayName,
+        isAllerlei: isAllerlei,
+        spansSlots,
+        allerleiColors: allerleiColors.length > 0 ? allerleiColors : 'keine Farben',
+        description,
+      });
 
       // Debug: Logge die normalisierten Allerlei-Daten
       if (lesson.is_allerlei) {
@@ -427,6 +632,9 @@ export default function DailyView({ currentDate, onDateChange }) {
       return currentDateObj >= startDate && currentDateObj <= endDate;
     });
   }, [holidays, currentDate]);
+
+  // Hook für Themenübersicht
+  const allActiveTopicsProgress = useAllActiveTopicsProgress();
 
   // Get current item (lesson or break) based on time
   const currentItem = useMemo(() => {
@@ -536,23 +744,26 @@ export default function DailyView({ currentDate, onDateChange }) {
 
   const getBackgroundStyle = () => {
     const { background, theme } = customization;
-    const baseColor = background.value || '#ffffff';
-    const gradient = getThemeGradient(theme || 'default', baseColor, undefined, isDark);
-    
-    switch (background.type) {
-      case 'solid':
-        return { backgroundColor: baseColor };
-      case 'image':
-        return {
-          backgroundImage: `url(${background.value})`,
-          backgroundSize: 'cover',
-          backgroundPosition: 'center'
-        };
-      case 'gradient':
-        return { background: gradient };
-      default:
-        return { background: getThemeGradient('default', baseColor, undefined, isDark) };
+
+    if (background.type === 'solid') {
+      return { backgroundColor: background.value || '#ffffff' };
     }
+
+    if (background.type === 'image') {
+      return {
+        backgroundImage: `url(${background.value})`,
+        backgroundSize: 'cover',
+        backgroundPosition: 'center'
+      };
+    }
+
+    // Gradient-Fall: Priorisiere manuelle Auswahl, sonst Theme-Gradient, sonst Default
+    if (background.type === 'gradient' && background.value) {
+      return { background: background.value };
+    }
+
+    // Fallback: Theme-basiert (auch wenn kein manueller Gradient)
+    return { background: getThemeGradient(theme || 'default', '#3b82f6', undefined, isDark) };
   };
 
   const mainGridStyle = useMemo(() => {
@@ -569,6 +780,9 @@ export default function DailyView({ currentDate, onDateChange }) {
     };
   }, [customization.showOverview]);
 
+  // const themeStyles = getThemeStyles(customization.theme);
+  const themeStyles = { background: '', textColor: '' }; // neutral
+
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -579,11 +793,8 @@ export default function DailyView({ currentDate, onDateChange }) {
 
   return (
     <motion.div 
-      className={`h-full w-full overflow-hidden relative text-slate-800 dark:text-slate-200 font-[Poppins] ${
-        customization.background.type === 'gradient' ? `bg-gradient-to-br ${customization.background.value}` :
-        (customization.background.type === 'solid' || customization.background.type === 'image' ? '' : 'bg-gradient-to-br from-slate-50 via-slate-100 to-slate-200 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950')
-      }`}
-      style={customization.background.type !== 'gradient' ? getBackgroundStyle() : {}}
+      className="h-full w-full overflow-hidden relative font-[Poppins]"
+      style={{ background: '#ffffff', ...getBackgroundStyle() }}
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       transition={{ duration: 1 }}
@@ -606,21 +817,29 @@ export default function DailyView({ currentDate, onDateChange }) {
         >
           <Maximize className="w-4 h-4" />
         </Button>
+        <Button
+          variant="outline"
+          size="icon"
+          onClick={() => setForcePauseView(prev => !prev)}
+          className={`rounded-xl ${forcePauseView ? 'bg-orange-500 text-white border-orange-600' : ''}`}
+          title="Temporäre Pausenansicht anzeigen"
+        >
+          <Coffee className="w-4 h-4" />
+        </Button>
       </div>
       
       <audio ref={audioRef} src="/audio/end_of_lesson.ogg" preload="auto" />
       
       {/* Main Content Area */}
       <div 
-        className={`h-full w-full grid grid-cols-1 lg:grid-cols-[minmax(350px,25%)_1fr] gap-4 overflow-hidden ${
+        className={`h-full w-full grid grid-cols-1 lg:grid-cols-[minmax(400px,35%)_1fr] gap-2 md:gap-3 overflow-hidden ${
           isFullscreen ? 'p-0' : 'p-4'
         }`}
       >
         {/* Lesson Overview Panel */}
         {customization.showOverview && (
           <motion.div 
-            className="h-full overflow-hidden min-w-0" /* allow shrinking */
-            style={{ maxWidth: '350px' }} /* Setze maximale Breite für große Bildschirme (ca. 50% weniger als vorherige implizite Max) */
+            className="h-full overflow-hidden min-w-0"
           >
             <LessonOverviewPanel
               items={lessonsForDate}
@@ -637,7 +856,22 @@ export default function DailyView({ currentDate, onDateChange }) {
 
         {/* Main Central Panel */}
         <div className="h-full overflow-y-auto overflow-x-hidden p-1 md:p-2 min-w-0 flex flex-col" style={{ maxWidth: '100%' }}> {/* Entferne overflowX: 'auto', um Scrollen zu vermeiden; Panel passt sich an */}
-          {showChoresView ? (
+          {forcePauseView ? (
+            <div className="rounded-2xl shadow-2xl bg-white/95 dark:bg-slate-900/95 overflow-hidden h-full flex flex-col items-center justify-center p-8">
+              <Coffee className="w-24 h-24 text-orange-500 mb-8 animate-pulse" />
+              <h2 className="text-4xl font-bold text-slate-800 dark:text-slate-200 mb-12">
+                Pause – Themenübersicht (Testmodus)
+              </h2>
+
+              <div className="w-full max-w-3xl px-4">
+                <AllTopicsProgressOverview progresses={allActiveTopicsProgress} />
+              </div>
+
+              <div className="mt-12 text-sm text-slate-600 dark:text-slate-400 italic">
+                Temporär per ☕-Button oben rechts aktiviert
+              </div>
+            </div>
+          ) : showChoresView ? (
             <ChoresDisplay
               assignments={todaysAssignments}
               chores={chores}
@@ -683,7 +917,7 @@ export default function DailyView({ currentDate, onDateChange }) {
           exit={{ opacity: 0, scale: 0.95 }}
           transition={{ duration: 0.3 }}
         >
-          <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-2xl max-h-[80vh] overflow-hidden">
+          <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-2xl h-[80vh] overflow-hidden">
             <CustomizationPanel
               customization={customization}
               onCustomizationChange={setCustomization}

@@ -1,108 +1,90 @@
-import React, { useState, useEffect, useMemo, useCallback } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { motion } from "framer-motion";
-import { Clock, User, Users, Users2, Building, ChevronLeft, ChevronRight, Play, Coffee, ChevronsRight } from "lucide-react";
+import {
+  Clock,
+  User,
+  Users2,
+  Users,
+  Building,
+  ChevronLeft,
+  ChevronRight,
+  Play,
+  Coffee,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { getThemeGradient } from "@/utils/colorDailyUtils";
 import TopicProgressBar from "./TopicProgressBar";
 import { useTopicProgress } from "@/hooks/useTopicProgress";
-import AllTopicsProgressOverview from "./AllTopicsProgressOverview";
+import { useAllerleiTopicProgress } from "@/hooks/useAllerleiTopicProgress";
+import AllTopicsProgressOverview from "./AlltopicsProgressOverview";
 import { useAllActiveTopicsProgress } from "@/hooks/useAllActiveTopicsProgress";
+import { createMixedSubjectGradient, createGradient } from "@/utils/colorUtils";
 
 const WORK_FORM_ICONS = {
-  'Single': User,
-  'Partner': Users2,
-  'Group': Users,
-  'Plenum': Building
+  Single: User,
+  Partner: Users2,
+  Group: Users,
+  Plenum: Building,
 };
 
 const WORK_FORMS = {
-  'Single': '👤 Single',
-  'Partner': '👥 Partner', 
-  'Group': '👨‍👩‍👧‍👦 Group',
-  'Plenum': '🏛️ Plenum'
+  Single: "👤 Single",
+  Partner: "👥 Partner",
+  Group: "👨‍👩‍👧‍👦 Group",
+  Plenum: "🏛️ Plenum",
 };
 
 export default function LessonDetailPanel({
   lesson,
   currentItem,
-  nextLesson,
   customization,
   currentTime,
   selectedDate,
   manualStepIndex,
   onManualStepChange,
-  theme, // Neu hinzufügen
-  isDark // Neu hinzufügen
 }) {
   const [currentStepIndex, setCurrentStepIndex] = useState(-1);
   const [manualStepControl, setManualStepControl] = useState(false);
-  const [timeLeftInPause, setTimeLeftInPause] = useState("");
 
-  // Determine what to display
-  const displayLesson = lesson || (currentItem?.type === 'lesson' ? currentItem : null);
-  const isPause = currentItem?.type === 'break';
+  // Anzuzeigende Lektion (ausgewählt oder aktuell laufend)
+  const displayLesson = lesson || (currentItem?.type === "lesson" ? currentItem : null);
+  const isPause = currentItem?.type === "break";
+
   const { topic, planned, completed } = useTopicProgress(displayLesson);
+  const allerleiProgresses = useAllerleiTopicProgress(displayLesson);
   const allProgress = useAllActiveTopicsProgress();
 
-  // Anpassung für Allerlei: Nutze lesson.color und isGradient
+  // Fachfarbe + Name + Emoji ermitteln (inkl. Allerlei)
   const getLessonDisplay = (lesson) => {
-    if (lesson.is_allerlei) {
-      console.log("Debug: Allerlei Lesson in Detail", {
-        lessonId: lesson.id,
-        color: lesson.color,
-        isGradient: lesson.isGradient,
-        allerlei_subjects: lesson.allerlei_subjects
-      });
+    if (lesson?.is_allerlei) {
       return {
         name: "Allerlei",
         emoji: "🌈",
-        color: lesson.color || "#a855f7", // Fallback auf Purple-500
-        isGradient: lesson.isGradient || false,
+        // KEINE feste Farbe mehr! Wird vom Gradient überschrieben
+        color: null, // oder '#a855f7' nur als allerletzter Fallback
       };
     }
     return {
-      name: lesson.subject?.name || lesson.subject || "Unbekanntes Fach",
-      emoji: lesson.subject?.emoji || "📚",
-      color: lesson.subject?.color || "#3b82f6",
-      isGradient: lesson.isGradient || false,
+      name: lesson?.subject?.name || lesson?.displayName || "Unbekanntes Fach",
+      emoji: lesson?.subject?.emoji || lesson?.displayEmoji || "📚",
+      color: lesson?.subject?.color || "#3b82f6",
     };
   };
 
-  // NEU: Effekt für den Pausen-Countdown
-  useEffect(() => {
-    if (!isPause) {
-      setTimeLeftInPause("");
-      return;
-    }
+  const { name, emoji, color } = getLessonDisplay(displayLesson);
 
-    const breakEndTime = new Date(`${new Date().toDateString()} ${currentItem.timeSlot.end}`);
-    
-    const timer = setInterval(() => {
-      const now = new Date();
-      const distance = breakEndTime.getTime() - now.getTime();
+  // Live-Uhrzeit formatieren
+  const liveTime = currentTime.toLocaleTimeString('de-DE', {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit'
+  });
 
-      if (distance < 0) {
-        clearInterval(timer);
-        setTimeLeftInPause("Die Pause ist vorbei!");
-        return;
-      }
+  // Einfacher, kräftiger Gradient nur aus der Fachfarbe (wie in den alten Versionen)
+  const headerGradient = lesson.is_allerlei && lesson.allerleiColors?.length > 0
+    ? createMixedSubjectGradient(lesson.allerleiColors)
+    : createGradient(color || "#3b82f6", -25); // color kommt aus getLessonDisplay
 
-      const totalSeconds = Math.floor(distance / 1000);
-      const hours = Math.floor(totalSeconds / 3600);
-      const minutes = Math.floor((totalSeconds % 3600) / 60);
-      const seconds = totalSeconds % 60;
-      
-      if (hours > 0) {
-        setTimeLeftInPause(`${hours}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`);
-      } else {
-        setTimeLeftInPause(`${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`);
-      }
-    }, 1000);
-
-    return () => clearInterval(timer);
-  }, [isPause, currentItem]);
-
-  // Sync with parent component's manual control state
+  // Manuelle Schrittsteuerung synchronisieren
   useEffect(() => {
     if (manualStepIndex !== null) {
       setCurrentStepIndex(manualStepIndex);
@@ -112,21 +94,21 @@ export default function LessonDetailPanel({
     }
   }, [manualStepIndex]);
 
-  // Calculate current step based on time (only for today)
+  // Automatischer Schrittfortschritt (nur heute)
   useEffect(() => {
     if (manualStepControl || !displayLesson) return;
-    
+
     const today = new Date().toDateString();
     const selectedDay = selectedDate.toDateString();
-    
-    if (today !== selectedDay || !displayLesson.timeSlot || !displayLesson.steps) {
+
+    if (today !== selectedDay || !displayLesson.timeSlot || !displayLesson.steps?.length) {
       setCurrentStepIndex(-1);
       return;
     }
 
     const lessonStart = new Date(`${today} ${displayLesson.timeSlot.start}`);
     let elapsed = (currentTime - lessonStart) / 60000;
-    
+
     if (elapsed < 0) {
       setCurrentStepIndex(-1);
       return;
@@ -139,27 +121,14 @@ export default function LessonDetailPanel({
       elapsed -= stepTime;
       if (elapsed >= 0) stepIndex++;
     }
-    
+
     setCurrentStepIndex(Math.min(stepIndex, displayLesson.steps.length - 1));
   }, [displayLesson, currentTime, selectedDate, manualStepControl]);
 
-  const handlePrevStep = () => {
-    const newIndex = Math.max(-1, currentStepIndex - 1);
-    onManualStepChange(newIndex);
-  };
-
-  const handleNextStep = () => {
-    const newIndex = Math.min(displayLesson.steps.length - 1, currentStepIndex + 1);
-    onManualStepChange(newIndex);
-  };
-
-  const resetToAutoMode = () => {
-    onManualStepChange(null);
-  };
-
+  // Schrittfortschritt für Progresskreise
   const stepProgress = useMemo(() => {
-    if (!displayLesson?.steps || selectedDate.toDateString() !== new Date().toDateString()) {
-      return displayLesson.steps ? displayLesson.steps.map(() => 0) : [];
+    if (!displayLesson?.steps?.length || selectedDate.toDateString() !== new Date().toDateString()) {
+      return displayLesson?.steps?.map(() => 0) || [];
     }
 
     const progresses = [];
@@ -180,150 +149,184 @@ export default function LessonDetailPanel({
         elapsed = 0;
       }
     }
-
     return progresses;
   }, [displayLesson, currentTime, selectedDate]);
 
-  // Add debugging logs for overflow check (updated for new grid layout) - Moved to the top, after other hooks
-  useEffect(() => {
-    if (!displayLesson) return;
-
-    const check = () => {
-      // Robuster: Nimm das äußere Panel und das innere Grid
-      const panel = document.querySelector('[class*="LessonDetailPanel"] > div > div.flex.h-full');
-      const content = document.querySelector('.flex-1.overflow-y-auto.bg-white\\/95');
-      const grid = document.querySelector('.grid-cols-\\[80px_80px_140px_1fr_200px\\]');
-
-      console.log('%cLessonDetail Overflow Check', 'font-weight:bold; color:#ec4899');
-      console.log('Viewport Breite:', window.innerWidth);
-      if (content && grid) {
-        console.log('Content wrapper Breite:', content.clientWidth, 'scrollWidth:', content.scrollWidth);
-        console.log('Grid Breite:', grid.offsetWidth, 'scrollWidth:', grid.scrollWidth);
-        console.log('Overflow?', grid.offsetWidth > content.clientWidth ? 'JA (Grid zu breit)' : 'Nein – alles gut 🎉');
-      } else {
-        console.log('Elemente nicht gefunden – wahrscheinlich noch nicht gerendert');
-      }
-    };
-
-    check();
-    window.addEventListener('resize', check);
-    return () => window.removeEventListener('resize', check);
-  }, [displayLesson]);
-
-  // Pause View
+  // Pause-Ansicht
   if (isPause) {
     return (
       <div className="rounded-2xl shadow-2xl bg-white/95 dark:bg-slate-900/95 overflow-hidden h-full flex flex-col items-center justify-center p-8">
-        <Coffee className="w-24 h-24 text-orange-500 mb-8" />
+        <Coffee className="w-24 h-24 text-orange-500 mb-8 animate-pulse" />
         <h2 className="text-4xl font-bold text-slate-800 dark:text-slate-200 mb-12">
           {currentItem.name}
         </h2>
-
         <div className="w-full max-w-2xl">
           <AllTopicsProgressOverview progresses={allProgress} />
         </div>
-
-        {timeLeftInPause && (
-          <div className="mt-12 text-6xl font-bold tracking-tight text-orange-600">
-            {timeLeftInPause}
-          </div>
-        )}
       </div>
     );
   }
 
-  // Lesson Detail View
-  if (displayLesson) {
-    const { name, emoji, color, isGradient } = getLessonDisplay(displayLesson);
-
+  // Keine Lektion ausgewählt
+  if (!displayLesson) {
     return (
-      <div 
-        className="flex h-full flex-col overflow-hidden rounded-2xl shadow-2xl"
-        style={{ 
-          background: isGradient ? color : getThemeGradient(theme || 'default', color, undefined, isDark),
-          borderColor: color + '40',
-        }}
+      <div className="flex items-center justify-center h-full text-center bg-white/50 dark:bg-slate-800/50 rounded-2xl">
+        <div>
+          <div className="text-6xl mb-4">👈</div>
+          <h2 className={`${customization.fontSize.title} font-bold text-slate-600 dark:text-slate-400 mb-2`}>
+            Kein Element ausgewählt
+          </h2>
+          <p className={`${customization.fontSize.content} text-slate-500`}>Wählen Sie eine Lektion aus.</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Haupt-Detail-Ansicht
+  return (
+    <div
+      className={`flex h-full flex-col overflow-hidden rounded-2xl shadow-2xl ${
+        customization.transparencyMode
+          ? "bg-transparent border border-white/20 dark:border-white/10"
+          : "bg-white/95 dark:bg-slate-900/95 border border-slate-200/30 dark:border-slate-700/30"
+      }`}
+    >
+      {/* Header mit Fachfarben-Gradient */}
+      <div
+        className="p-6 border-b border-slate-200 dark:border-slate-700"
+        style={{ background: customization.transparencyMode ? "transparent" : headerGradient }}
       >
-        {/* Header */}
-        <div 
-          className="p-6 cursor-default border-b flex justify-between items-center"
-          style={{ 
-            background: isGradient ? color : getThemeGradient(theme || 'default', color, -10, isDark),
-          }}
-        >
+        <div className="flex justify-between items-start">
           <div>
-            <h2 className={`${customization.fontSize.title} font-bold text-white`}>
+            <h2 className={`${customization.fontSize.title} font-bold text-white flex items-center gap-3 flex-wrap`}>
               {emoji} {name}
+              
+              {/* Symbole direkt im Titel */}
+              {displayLesson.is_exam && <span className="text-red-300 font-bold text-4xl leading-none">!</span>}
+              {displayLesson.is_half_class && <span className="text-blue-300 font-bold text-3xl">½</span>}
+              {displayLesson.is_double_lesson && <span className="text-yellow-300 font-bold text-3xl">×2</span>}
             </h2>
-            <p className={`${customization.fontSize.content} text-white/90`}>
+            <p className={`mt-2 text-white/90 ${customization.fontSize.content}`}>
               {displayLesson.description}
             </p>
           </div>
-          
-          <div className="flex items-center gap-2">
-            {displayLesson.timeSlot && (
-              <div className="text-white/90 text-right">
-                <div className="flex items-center gap-1">
-                  <Clock className="w-4 h-4" />
-                  <span className="font-medium">
-                    {displayLesson.timeSlot.start} - {displayLesson.timeSlot.end}
-                  </span>
-                </div>
-                <div className="text-sm">Periode {displayLesson.period_slot}</div>
-              </div>
-            )}
+          <div className="text-right">
+            <div className="text-4xl font-bold text-white tabular-nums">
+              {liveTime}
+            </div>
           </div>
         </div>
+      </div>
 
-        {/* Topic Progress Bar */}
-        <TopicProgressBar topic={topic} planned={planned} completed={completed} />
-
-        {/* Content */}
-        <div className="flex-1 overflow-y-auto bg-white/95 dark:bg-slate-900/95">
-          <div className="p-4 md:p-6">
-            {/* Step controls */}
-            <div className="flex justify-between items-center mb-4">
-              <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handlePrevStep}
-                  disabled={currentStepIndex <= -1}
-                >
-                  <ChevronLeft className="w-4 h-4" />
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleNextStep}
-                  disabled={currentStepIndex >= displayLesson.steps.length - 1}
-                >
-                  <ChevronRight className="w-4 h-4" />
-                </Button>
-                {manualStepControl && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={resetToAutoMode}
-                    className="text-xs"
-                  >
-                    <Play className="w-3 h-3 mr-1" />
-                    Auto
-                  </Button>
-                )}
+      {/* Themenfortschrittsbalken */}
+      <div className="space-y-3">
+        {displayLesson?.is_allerlei ? (
+          <>
+            {allerleiProgresses.length > 0 ? (
+              allerleiProgresses.map(({ topic, planned, completed }) => (
+                <TopicProgressBar
+                  key={topic.id}
+                  topic={topic}
+                  planned={planned}
+                  completed={completed}
+                />
+              ))
+            ) : (
+              <div className="text-sm text-slate-500 dark:text-slate-400 italic">
+                Keine Themen zugeordnet
               </div>
-              <span className="text-sm text-slate-500 dark:text-slate-400">
-                Schritt {Math.max(0, currentStepIndex + 1)} von {displayLesson.steps.length}
-                {manualStepControl && (
-                  <span className="ml-2 px-2 py-1 bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 text-xs rounded-full">
-                    Manuell
-                  </span>
-                )}
-              </span>
-            </div>
+            )}
+          </>
+        ) : topic ? (
+          <TopicProgressBar topic={topic} planned={planned} completed={completed} />
+        ) : (
+          <div className="text-sm text-slate-500 dark:text-slate-400 italic">
+            Kein Thema zugeordnet
+          </div>
+        )}
+      </div>
 
-            {/* Mobile Card Layout */}
-            <div className="md:hidden space-y-4">
+      {/* Inhaltsbereich */}
+      <div className="flex-1 overflow-y-auto bg-white/95 dark:bg-slate-900/95">
+        <div className="p-4 md:p-6">
+          {/* Schrittsteuerung */}
+          <div className="flex justify-between items-center mb-6">
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" onClick={() => onManualStepChange(Math.max(-1, currentStepIndex - 1))} disabled={currentStepIndex <= -1}>
+                <ChevronLeft className="w-4 h-4" />
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => onManualStepChange(Math.min(displayLesson.steps.length - 1, currentStepIndex + 1))} disabled={currentStepIndex >= displayLesson.steps.length - 1}>
+                <ChevronRight className="w-4 h-4" />
+              </Button>
+              {manualStepControl && (
+                <Button variant="outline" size="sm" onClick={() => onManualStepChange(null)}>
+                  <Play className="w-4 h-4 mr-1" /> Auto
+                </Button>
+              )}
+            </div>
+            <span className="text-sm text-slate-600 dark:text-slate-400">
+              Schritt {Math.max(0, currentStepIndex + 1)} von {displayLesson.steps.length}
+            </span>
+          </div>
+
+          {/* Mobile Karten-Layout */}
+          <div className="md:hidden space-y-4">
+            {displayLesson.steps.map((step, index) => {
+              const progress = stepProgress[index] || 0;
+              const isCurrent = index === currentStepIndex;
+              const isCompleted = progress === 100;
+              const WorkFormIcon = WORK_FORM_ICONS[step.workForm] || User;
+
+              return (
+                <div
+                  key={step.id || index}
+                  className={`p-4 rounded-xl border-2 ${
+                    isCurrent ? "border-blue-500 bg-blue-50 dark:bg-blue-900/30" : "border-slate-200 dark:border-slate-700"
+                  }`}
+                >
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-3">
+                      <svg className="h-10 w-10 -rotate-90">
+                        <circle cx="20" cy="20" r="16" stroke="#e5e7eb" strokeWidth="4" fill="none" />
+                        <circle
+                          cx="20"
+                          cy="20"
+                          r="16"
+                          stroke={isCompleted ? "#22c55e" : "#3b82f6"}
+                          strokeWidth="4"
+                          fill="none"
+                          strokeDasharray="100"
+                          strokeDashoffset={100 * (1 - progress / 100)}
+                          className="transition-all duration-500"
+                        />
+                      </svg>
+                      <span className="font-semibold text-lg">{step.time} Min</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <WorkFormIcon className="h-6 w-6" />
+                      <span>{WORK_FORMS[step.workForm] || step.workForm}</span>
+                    </div>
+                  </div>
+                  <div className="text-sm">
+                    <span className="font-medium">Ablauf:</span> {step.activity || "–"}
+                  </div>
+                  <div className="text-sm mt-1">
+                    <span className="font-medium">Material:</span> {step.material || "–"}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Desktop Grid-Layout */}
+          <div className="hidden md:block">
+            <div className="grid grid-cols-[80px_80px_140px_1fr_200px] gap-4">
+              <div className="text-xs font-semibold uppercase text-slate-600 dark:text-slate-400 py-3"> </div>
+              <div className="text-xs font-semibold uppercase text-slate-600 dark:text-slate-400 py-3">Zeit</div>
+              <div className="text-xs font-semibold uppercase text-slate-600 dark:text-slate-400 py-3">Form</div>
+              <div className="text-xs font-semibold uppercase text-slate-600 dark:text-slate-400 py-3">Ablauf</div>
+              <div className="text-xs font-semibold uppercase text-slate-600 dark:text-slate-400 py-3">Material</div>
+
               {displayLesson.steps.map((step, index) => {
                 const progress = stepProgress[index] || 0;
                 const isCurrent = index === currentStepIndex;
@@ -331,153 +334,45 @@ export default function LessonDetailPanel({
                 const WorkFormIcon = WORK_FORM_ICONS[step.workForm] || User;
 
                 return (
-                  <div key={index} className={`p-4 rounded-xl border-2 ${index === currentStepIndex ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30' : 'border-slate-200 dark:border-slate-700'}`}>
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10">
-                          <svg className="h-8 w-8 -rotate-90 transform">
-                            <circle cx="16" cy="16" r="14" stroke="#e5e7eb" strokeWidth="3" fill="none" />
-                            <circle
-                              cx="16"
-                              cy="16"
-                              r="14"
-                              stroke={isCompleted ? "#22c55e" : "#3b82f6"}
-                              strokeWidth="3"
-                              fill="none"
-                              strokeDasharray="88"
-                              strokeDashoffset={88 * (1 - progress / 100)}
-                              className="transition-all duration-500"
-                            />
-                          </svg>
-                        </div>
-                        <span className="font-semibold">{step.time} Min</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <WorkFormIcon className="h-5 w-5" />
-                        <span>{WORK_FORMS[step.workForm] || step.workForm}</span>
-                      </div>
+                  <motion.div
+                    key={step.id || index}
+                    className={`grid grid-cols-subgrid col-span-5 gap-4 p-4 rounded-lg border transition-all ${
+                      isCurrent
+                        ? "bg-yellow-50 dark:bg-yellow-900/30 border-yellow-400 dark:border-yellow-600 shadow-sm"
+                        : isCompleted
+                        ? "bg-green-50 dark:bg-green-900/20 opacity-70"
+                        : "bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700"
+                    }`}
+                  >
+                    <div className="flex items-center">
+                      <svg className="h-10 w-10 -rotate-90">
+                        <circle cx="20" cy="20" r="16" stroke="#e5e7eb" strokeWidth="4" fill="none" />
+                        <circle
+                          cx="20"
+                          cy="20"
+                          r="16"
+                          stroke={isCompleted ? "#22c55e" : "#3b82f6"}
+                          strokeWidth="4"
+                          fill="none"
+                          strokeDasharray="100"
+                          strokeDashoffset={100 * (1 - progress / 100)}
+                          className="transition-all duration-500"
+                        />
+                      </svg>
                     </div>
-                    <div className="text-sm"><span className="font-medium">Ablauf:</span> {step.activity || '–'}</div>
-                    <div className="text-sm"><span className="font-medium">Material:</span> {step.material || '–'}</div>
-                  </div>
+                    <div className="flex items-center text-sm">{step.time ? `${step.time} Min` : "–"}</div>
+                    <div className="flex items-center gap-2 text-sm">
+                      <WorkFormIcon className="h-5 w-5 text-slate-500" />
+                      <span className="truncate">{WORK_FORMS[step.workForm] || step.workForm || "–"}</span>
+                    </div>
+                    <div className="text-sm break-words">{step.activity || "–"}</div>
+                    <div className="text-sm break-words">{step.material || "–"}</div>
+                  </motion.div>
                 );
               })}
             </div>
-
-            {/* === TABELLE MIT FORCIERTER RESPONSIVEN LAYOUT === */}
-            {/* Desktop Steps – komplett responsives Grid (ersetzt die alte Tabelle) */}
-            <div className="hidden md:block desktop-steps-grid">
-              <div className="grid grid-cols-[80px_80px_140px_1fr_200px] gap-4">
-                {/* Header */}
-                <div className="text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400 py-3"></div>
-                <div className="text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400 py-3">Zeit</div>
-                <div className="text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400 py-3">Form</div>
-                <div className="text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400 py-3">Ablauf</div>
-                <div className="text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400 py-3">Material</div>
-
-                {/* Rows */}
-                {displayLesson.steps.map((step, index) => {
-                  const progress = stepProgress[index] || 0;
-                  const isCurrent = index === currentStepIndex;
-                  const isCompleted = progress === 100;
-                  const WorkFormIcon = WORK_FORM_ICONS[step.workForm] || User;
-
-                  return (
-                    <motion.div
-                      key={step.id || index}
-                      className={`grid grid-cols-subgrid col-span-5 gap-4 p-4 rounded-lg border transition-all ${
-                        isCurrent 
-                          ? 'bg-yellow-100 dark:bg-yellow-900/40 font-bold shadow-sm border-yellow-300 dark:border-yellow-700' 
-                          : isCompleted 
-                            ? 'bg-green-50 dark:bg-green-900/20 opacity-60' 
-                            : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700'
-                      }`}
-                    >
-                      {/* Progress Kreis */}
-                      <div className="flex items-center">
-                        <svg className="h-8 w-8 -rotate-90">
-                          <circle cx="16" cy="16" r="14" stroke="#e5e7eb" strokeWidth="3" fill="none" />
-                          <circle
-                            cx="16" cy="16"
-                            r="14"
-                            stroke={isCompleted ? "#22c55e" : "#3b82f6"}
-                            strokeWidth="3"
-                            fill="none"
-                            strokeDasharray="88"
-                            strokeDashoffset={88 * (1 - progress / 100)}
-                            className="transition-all duration-500"
-                          />
-                        </svg>
-                      </div>
-
-                      {/* Zeit */}
-                      <div className="text-sm flex items-center">
-                        {step.time ? `${step.time} Min` : '–'}
-                      </div>
-
-                      {/* Arbeitsform */}
-                      <div className="text-sm flex items-center gap-2">
-                        <WorkFormIcon className="h-5 w-5 text-slate-500 flex-shrink-0" />
-                        <span className="truncate">{WORK_FORMS[step.workForm] || step.workForm || '–'}</span>
-                      </div>
-
-                      {/* Ablauf – bricht um, läuft nie über */}
-                      <div className="text-sm break-words hyphens-auto">
-                        {step.activity || '–'}
-                      </div>
-
-                      {/* Material – bricht auch um */}
-                      <div className="text-sm break-words hyphens-auto">
-                        {step.material || '–'}
-                      </div>
-                    </motion.div>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Additional lesson info */}
-            {(displayLesson.is_exam || displayLesson.is_half_class || displayLesson.is_double_lesson) && (
-              <div className="mt-6 p-4 bg-slate-50 dark:bg-slate-700 rounded-xl">
-                <h4 className={`${customization.fontSize.content} font-semibold text-slate-700 dark:text-slate-300 mb-2`}>
-                  Lektionsdetails
-                </h4>
-                <div className="flex flex-wrap gap-2">
-                  {displayLesson.is_double_lesson && (
-                    <span className="px-3 py-1 bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 text-sm rounded-full">
-                      Doppellektion ({displayLesson.is_double_lesson ? '90' : '45'} Min)
-                    </span>
-                  )}
-                  {displayLesson.is_exam && (
-                    <span className="px-3 py-1 bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300 text-sm rounded-full">
-                      Prüfung
-                    </span>
-                  )}
-                  {displayLesson.is_half_class && (
-                    <span className="px-3 py-1 bg-green-100 dark:bg-green-900 text-green-700 dark:text-blue-300 text-sm rounded-full">
-                      Halbklasse
-                    </span>
-                  )}
-                </div>
-              </div>
-            )}
           </div>
         </div>
-      </div>
-    );
-  }
-  
-  // Placeholder View when no lesson is selected and it's not a break
-  return (
-    <div className="flex items-center justify-center h-full text-center bg-white/50 dark:bg-slate-800/50 rounded-2xl">
-      <div>
-        <div className="text-6xl mb-4">👈</div>
-        <h2 className={`${customization.fontSize.title} font-bold text-slate-600 dark:text-slate-400 mb-2`}>
-          Kein Element ausgewählt
-        </h2>
-        <p className={`${customization.fontSize.content} text-slate-500 dark:text-slate-500`}>
-          Wählen Sie eine Lektion aus der Übersicht, um Details anzuzeigen.
-        </p>
       </div>
     </div>
   );

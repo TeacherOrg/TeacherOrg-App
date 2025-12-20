@@ -162,3 +162,17 @@ export const getThemeAwareColor = (baseColor, isDarkMode, adjustAmount = -10) =>
     ? adjustColor(baseColor, adjustAmount)
     : baseColor;
 };
+
+export const adjustBrightness = (color, amount) => {
+  // Entfernt # wenn vorhanden
+  color = color.replace("#", "");
+  let r = parseInt(color.substr(0, 2), 16);
+  let g = parseInt(color.substr(2, 2), 16);
+  let b = parseInt(color.substr(4, 2), 16);
+
+  r = Math.min(255, Math.max(0, r + amount));
+  g = Math.min(255, Math.max(0, g + amount));
+  b = Math.min(255, Math.max(0, b + amount));
+
+  return `#${r.toString(16).padStart(2, "0")}${g.toString(16).padStart(2, "0")}${b.toString(16).padStart(2, "0")}`;
+};

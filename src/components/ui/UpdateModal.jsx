@@ -20,6 +20,7 @@ const UpdateModal = ({ isOpen, onClose, version }) => {
           subcategory: 'Allgemein',
           items: [
             { text: 'OliOmegaGay', type: 'fixed' },
+            { text: 'Neue Sidebar (Ein/Ausklappbar + Ansichtenanpassung', type: 'fixed' },
           ],
         },
         {
@@ -45,6 +46,15 @@ const UpdateModal = ({ isOpen, onClose, version }) => {
           ],
         },
         {
+          subcategory: 'Tagesansicht',
+          items: [
+            { text: 'Designanpassungen', type: 'fixed' },
+            { text: 'Allerleilektionen werden korrekt angezeigt', type: 'fixed' },
+            { text: 'Doppellektionen korrekt angezeigt', type: 'fixed' },
+            { text: 'Themenprogressionsbars eingefügt (Berechnung noch nicht korrekt)', type: 'warning' },
+          ],
+        },
+        {
           subcategory: 'Themenansicht',
           items: [
             { text: 'Themenzuweisung bestehender Lektionen', type: 'fixed' },
@@ -57,6 +67,8 @@ const UpdateModal = ({ isOpen, onClose, version }) => {
           items: [
             { text: 'Materialien aus Thema stehen bei den Schritten zur Verfügung ', type: 'fixed' },
             { text: 'Lektionstemplates können erstellt werden und erlauben hinzufügen neuer Lektionen', type: 'fixed' },
+            { text: 'Fixes', type: 'fixed' },
+            { text: 'Manchmal muss mehrfach auf Lektion in Wochenansicht geklickt werden, damit Modal öffnet', type: 'warning' },
           ],
         },
         {
@@ -114,7 +126,7 @@ const UpdateModal = ({ isOpen, onClose, version }) => {
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>TeacherOrg Update: Version Alpha 4.2.0</DialogTitle>
+          <DialogTitle>TeacherOrg Update: Version Alpha 6.9.0</DialogTitle>
           <DialogDescription>
             Hier sind die neuesten Änderungen:
           </DialogDescription>

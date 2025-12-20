@@ -47,6 +47,8 @@ export default function LessonModal({
   const [addSecondLesson, setAddSecondLesson] = useState(false);
   const [selectedSecondLesson, setSelectedSecondLesson] = useState("");
   const [selectedSubject, setSelectedSubject] = useState("");
+  const [selectedTopicId, setSelectedTopicId] = useState("no_topic");
+  const [availableTopics, setAvailableTopics] = useState([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [validationError, setValidationError] = useState(null);
   const [integratedOriginalData, setIntegratedOriginalData] = useState({});
@@ -419,11 +421,30 @@ export default function LessonModal({
       }
     }
 
-    // ─── NEU: loadedSubject berechnen ─────────────────────────────────────
-    let loadedSubject = lessonToLoad.subject || initialSubject || "";
-    if (lessonToLoad.collectionName === 'allerlei_lessons' && loadedPrimaryYlId) {
+    // ─── NEU: Robuste loadedSubject-Bestimmung ─────────────────────────────────────
+    let loadedSubject = initialSubject || "";
+
+    // 1. Priorität: Direkt aus lesson.subject (falls vorhanden)
+    if (lessonToLoad.subject) {
+      loadedSubject = lessonToLoad.subject;
+    }
+    // 2. Bei Allerlei: aus primary YearlyLesson
+    else if (lessonToLoad.collectionName === 'allerlei_lessons' && loadedPrimaryYlId) {
       const primaryYL = allYearlyLessons.find(yl => yl.id === loadedPrimaryYlId);
-      loadedSubject = primaryYL?.subject || initialSubject || "";
+      if (primaryYL?.subject) {
+        loadedSubject = primaryYL.subject;
+      }
+    }
+    // 3. Bei normaler Lektion: aus yearly_lesson_id → YearlyLesson.subject
+    else if (lessonToLoad.yearly_lesson_id) {
+      const yl = allYearlyLessons.find(yl => yl.id === lessonToLoad.yearly_lesson_id);
+      if (yl?.subject) {
+        loadedSubject = yl.subject;
+      }
+    }
+    // 4. Fallback: initialSubject (z. B. beim Drag & Drop)
+    else {
+      loadedSubject = initialSubject || "";
     }
 
     // WICHTIG: ZUERST alle abhängigen Werte lokal berechnen
@@ -442,8 +463,9 @@ export default function LessonModal({
     const resolvedMaterials = resolvedTopic?.materials || [];
 
     // Jetzt alles setzen – inkl. topicMaterials werden indirekt über formData korrekt
+    setAvailableTopics(currentSubjectTopics);
+    setSelectedTopicId(loadedTopicId);
     setTopicMaterials(resolvedMaterials);
-    setSelectedSubject(loadedSubject);
     setFormData({
       topic_id: loadedTopicId,
       is_double_lesson: lessonToLoad.is_double_lesson || false,
@@ -457,6 +479,7 @@ export default function LessonModal({
       is_allerlei: lessonToLoad.collectionName === 'allerlei_lessons',
       subject: loadedSubject                     // ← NEU: subject in formData speichern
     });
+    setSelectedSubject(loadedSubject);
     setAddSecondLesson(lessonToLoad.is_double_lesson && !!lessonToLoad.second_yearly_lesson_id);
     setSelectedSecondLesson(lessonToLoad.second_yearly_lesson_id || "");
 
@@ -468,7 +491,7 @@ export default function LessonModal({
         .map(s => ({ ...s, id: `second-${s.id || generateId()}` })) || []);
     }
     setWasAllerlei(lessonToLoad.collectionName === 'allerlei_lessons');
-  }, [isOpen, lesson, copiedLesson, initialSubject, allYearlyLessons, topics]);
+  }, [isOpen, lesson, copiedLesson, initialSubject, allYearlyLessons, topics, subjectOptions]);
 
   // ─── Sync selectedSubject → formData.subject (für neue Lektionen wichtig) ─────
   useEffect(() => {
@@ -476,6 +499,21 @@ export default function LessonModal({
       setFormData(prev => ({ ...prev, subject: selectedSubject }));
     }
   }, [selectedSubject, isAllerlei, formData.subject]);
+
+  // ─── Cleanup beim Schließen ─────
+  useEffect(() => {
+    if (!isOpen) {
+      setSelectedTopicId("no_topic");
+      setAvailableTopics([]);
+    }
+  }, [isOpen]);
+
+  // Immer sicherstellen, dass formData.topic_id aktuell ist
+  useEffect(() => {
+    if (selectedTopicId !== formData.topic_id) {
+      setFormData(prev => ({ ...prev, topic_id: selectedTopicId }));
+    }
+  }, [selectedTopicId, formData.topic_id]);
 
   const handleAutoFill = useCallback(() => {
     if (!selectedSubject) return;
@@ -995,8 +1033,10 @@ export default function LessonModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent 
-        className="max-w-4xl border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 max-h-[80vh] overflow-y-auto" 
+      <DialogContent
+        onPointerDown={(e) => e.stopPropagation()}
+        onMouseDown={(e) => e.stopPropagation()}
+        className="max-w-4xl border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 max-h-[80vh] overflow-y-auto"
         style={{ borderColor: (subjectColor || '#3b82f6') + '40' }}
       >
         <DialogHeader 
@@ -1060,11 +1100,19 @@ export default function LessonModal({
             </div>
             <div className="space-y-2">
               <Label className="text-sm font-semibold text-slate-900 dark:text-white">Thema</Label>
-              <Select value={formData.topic_id || "no_topic"} onValueChange={(value) => setFormData({ ...formData, topic_id: value })} disabled={!selectedSubject || isAllerlei}>
+              <Select 
+                key={`${selectedSubject}-${selectedTopicId}-${availableTopics.length}`}
+                value={selectedTopicId} 
+                onValueChange={(value) => {
+                  setSelectedTopicId(value);
+                  setFormData(prev => ({ ...prev, topic_id: value }));
+                }} 
+                disabled={!selectedSubject || isAllerlei}
+              >
                 <SelectTrigger className="bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white"><SelectValue placeholder="Thema auswählen (optional)" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="no_topic">Kein Thema</SelectItem>
-                  {subjectTopics.map((topic) => (<SelectItem key={topic.id} value={topic.id}>{topic.title}</SelectItem>))}
+                  {availableTopics.map((topic) => (<SelectItem key={topic.id} value={topic.id}>{topic.title}</SelectItem>))}
                 </SelectContent>
               </Select>
             </div>

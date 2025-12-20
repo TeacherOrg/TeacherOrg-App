@@ -2,43 +2,72 @@
 import { useMemo } from "react";
 import { useLessonStore } from "@/store";
 
+function getCurrentWeek(date = new Date()) {
+  const d = new Date(date);
+  d.setHours(0, 0, 0, 0);
+  d.setDate(d.getDate() + 3 - ((d.getDay() + 6) % 7));
+  const yearStart = new Date(d.getFullYear(), 0, 1);
+  return Math.ceil(((d - yearStart) / 86400000 + 1) / 7);
+}
+
 export function useTopicProgress(currentLesson) {
-  const { yearlyLessons, allLessons } = useLessonStore();
+  const { allYearlyLessons, allLessons, topics } = useLessonStore();
+
+  const currentYear = new Date().getFullYear();
+  const currentWeek = getCurrentWeek();
 
   return useMemo(() => {
-    if (!currentLesson?.yearlyLesson?.topic_id && !currentLesson?.secondYearlyLesson?.topic_id) {
+    let topicId = null;
+
+    if (currentLesson?.yearly_lesson_id) {
+      const yl = allYearlyLessons.find(yl => yl.id === currentLesson.yearly_lesson_id);
+      topicId = yl?.topic_id;
+    } else if (currentLesson?.second_yearly_lesson_id) {
+      const yl = allYearlyLessons.find(yl => yl.id === currentLesson.second_yearly_lesson_id);
+      topicId = yl?.topic_id;
+    }
+
+    if (!topicId) {
       return { topic: null, planned: 0, completed: 0 };
     }
 
-    const topicId = currentLesson.yearlyLesson?.topic_id || currentLesson.secondYearlyLesson?.topic_id;
-    const topic = currentLesson.topic || null; // kommt oft schon mit (in lessonsWithDetails)
+    const topic = topics.find(t => t.id === topicId) || null;
 
-    // Alle yearlyLessons dieses Themas (auch über Klassen/Jahre hinweg – normalerweise pro Klasse eindeutig)
-    const plannedLessons = yearlyLessons.filter(yl => yl.topic_id === topicId);
+    // Alle yearlyLessons dieses Themas – sortiert nach lesson_number
+    const plannedLessons = allYearlyLessons
+      .filter(yl => yl.topic_id === topicId)
+      .sort((a, b) => (a.lesson_number || 0) - (b.lesson_number || 0));
 
     const planned = plannedLessons.length;
+    if (planned === 0) return { topic, planned: 0, completed: 0 };
 
-    // Wie viele davon sind bereits als weekly lesson eingetragen UND liegen in der Vergangenheit oder heute?
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    // Chronologisches Zählen – exakt wie in useAllActiveTopicsProgress
+    let completedCount = 0;
 
-    const completed = allLessons.filter(lesson => {
+    allLessons.forEach((lesson) => {
       const ylId = lesson.yearly_lesson_id || lesson.second_yearly_lesson_id;
-      const yl = plannedLessons.find(p => p.id === ylId);
-      if (!yl) return false;
+      if (!ylId) return;
 
-      // Woche + Jahr der weekly lesson bestimmen
-      const lessonDate = new Date(); // wir haben keine direkte date, aber week_number + year reicht
-      // Alternativ: wir können aus week_number + year ein Datum bauen
-      const jan4 = new Date(lesson.week_year || new Date().getFullYear(), 0, 4);
-      const mondayOfWeek1 = new Date(jan4);
-      mondayOfWeek1.setDate(jan4.getDate() - ((jan4.getDay() + 6) % 7));
-      const lessonMonday = new Date(mondayOfWeek1);
-      lessonMonday.setDate(mondayOfWeek1.getDate() + (lesson.week_number - 1) * 7);
+      // Wichtig: Index in der sortierten Liste finden!
+      const index = plannedLessons.findIndex(yl => yl.id === ylId);
+      if (index === -1) return; // nicht in diesem Thema
 
-      return lessonMonday <= today;
-    }).length;
+      const lessonWeek = lesson.week_number;
+      const lessonYear = lesson.week_year || currentYear;
 
-    return { topic, planned, completed };
-  }, [currentLesson, yearlyLessons, allLessons]);
+      const isPastOrToday =
+        lessonYear < currentYear ||
+        (lessonYear === currentYear && lessonWeek <= currentWeek);
+
+      if (isPastOrToday) {
+        // Jede vergangene Lektion zählt – auch wenn dazwischen Lücken sind
+        completedCount = Math.max(completedCount, index + 1);
+        if (lesson.is_double_lesson) completedCount += 1;
+      }
+    });
+
+    console.log("TopicProgress Debug Final:", { planned, completedCount, topicId });
+
+    return { topic, planned, completed: completedCount };
+  }, [currentLesson, allYearlyLessons, allLessons, topics, currentWeek]);
 }

@@ -11,7 +11,7 @@ class PbEntity {
     // Entitäts-spezifische expand-Felder, abgestimmt auf PocketBase-Schema
     const expandMap = {
       lesson: 'subject,user_id,yearly_lesson_id,second_yearly_lesson_id,topic_id',
-      yearly_lesson: 'subject,user_id,class_id,topic_id,second_yearly_lesson_id',
+      yearly_lesson: 'topic,subject',
       allerlei_lesson: 'primary_yearly_lesson_id.expand.subject,added_yearly_lesson_ids.expand.subject,user_id,class_id,topic_id',
       topic: 'class_id,subject',
       subject: 'class_id',
@@ -196,6 +196,7 @@ class PbEntity {
       normalizedItem.added_yearly_lesson_ids = normalizedItem.added_yearly_lesson_ids || [];  // ← Neu: Sicherstelle Array
     } else if (this.name === 'yearly_lesson') {
       normalizedItem.subject_name = normalizedItem.expand?.subject?.name || normalizedItem.subject_name || 'Unbekannt';
+      normalizedItem.subject_color = normalizedItem.expand?.subject?.color || normalizedItem.subject_color;
     }
     normalizedItem.topic_name = normalizedItem.expand?.topic_id?.name || '';
     normalizedItem.yearly_lesson_name = normalizedItem.expand?.yearly_lesson_id?.name || '';

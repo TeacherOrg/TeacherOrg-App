@@ -3,6 +3,7 @@ import { shallow } from 'zustand/shallow';
 
 export const useLessonStore = create((set) => ({
   yearlyLessons: [],
+  allYearlyLessons: [], // Komplette Liste aller yearlyLessons
   allLessons: [],
   allerleiLessons: [],
   topics: [], // Add topics state
@@ -11,6 +12,7 @@ export const useLessonStore = create((set) => ({
   holidays: [], // Add holidays state
   settings: {}, // Add settings state
   setYearlyLessons: (lessons) => set({ yearlyLessons: lessons.map(l => ({ ...l, lesson_number: Number(l.lesson_number) })) }),
+  setAllYearlyLessons: (lessons) => set({ allYearlyLessons: lessons.map(l => ({ ...l, lesson_number: Number(l.lesson_number) })) }),
   setAllLessons: (lessons) => set({ allLessons: lessons }),
   setAllerleiLessons: (lessons) => set({ allerleiLessons: lessons }),
   setTopics: (topics) => set({ topics }), // Add setTopics

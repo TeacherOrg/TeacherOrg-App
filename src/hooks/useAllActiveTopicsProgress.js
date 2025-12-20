@@ -11,90 +11,120 @@ function getCurrentWeek(date = new Date()) {
 }
 
 export function useAllActiveTopicsProgress() {
-  const { yearlyLessons, allLessons } = useLessonStore();
+  const { allYearlyLessons, allLessons, topics } = useLessonStore();
+
+  const currentYear = new Date().getFullYear();
+  const currentWeek = getCurrentWeek();
 
   return useMemo(() => {
     const topicMap = new Map();
-    const currentYear = new Date().getFullYear();
-    const currentWeek = getCurrentWeek();
 
-    yearlyLessons.forEach((yl) => {
+    // Alle yearlyLessons nach topic_id gruppieren und sortieren
+    allYearlyLessons.forEach((yl) => {
       if (!yl.topic_id) return;
+
+      const topicObj = topics.find(t => t.id === yl.topic_id) || {
+        id: yl.topic_id,
+        title: "Unbenanntes Thema",
+        color: "#94a3b8"
+      };
 
       if (!topicMap.has(yl.topic_id)) {
         topicMap.set(yl.topic_id, {
           topic: {
             id: yl.topic_id,
-            title:
-              (yl.expand?.topic?.title) || yl.topic_title || "Unbenanntes Thema",
-            color: (yl.expand?.topic?.color) || "#3b82f6",
+            title: topicObj.title,
+            color: topicObj.color || "#3b82f6",
           },
           subjectName:
             (yl.expand?.subject?.name) || yl.subject_name || "Unbekannt",
           subjectColor:
-            (yl.expand?.subject?.color) || "#94a3b8",
-          planned: 0,
-          completed: 0,
+            yl.subject_color || yl.expand?.subject?.color || "#3b82f6", // fallback nur auf Blau
+          sortedLessons: [],
+          completedCount: 0,
           hasExam: false,
-          lessonsUntilExam: null,     // z.B. 3, 1, 0
-          examThisWeek: false,
+          lessonsUntilExam: null,
         });
       }
-      const entry = topicMap.get(yl.topic_id);
-      entry.planned += 1;
 
-      // Prüfung finden
-      if (yl.is_exam) {
-        entry.hasExam = true;
-      }
+      const entry = topicMap.get(yl.topic_id);
+      entry.sortedLessons.push(yl);
+      if (yl.is_exam) entry.hasExam = true;
     });
 
-    // Completed zählen + Prüfungsabstand berechnen
+    // Sortiere jede Themenliste nach lesson_number
+    topicMap.forEach((entry) => {
+      entry.sortedLessons.sort((a, b) => (a.lesson_number || 0) - (b.lesson_number || 0));
+      entry.planned = entry.sortedLessons.length;
+    });
+
+    // Zähle chronologisch abgeschlossene Lektionen
     allLessons.forEach((lesson) => {
       const ylId = lesson.yearly_lesson_id || lesson.second_yearly_lesson_id;
       if (!ylId) return;
 
-      const yl = yearlyLessons.find((y) => y.id === ylId);
+      const yl = allYearlyLessons.find((y) => y.id === ylId);
       if (!yl?.topic_id) return;
+
+      const entry = topicMap.get(yl.topic_id);
+      if (!entry) return;
 
       const lessonWeek = lesson.week_number;
       const lessonYear = lesson.week_year || currentYear;
+
       const isPastOrToday =
         lessonYear < currentYear ||
         (lessonYear === currentYear && lessonWeek <= currentWeek);
 
       if (isPastOrToday) {
-        const entry = topicMap.get(yl.topic_id);
-        if (entry) {
-          entry.completed += lesson.is_double_lesson ? 2 : 1;
+        // Finde Index dieser Lektion in der sortierten Liste
+        const index = entry.sortedLessons.findIndex(l => l.id === ylId);
+        if (index >= 0) {
+          // Jede vergangene Lektion zählt – auch wenn dazwischen Lücken sind
+          entry.completedCount = Math.max(entry.completedCount, index + 1);
+          if (lesson.is_double_lesson) entry.completedCount += 1;
         }
-      }
-
-      // Prüfung in dieser Woche?
-      if (yl.is_exam && lessonWeek === currentWeek && lessonYear === currentYear) {
-        const entry = topicMap.get(yl.topic_id);
-        if (entry) entry.examThisWeek = true;
       }
     });
 
-    // Nachbearbeitung: lessonsUntilExam berechnen
-    topicMap.forEach((entry, topicId) => {
+    // Prüfungs-Countdown
+    topicMap.forEach((entry) => {
       if (!entry.hasExam) return;
 
-      const examLessons = yearlyLessons
-        .filter((yl) => yl.topic_id === topicId && yl.is_exam)
-        .sort((a, b) => a.lesson_number - b.lesson_number);
+      const examLesson = entry.sortedLessons.find(yl => yl.is_exam);
+      if (!examLesson) return;
 
-      if (examLessons.length === 0) return;
-
-      const nextExam = examLessons[0];
-      const examIndex = yearlyLessons.findIndex((yl) => yl.id === nextExam.id);
-      const completedSoFar = entry.completed;
-
-      entry.lessonsUntilExam = examIndex + 1 - completedSoFar;
+      const examIndex = entry.sortedLessons.findIndex(yl => yl.id === examLesson.id);
+      entry.lessonsUntilExam = examIndex + 1 - entry.completedCount;
       if (entry.lessonsUntilExam < 0) entry.lessonsUntilExam = 0;
     });
 
-    return Array.from(topicMap.values()).filter((e) => e.planned > 0);
-  }, [yearlyLessons, allLessons]);
+    // Nur aktuelle Themen (nicht abgeschlossen + kürzlich aktiv)
+    const activeTopics = Array.from(topicMap.values())
+      .filter(entry => {
+        if (entry.completedCount >= entry.planned) return false;
+
+        // War in den letzten 10 Wochen aktiv oder hat bald Lektionen?
+        const hasRecentOrUpcoming = entry.sortedLessons.some(yl => {
+          const lesson = allLessons.find(l => 
+            l.yearly_lesson_id === yl.id || l.second_yearly_lesson_id === yl.id
+          );
+          if (!lesson) return false;
+
+          const weekDiff = Math.abs(lesson.week_number - currentWeek);
+          return weekDiff <= 10;
+        });
+
+        return hasRecentOrUpcoming || entry.completedCount > 0;
+      })
+      .map(entry => ({
+        ...entry,
+        completed: entry.completedCount,
+        planned: entry.planned,
+      }));
+
+    return activeTopics.sort((a, b) => 
+      (b.completed / b.planned) - (a.completed / a.planned)
+    );
+  }, [allYearlyLessons, allLessons, topics]);
 }
