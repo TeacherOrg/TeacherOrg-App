@@ -1,11 +1,11 @@
-// src/components/daily/AllTopicsProgressOverview.jsx
+// src/components/daily/AlltopicsProgressOverview.jsx
 import React, { useEffect, useRef } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Trophy, Zap } from "lucide-react";
 import { adjustBrightness } from "@/utils/colorUtils";
 import confetti from "canvas-confetti";
 
-export default function AllTopicsProgressOverview({ progresses }) {
+export default function AlltopicsProgressOverview({ progresses }) {
   const activeTopics = progresses
     .filter((p) => p.planned > p.completed)
     .sort((a, b) => (b.completed / b.planned) - (a.completed / a.planned));
