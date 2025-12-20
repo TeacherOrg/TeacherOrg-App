@@ -15,7 +15,7 @@ import { Button } from "@/components/ui/button";
 import TopicProgressBar from "./TopicProgressBar";
 import { useTopicProgress } from "@/hooks/useTopicProgress";
 import { useAllerleiTopicProgress } from "@/hooks/useAllerleiTopicProgress";
-import AllTopicsProgressOverview from "./AlltopicsProgressOverview";
+import AlltopicsProgressOverview from "./AlltopicsProgressOverview";
 import { useAllActiveTopicsProgress } from "@/hooks/useAllActiveTopicsProgress";
 import { createMixedSubjectGradient, createGradient } from "@/utils/colorUtils";
 
@@ -161,7 +161,7 @@ export default function LessonDetailPanel({
           {currentItem.name}
         </h2>
         <div className="w-full max-w-2xl">
-          <AllTopicsProgressOverview progresses={allProgress} />
+          <AlltopicsProgressOverview progresses={allProgress} />
         </div>
       </div>
     );

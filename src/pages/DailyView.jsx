@@ -9,7 +9,7 @@ import LessonOverviewPanel from "../components/daily/LessonOverviewPanel";
 import LessonDetailPanel from "../components/daily/LessonDetailPanel";
 import CustomizationPanel from "../components/daily/CustomizationPanel";
 import ChoresDisplay from "../components/daily/ChoresDisplay";
-import AllTopicsProgressOverview from "../components/daily/AlltopicsProgressOverview";
+import AlltopicsProgressOverview from "../components/daily/AlltopicsProgressOverview";
 import { createPageUrl } from "@/utils";
 import { getThemeGradient } from "@/utils/colorDailyUtils";
 import { normalizeAllerleiData } from "@/components/timetable/allerlei/AllerleiUtils";
@@ -864,7 +864,7 @@ export default function DailyView({ currentDate, onDateChange }) {
               </h2>
 
               <div className="w-full max-w-3xl px-4">
-                <AllTopicsProgressOverview progresses={allActiveTopicsProgress} />
+                <AlltopicsProgressOverview progresses={allActiveTopicsProgress} />
               </div>
 
               <div className="mt-12 text-sm text-slate-600 dark:text-slate-400 italic">
