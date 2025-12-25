@@ -81,7 +81,7 @@ const getCurrentWeek = () => {
   return Math.max(1, Math.min(52, Math.floor(diffTime / (7 * 24 * 60 * 60 * 1000)) + 1));
 };
 
-const YearlyGrid = React.memo(({
+const YearlyGrid = ({
   lessons,
   topics,
   subjects,
@@ -502,13 +502,17 @@ const YearlyGrid = React.memo(({
     e.preventDefault();
     e.stopPropagation();
 
+    // WICHTIG: Overlay sofort schließen!
+    onHideHover();   // ← Das ist die Prop aus YearlyOverviewPage → ruft handleHideHover() dort auf
+
+    const cellRect = e.currentTarget.getBoundingClientRect();
+
     setContextMenu({
-      x: e.clientX,
-      y: e.clientY,
       lesson,
       slot,
+      cellRect,
     });
-  }, []);
+  }, [onHideHover]); // ← Dependency hinzufügen!
 
   const closeContextMenu = useCallback(() => {
     setContextMenu(null);
@@ -1060,7 +1064,7 @@ const YearlyGrid = React.memo(({
   }, [isAssignMode, selectedLessons]);
 
   return (
-    <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm h-full flex flex-col">
+    <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm h-full flex flex-col relative"> {/* ← relative hier */}
       {/* 1. KLASSEN-SELECTION sticky */}
       <ClassSelectorBar
         classes={classes || []}
@@ -1071,7 +1075,7 @@ const YearlyGrid = React.memo(({
       {/* 2. Scroll-Container */}
       <div
         ref={containerRef}
-        className="flex-1 overflow-auto scrollbar-gutter-stable"
+        className="flex-1 overflow-auto scrollbar-gutter-stable relative" // ← auch hier relative (für Kinder)
         onScroll={handleScroll}
       >
         {/* Fächer-Header – sticky + zentriert */}
@@ -1129,11 +1133,11 @@ const YearlyGrid = React.memo(({
         <LessonContextMenu
           isOpen={!!contextMenu}
           onClose={closeContextMenu}
-          position={{ x: contextMenu.x, y: contextMenu.y }}
+          cellRect={contextMenu.cellRect}          // ← NEU: genaue Zellenposition
+          lesson={contextMenu.lesson}
+          slot={contextMenu.slot}
           onMove={() => openWeekPicker('move', contextMenu.lesson, contextMenu.slot)}
           onCopy={() => openWeekPicker('copy', contextMenu.lesson, contextMenu.slot)}
-          
-          // === NEU: Mit Verfügbarkeits-Check ===
           onDuplicateNext={() => {
             const available = checkNextSlotAvailable(contextMenu.lesson, contextMenu.slot);
             if (available) {
@@ -1200,7 +1204,7 @@ const YearlyGrid = React.memo(({
       )}
     </div>
   );
-});
+};
 
 YearlyGrid.displayName = 'YearlyGrid';
 

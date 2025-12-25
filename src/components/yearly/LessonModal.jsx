@@ -11,147 +11,8 @@ import pb from '@/api/pb';
 import { createGradient, getTextColorForBackground } from '@/utils/colorUtils';
 import { YearlyLesson } from '@/api/entities';
 import LessonTemplatePopover from '@/components/lesson-planning/LessonTemplatePopover';
-
-const WORK_FORMS = [
-    { value: 'frontal', label: '🗣️ Frontal' },
-    { value: 'single', label: '👤 Einzelarbeit' },
-    { value: 'partner', label: '👥 Partnerarbeit' },
-    { value: 'group', label: '👨‍👩‍👧‍👦 Gruppenarbeit' },
-    { value: 'plenum', label: '🏛️ Plenum' },
-    { value: 'discussion', label: '💬 Diskussion' },
-    { value: 'experiment', label: '🧪 Experiment' }
-];
-const generateId = () => Math.random().toString(36).substr(2, 9);
-
-const MaterialQuickAdd = ({ step, onUpdate, topicMaterials = [], topicColor }) => {
-  if (!topicMaterials.length) return null;
-
-  const currentMaterials = step.material 
-    ? step.material.split(',').map(m => m.trim().toLowerCase()) 
-    : [];
-
-  const toggleMaterial = (mat) => {
-    const lowerMat = mat.toLowerCase();
-    if (currentMaterials.includes(lowerMat)) {
-      // entfernen
-      const newList = step.material
-        .split(',')
-        .map(m => m.trim())
-        .filter(m => m.toLowerCase() !== lowerMat)
-        .join(', ');
-      onUpdate('material', newList.replace(/^,\s|,$/g, '').trim());
-    } else {
-      // hinzufügen
-      const newValue = step.material ? `${step.material}, ${mat}` : mat;
-      onUpdate('material', newValue);
-    }
-  };
-
-  return (
-    <div className="flex flex-wrap gap-2 mt-2">
-      {topicMaterials.map((mat) => {
-        const isSelected = currentMaterials.includes(mat.toLowerCase());
-        return (
-          <button
-            key={mat}
-            type="button"
-            onMouseDown={(e) => e.preventDefault()}
-            onClick={() => toggleMaterial(mat)}
-            className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all duration-200 shadow-sm
-              ${isSelected 
-                ? 'text-white shadow-md scale-105' 
-                : 'text-white/80 border border-white/30 hover:scale-105 hover:shadow-md'
-              }`}
-            style={{
-              backgroundColor: isSelected ? topicColor : topicColor + '40',
-            }}
-          >
-            {mat}
-          </button>
-        );
-      })}
-    </div>
-  );
-};
-
-const StepRow = ({ step, onUpdate, onRemove, topicMaterials = [], topicColor, isLast = false, isUnifiedDouble }) => {
-  const [isMaterialFocused, setIsMaterialFocused] = useState(false);
-
-  const showQuickAdd = topicMaterials.length > 0 && (isLast || isMaterialFocused);
-
-  return (
-    <div className="grid grid-cols-[60px_140px_1fr_1fr_auto] gap-2 items-start">
-      {/* Zeit */}
-      <Input
-        type="number"
-        value={step.time || ''}
-        onChange={e => onUpdate('time', e.target.value ? Number(e.target.value) : null)}
-        placeholder="Zeit"
-        className="text-center bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600"
-        min="0"
-        max={isUnifiedDouble ? 90 : 45}  // ← dynamisch!
-      />
-
-      {/* Arbeitsform */}
-      <Select value={step.workForm || ''} onValueChange={val => onUpdate('workForm', val)}>
-        <SelectTrigger className="bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600">
-          <SelectValue placeholder="Form" />
-        </SelectTrigger>
-        <SelectContent>
-          {WORK_FORMS.map(form => (
-            <SelectItem key={form.value} value={form.value}>{form.label}</SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-
-      {/* Aktivität */}
-      <Input
-        value={step.activity || ''}
-        onChange={e => onUpdate('activity', e.target.value)}
-        placeholder="Aktivität / Was wird gemacht"
-        className="bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600"
-      />
-
-      {/* Material + QuickAdd */}
-      <div className="space-y-1">
-        <Input
-          value={step.material || ''}
-          onChange={e => onUpdate('material', e.target.value)}
-          onFocus={() => setIsMaterialFocused(true)}
-          onBlur={() => setIsMaterialFocused(false)}
-          placeholder="Material"
-          className="bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600"
-        />
-
-        {/* QuickAdd mit sanfter Transition */}
-        <div
-          className={`transition-all duration-300 ease-in-out overflow-hidden ${
-            showQuickAdd ? 'opacity-100 mt-2' : 'opacity-0 mt-0 h-0'
-          }`}
-        >
-          {showQuickAdd && (
-            <MaterialQuickAdd
-              step={step}
-              onUpdate={(field, value) => onUpdate(field, value)}
-              topicMaterials={topicMaterials}
-              topicColor={topicColor}
-            />
-          )}
-        </div>
-      </div>
-
-      {/* Löschen */}
-      <Button
-        variant="ghost"
-        size="icon"
-        onClick={onRemove}
-        className="text-red-500 hover:text-red-700 hover:bg-red-100 dark:hover:bg-red-900/30"
-      >
-        <Trash2 className="w-4 h-4" />
-      </Button>
-    </div>
-  );
-};
+import StepRow from '@/components/lesson-planning/StepRow';
+import { generateId } from '@/components/lesson-planning/utils';
 
 export default function LessonModal({ 
   isOpen, 
@@ -166,7 +27,8 @@ export default function LessonModal({
   currentWeek = null, 
   currentYear = new Date().getFullYear(),
   autoAssignTopicId,
-  onSaveAndNext // new prop
+  onSaveAndNext, // new prop
+  subjects = [] // new prop
 }) {
   const [formData, setFormData] = useState({
     name: '',
@@ -200,6 +62,22 @@ export default function LessonModal({
   // Robust: topic.subject kann entweder die Subject-ID oder der Subject-Name sein.
   const rawSubject = displayLesson?.subject;
   const subjectId = typeof rawSubject === 'object' ? rawSubject.id : rawSubject;
+  
+  // Finde den Subject-Namen
+  const subjectName = (() => {
+    if (typeof rawSubject === 'object' && rawSubject?.name) {
+      return rawSubject.name;
+    }
+    // Versuche anhand der ID zu finden
+    const subjectById = subjects.find(s => s.id === subjectId);
+    if (subjectById) return subjectById.name;
+    // Versuche anhand des Namens zu finden
+    const subjectByName = subjects.find(s => s.name === rawSubject);
+    if (subjectByName) return subjectByName.name;
+    // Fallback: zeige die rohe Subject-Info
+    return rawSubject || 'Fach';
+  })();
+  
   const subjectTopics = (topics || []).filter(topic => {
     const topicSubjectId = topic.subject || topic.subject_id || topic.subjectName;
     return String(topicSubjectId) === String(subjectId);
@@ -584,25 +462,63 @@ export default function LessonModal({
             >
               <BookOpen className="w-5 h-5 text-white" />
             </div>
-            {lesson ? 'Jahreslektion bearbeiten' : 'Neue Jahreslektion erstellen'}
+            {subjectName} – Woche {displayLesson?.week_number}, {
+              formData.is_double_lesson && addSecondLesson
+                ? `Lektionen ${displayLesson?.lesson_number}-${Number(displayLesson?.lesson_number || 0) + 1}`
+                : `Lektion ${displayLesson?.lesson_number}`
+            }
           </DialogTitle>
           <DialogDescription className="text-slate-500 dark:text-slate-400">
-            {displayLesson?.subject} - Woche {displayLesson?.week_number}, Lektion {displayLesson?.lesson_number}
+            {lesson ? 'Jahreslektion bearbeiten' : 'Neue Jahreslektion erstellen'}
           </DialogDescription>
         </DialogHeader>
         
         <form id="yearly-lesson-form" onSubmit={handleSubmit} className="space-y-6 pt-4">
-          <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="name" className="text-right text-sm font-semibold text-slate-900 dark:text-white">Titel (Lektion {displayLesson?.lesson_number})</Label>
-            <Input
-              id="name"
-              name="name"
-              value={formData.name}
-              onChange={handleInputChange}
-              className="col-span-3 bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white"
-              placeholder={`Lektion ${displayLesson?.lesson_number || ''}`}
-              maxLength={30}
-            />
+          <div className="flex flex-wrap items-center justify-around gap-x-6 gap-y-4 p-3 rounded-lg bg-slate-100/50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700">
+            <div className="flex items-center gap-2">
+              <Switch id="half-class" checked={formData.is_half_class || false} onCheckedChange={(checked) => setFormData(prev => ({ ...prev, is_half_class: checked }))} />
+              <Label htmlFor="half-class" className="text-sm font-semibold text-slate-900 dark:text-white cursor-pointer">Halbklasse</Label>
+            </div>
+            <div className="flex items-center gap-2">
+              <Switch id="double-lesson" checked={formData.is_double_lesson || false} onCheckedChange={handleDoubleLessonToggle} />
+              <Label htmlFor="double-lesson" className="text-sm font-semibold text-slate-900 dark:text-white cursor-pointer">Doppellektion</Label>
+            </div>
+            <div className="flex items-center gap-2">
+              <Switch id="exam" checked={formData.is_exam || false} onCheckedChange={(checked) => setFormData(prev => ({ ...prev, is_exam: checked }))} />
+              <Label htmlFor="exam" className="text-sm font-semibold text-slate-900 dark:text-white cursor-pointer">Prüfung</Label>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label className="text-sm font-semibold text-slate-900 dark:text-white">Thema</Label>
+              <Select
+                value={formData.topic_id || "no_topic"}
+                onValueChange={(value) => setFormData({...formData, topic_id: value})}
+              >
+                <SelectTrigger className="bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white">
+                  <SelectValue placeholder="Thema auswählen (optional)" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="no_topic">Kein Thema</SelectItem>
+                  {subjectTopics.map((topic) => (
+                    <SelectItem key={topic.id} value={topic.id}>{topic.title || topic.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label className="text-sm font-semibold text-slate-900 dark:text-white">Titel (Lektion {displayLesson?.lesson_number})</Label>
+              <Input
+                id="name"
+                name="name"
+                value={formData.name}
+                onChange={handleInputChange}
+                className="bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white"
+                placeholder={`Lektion ${displayLesson?.lesson_number || ''}`}
+                maxLength={30}
+              />
+            </div>
           </div>
 
           {formData.is_double_lesson && addSecondLesson && (
@@ -619,21 +535,6 @@ export default function LessonModal({
               />
             </div>
           )}
-
-          <div className="flex flex-wrap items-center justify-around gap-x-6 gap-y-4 p-3 rounded-lg bg-slate-100/50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700">
-            <div className="flex items-center gap-2">
-              <Switch id="half-class" checked={formData.is_half_class || false} onCheckedChange={(checked) => setFormData(prev => ({ ...prev, is_half_class: checked }))} />
-              <Label htmlFor="half-class" className="text-sm font-semibold text-slate-900 dark:text-white cursor-pointer">Halbklasse</Label>
-            </div>
-            <div className="flex items-center gap-2">
-              <Switch id="double-lesson" checked={formData.is_double_lesson || false} onCheckedChange={handleDoubleLessonToggle} />
-              <Label htmlFor="double-lesson" className="text-sm font-semibold text-slate-900 dark:text-white cursor-pointer">Doppellektion</Label>
-            </div>
-            <div className="flex items-center gap-2">
-              <Switch id="exam" checked={formData.is_exam || false} onCheckedChange={(checked) => setFormData(prev => ({ ...prev, is_exam: checked }))} />
-              <Label htmlFor="exam" className="text-sm font-semibold text-slate-900 dark:text-white cursor-pointer">Prüfung</Label>
-            </div>
-          </div>
           
           {formData.is_double_lesson && (
             <div className="p-3 rounded-lg bg-slate-100/50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 space-y-3">
@@ -686,29 +587,23 @@ export default function LessonModal({
               )}
             </div>
           )}
-
-          <div className="flex justify-between items-start">
-            <div className="flex-1 space-y-2 mr-6">
-              <Label className="text-sm font-semibold text-slate-900 dark:text-white">Thema</Label>
-              <Select
-                value={formData.topic_id || "no_topic"}
-                onValueChange={(value) => setFormData({...formData, topic_id: value})}
-              >
-                <SelectTrigger className="bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white">
-                  <SelectValue placeholder="Thema auswählen (optional)" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="no_topic">Kein Thema</SelectItem>
-                  {subjectTopics.map((topic) => (
-                    <SelectItem key={topic.id} value={topic.id}>{topic.title || topic.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
           
           <div className="space-y-4">
-            <Label className="font-semibold text-slate-900 dark:text-white">Lektionsplan Schritte</Label>
+            <div className="flex items-center gap-2">
+              <Label className="font-semibold text-slate-900 dark:text-white">Lektionsplan Schritte</Label>
+              <LessonTemplatePopover
+                subjectId={subjectId}
+                onInsert={(steps, templateName) => {
+                  const withNewIds = steps.map(s => ({ ...s, id: generateId() }));
+                  setPrimarySteps(prev => [...prev, ...withNewIds]);
+
+                  if (templateName) {
+                    setFormData(prev => ({ ...prev, name: templateName }));
+                  }
+                }}
+                currentSteps={primarySteps}
+              />
+            </div>
             <div className="space-y-3 p-4 border rounded-lg bg-slate-100/50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700">
               {primarySteps.map(step => (
                 <StepRow
@@ -723,29 +618,42 @@ export default function LessonModal({
                 />
               ))}
               <div className="flex gap-2 mt-2">
-                <Button type="button" variant="outline" onClick={handleAddPrimaryStep} className="w-full mt-2 border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white bg-white dark:bg-slate-700 hover:bg-slate-100 dark:hover:bg-slate-600">
+                <Button type="button" variant="outline" onClick={handleAddPrimaryStep} className="flex-[2] border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white bg-white dark:bg-slate-700 hover:bg-slate-100 dark:hover:bg-slate-600">
                   <PlusCircle className="w-4 h-4 mr-2" />
                   <span className="text-slate-900 dark:text-white">Schritt hinzufügen (Lektion 1)</span>
                 </Button>
-                <LessonTemplatePopover
-                  subjectId={subjectId}
-                  onInsert={(steps, templateName) => {
-                    const withNewIds = steps.map(s => ({ ...s, id: generateId() }));
-                    setPrimarySteps(prev => [...prev, ...withNewIds]);
-
-                    if (templateName) {
-                      setFormData(prev => ({ ...prev, name: templateName }));
-                    }
+                <Button 
+                  type="button" 
+                  variant="outline"
+                  onClick={() => {
+                    const defaultName = formData.name?.trim() || 
+                                        lesson?.name?.trim() || 
+                                        "Meine Vorlage";
+                    setTemplateName(defaultName);
+                    setShowTemplateSave(true);
                   }}
-                  currentSteps={primarySteps}
-                />
+                  className="flex-[2] border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white bg-white dark:bg-slate-700 hover:bg-slate-100 dark:hover:bg-slate-600"
+                >
+                  <Copy className="w-4 h-4 mr-2" />
+                  <span className="text-slate-900 dark:text-white">Als Vorlage speichern</span>
+                </Button>
               </div>
             </div>
           </div>
           
           {formData.is_double_lesson && addSecondLesson && !isUnifiedDouble && (
             <div className="space-y-4">
-              <Label className="font-semibold text-slate-900 dark:text-white">Zweite Lektion – Schritte</Label>
+              <div className="flex items-center justify-between">
+                <Label className="font-semibold text-slate-900 dark:text-white">Zweite Lektion – Schritte</Label>
+                <LessonTemplatePopover
+                  subjectId={subjectId}
+                  onInsert={(steps) => {
+                    const withNewIds = steps.map(s => ({ ...s, id: generateId() }));
+                    setSecondSteps(prev => [...prev, ...withNewIds]);
+                  }}
+                  currentSteps={secondSteps}
+                />
+              </div>
               <div className="space-y-3 p-4 border rounded-lg bg-slate-100/50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700">
                 {secondSteps.map(step => (
                   <StepRow
@@ -759,20 +667,10 @@ export default function LessonModal({
                     isUnifiedDouble={isUnifiedDouble}
                   />
                 ))}
-                <div className="flex gap-2 mt-2">
-                  <Button type="button" variant="outline" onClick={handleAddSecondStep} className="w-full mt-2 border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white bg-white dark:bg-slate-700 hover:bg-slate-100 dark:hover:bg-slate-600">
-                    <PlusCircle className="w-4 h-4 mr-2" />
-                    <span className="text-slate-900 dark:text-white">Schritt hinzufügen (2. Lektion)</span>
-                  </Button>
-                  <LessonTemplatePopover
-                    subjectId={subjectId}
-                    onInsert={(steps) => {
-                      const withNewIds = steps.map(s => ({ ...s, id: generateId() }));
-                      setSecondSteps(prev => [...prev, ...withNewIds]);
-                    }}
-                    currentSteps={secondSteps}
-                  />
-                </div>
+                <Button type="button" variant="outline" onClick={handleAddSecondStep} className="w-full mt-2 border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white bg-white dark:bg-slate-700 hover:bg-slate-100 dark:hover:bg-slate-600">
+                  <PlusCircle className="w-4 h-4 mr-2" />
+                  <span className="text-slate-900 dark:text-white">Schritt hinzufügen (2. Lektion)</span>
+                </Button>
               </div>
             </div>
           )}
@@ -794,15 +692,6 @@ export default function LessonModal({
               <Button type="button" variant="outline" onClick={onClose} className="border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white bg-white dark:bg-slate-700 hover:bg-slate-100 dark:hover:bg-slate-600">
                 <span className="text-slate-900 dark:text-white">Abbrechen</span>
               </Button>
-              <Button 
-                type="submit"
-                className={`text-${buttonTextColor} shadow-md hover:opacity-90`}
-                style={{ background: modalBackground }}
-                disabled={isSubmitting}
-              >
-                <Save className="w-4 h-4 mr-2" />
-                Lektionsplan speichern
-              </Button>
               <Button
                 type="submit"
                 variant="default"
@@ -813,73 +702,66 @@ export default function LessonModal({
                 <Save className="w-4 h-4 mr-2" />
                 Speichern & nächste
               </Button>
-              <div className="relative">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => {
-                    const defaultName = formData.name?.trim() || 
-                                        lesson?.name?.trim() || 
-                                        "Meine Vorlage";
-                    setTemplateName(defaultName);
-                    setShowTemplateSave(true);
-                  }}
-                >
-                  <Copy className="w-4 h-4 mr-2" />
-                  Als Vorlage speichern
-                </Button>
-
-                {/* Popup als fixed Overlay – ragt über alles hinaus */}
-                {showTemplateSave && (
-                  <div className="fixed inset-0 z-[9999] flex items-center justify-center">
-                    {/* Backdrop */}
-                    <div 
-                      className="absolute inset-0 bg-black/50"
-                      onClick={() => {
-                        setShowTemplateSave(false);
-                        setTemplateName("");
-                      }}
-                    />
-
-                    {/* Dialog */}
-                    <div className="relative bg-white dark:bg-slate-800 rounded-lg shadow-2xl p-6 w-96 max-w-[90vw]">
-                      <h3 className="text-lg font-semibold mb-4">Name der Vorlage</h3>
-                      
-                      <Input
-                        autoFocus
-                        value={templateName}
-                        onChange={(e) => setTemplateName(e.target.value)}
-                        onKeyDown={(e) => e.key === 'Enter' && handleSaveAsTemplate()}
-                        placeholder="z. B. Einstieg Photosynthese"
-                        className="mb-4"
-                      />
-
-                      <div className="flex justify-end gap-3">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => {
-                            setShowTemplateSave(false);
-                            setTemplateName("");
-                          }}
-                        >
-                          Abbrechen
-                        </Button>
-                        <Button
-                          size="sm"
-                          onClick={handleSaveAsTemplate}
-                          disabled={!templateName.trim()}
-                        >
-                          Speichern
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
+              <Button 
+                type="submit"
+                className={`text-${buttonTextColor} shadow-md hover:opacity-90`}
+                style={{ background: modalBackground }}
+                disabled={isSubmitting}
+              >
+                <Save className="w-4 h-4 mr-2" />
+                Speichern
+              </Button>
             </div>
           </div>
         </form>
+
+        {/* Template-Popup Modal */}
+        {showTemplateSave && (
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center">
+            {/* Backdrop */}
+            <div 
+              className="absolute inset-0 bg-black/50"
+              onClick={() => {
+                setShowTemplateSave(false);
+                setTemplateName("");
+              }}
+            />
+
+            {/* Dialog */}
+            <div className="relative bg-white dark:bg-slate-800 rounded-lg shadow-2xl p-6 w-96 max-w-[90vw]">
+              <h3 className="text-lg font-semibold mb-4">Name der Vorlage</h3>
+              
+              <Input
+                autoFocus
+                value={templateName}
+                onChange={(e) => setTemplateName(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleSaveAsTemplate()}
+                placeholder="z. B. Einstieg Photosynthese"
+                className="mb-4"
+              />
+
+              <div className="flex justify-end gap-3">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setShowTemplateSave(false);
+                    setTemplateName("");
+                  }}
+                >
+                  Abbrechen
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={handleSaveAsTemplate}
+                  disabled={!templateName.trim()}
+                >
+                  Speichern
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
       </DialogContent>
     </Dialog>
   );

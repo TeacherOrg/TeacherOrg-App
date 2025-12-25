@@ -19,7 +19,7 @@ import debounce from 'lodash/debounce';
 import OverlayView from "../components/timetable/OverlayView";
 import { adjustColor } from '@/utils/colorUtils';
 import { useLessonStore } from '@/store';
-import { QueryClient, QueryClientProvider, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import pb from '@/api/pb';
 import { calculateAllerleiGradient } from '@/components/timetable/allerlei/AllerleiUtils';
 import { findFreeSlot, findAlternativeSlot } from '@/utils/slotUtils';
@@ -33,27 +33,22 @@ import useLessonHandlers from '../hooks/useLessonHandlers';
 import { getCurrentWeek, getWeekInfo, generateTimeSlots } from '../utils/timetableUtils';
 import { isEqual } from 'lodash';
 import { createMixedSubjectGradient } from '@/utils/colorUtils';
+import useAllYearlyLessons from '@/hooks/useAllYearlyLessons';
 
 
 const ACADEMIC_WEEKS = 52;
-const queryClient = new QueryClient();
 
 export default function TimetablePage() {
-  return (
-    <QueryClientProvider client={queryClient}>
-      <InnerTimetablePage />
-    </QueryClientProvider>
-  );
+  return <InnerTimetablePage />;
 }
 
 function InnerTimetablePage() {
   const navigate = useNavigate();
   const allLessons = useLessonStore((state) => state.allLessons);
-  const yearlyLessons = useLessonStore((state) => state.yearlyLessons);
   const allerleiLessons = useLessonStore((state) => state.allerleiLessons);
   const {
     setAllLessons,
-    setYearlyLessons,
+    setAllYearlyLessons,
     setAllerleiLessons,
     optimisticUpdateAllLessons,
     optimisticUpdateYearlyLessons,
@@ -83,12 +78,19 @@ function InnerTimetablePage() {
 
   // Call useTimetableData with currentYear and currentWeek
   const { data, isLoading: queryLoading, classes, subjects, settings, holidays, topics, refetch, activeClassId, setActiveClassId } = useTimetableData(currentYear, currentWeek);
+
+  const { allYearlyLessons } = useAllYearlyLessons(currentYear);
+
+  // Debug: Check if allYearlyLessons is loaded
+  useEffect(() => {
+    console.log('allYearlyLessons loaded:', allYearlyLessons?.length || 0);
+  }, [allYearlyLessons]);
   
   const memoizedSubjects = useMemo(() => subjects || [], [subjects]);
   const memoizedTopics = useMemo(() => topics || [], [topics]);
 
   // Call useTimetableStates with settings, currentYear, and currentWeek
-  const { currentView, setCurrentView, viewMode, setViewMode, currentDate, setCurrentDate, renderKey, setRenderKey, isModalOpen, setIsModalOpen, editingLesson, setEditingLesson, slotInfo, setSlotInfo, initialSubjectForModal, setInitialSubjectForModal, isCopying, setIsCopying, copiedLesson, setCopiedLesson, activeDragId, setActiveDragId, hoverLesson, setHoverLesson, hoverPosition, setHoverPosition, disableHover, setDisableHover, overlayRef, debouncedShowRef, debouncedHideRef, handleShowHover, handleHideHover, timeSlots, weekInfo, autoFit, setAutoFit } = useTimetableStates(settings || {}, currentYear, currentWeek);
+  const { currentView, setCurrentView, viewMode, setViewMode, currentDate, setCurrentDate, renderKey, setRenderKey, isModalOpen, setIsModalOpen, editingLesson, setEditingLesson, slotInfo, setSlotInfo, initialSubjectForModal, setInitialSubjectForModal, isCopying, setIsCopying, copiedLesson, setCopiedLesson, activeDragId, setActiveDragId, hoverLesson, setHoverLesson, hoverPosition, setHoverPosition, disableHover, setDisableHover, overlayRef, handleShowHover, handleHideHover, timeSlots, weekInfo, autoFit, setAutoFit } = useTimetableStates(settings || {}, currentYear, currentWeek);
 
   const queryClientLocal = useQueryClient();
 
@@ -126,7 +128,7 @@ function InnerTimetablePage() {
     editingLesson,
     currentYear,
     allLessons,
-    yearlyLessons,
+    allYearlyLessons,
     timeSlots,
     currentWeek,
     queryClientLocal,
@@ -136,7 +138,7 @@ function InnerTimetablePage() {
     addAllerleiLesson,
     removeAllLesson,
     setAllLessons,
-    setYearlyLessons,
+    setAllYearlyLessons,
     activeClassId,
     refetch,
     setIsModalOpen,
@@ -151,7 +153,7 @@ function InnerTimetablePage() {
     allLessons,
     allerleiLessons,
     currentWeek,
-    yearlyLessons,
+    allYearlyLessons,
     timeSlots,
     currentYear,
     queryClientLocal,
@@ -163,7 +165,7 @@ function InnerTimetablePage() {
     reassignYearlyLessonLinks,
     updateYearlyLessonOrder,
     setAllLessons,
-    setYearlyLessons,
+    setAllYearlyLessons,
     setAllerleiLessons,
     refetch,
     setActiveDragId
@@ -176,7 +178,7 @@ function InnerTimetablePage() {
       console.log('Debug: computeLessonsWithDetails running', {
         normalLessons: stableAllLessons.filter(l => l.week_number === currentWeek).length,
         allerleiLessons: allerleiLessons.filter(l => l.week_number === currentWeek).length,
-        yearlyLessons: yearlyLessons.length,
+        yearlyLessons: allYearlyLessons.length,
         memoizedTopics: memoizedTopics.length,
         memoizedSubjects: memoizedSubjects.length,
       });
@@ -186,7 +188,7 @@ function InnerTimetablePage() {
 
       const resolvedNormalLessons = normalLessons.map((lesson) => {
         const subjectsById = new Map(memoizedSubjects.map(s => [s.id, s]));
-        const yearlyLessonsById = new Map(yearlyLessons.map(yl => [yl.id, yl]));
+        const yearlyLessonsById = new Map(allYearlyLessons.map(yl => [yl.id, yl]));
         const topicsById = new Map(memoizedTopics.map(t => [t.id, t]));
         const subjectsByName = memoizedSubjects.reduce((acc, s) => {
           acc[s.name] = s;
@@ -299,7 +301,7 @@ function InnerTimetablePage() {
             if (l.expand?.primary_yearly_lesson_id) {
               allSteps.push(...(l.expand.primary_yearly_lesson_id.steps || []));
             } else if (l.primary_yearly_lesson_id) {
-              const primaryYL = yearlyLessons.find(yl => yl.id === l.primary_yearly_lesson_id);
+              const primaryYL = allYearlyLessons.find(yl => yl.id === l.primary_yearly_lesson_id);
               allSteps.push(...(primaryYL?.steps || []));
             }
           }
@@ -311,7 +313,7 @@ function InnerTimetablePage() {
             });
           } else if (Array.isArray(l.added_yearly_lesson_ids)) {
             l.added_yearly_lesson_ids.forEach(id => {
-              const yl = yearlyLessons.find(yl => yl.id === id);
+              const yl = allYearlyLessons.find(yl => yl.id === id);
               if (yl) allSteps.push(...(yl.steps || []));
             });
           }
@@ -336,7 +338,7 @@ function InnerTimetablePage() {
     allLessons,           // ← statt stableAllLessons
     allerleiLessons,      // ← statt stableAllerleiLessons
     currentWeek,
-    yearlyLessons,
+    allYearlyLessons,
     memoizedTopics,
     memoizedSubjects
   ]);
@@ -381,7 +383,7 @@ function InnerTimetablePage() {
       const addedIds = Array.isArray(lesson.added_yearly_lesson_ids) ? lesson.added_yearly_lesson_ids : [];
 
       [...(primaryId ? [primaryId] : []), ...addedIds].forEach(ylId => {
-        let yl = yearlyLessons.find(y => y.id === ylId);
+        let yl = allYearlyLessons.find(y => y.id === ylId);
         if (!yl && lesson.expand) {
           yl = lesson.expand.primary_yearly_lesson_id || 
                lesson.expand.added_yearly_lesson_ids?.find(y => y.id === ylId);
@@ -404,7 +406,7 @@ function InnerTimetablePage() {
         l.week_number === currentWeek && 
         !l.is_hidden
       );
-      const availableLessons = yearlyLessons
+      const availableLessons = allYearlyLessons
         .filter(yl => {
           const matchesSubject = yl.subject_name === subject.name || yl.expand?.subject?.name === subject.name;
           const matchesWeek = yl.week_number === currentWeek;
@@ -444,7 +446,7 @@ function InnerTimetablePage() {
       };
     });
     return result;
-  }, [subjects, activeClassId, allLessons, allerleiLessons, yearlyLessons, currentWeek, poolRefreshKey]);
+  }, [subjects, activeClassId, allLessons, allerleiLessons, allYearlyLessons, currentWeek, poolRefreshKey]);
 
   const handleCreateLesson = (dayOfWeek, periodSlot, subject = null) => {
     setSlotInfo({ day: dayOfWeek, period: periodSlot, week: currentWeek });
@@ -494,21 +496,34 @@ function InnerTimetablePage() {
       const subjectId = id.replace('pool-', '');
       const subjectData = availableYearlyLessonsForPool.find(s => String(s.subject.id) === subjectId);
       if (!subjectData) return null;
+
       return (
-        <div className="bg-white dark:bg-slate-800 p-2 rounded shadow">
-          <div className="font-bold">
+        <div 
+          className="bg-white dark:bg-slate-800 p-4 rounded-xl shadow-2xl border border-slate-300 dark:border-slate-600"
+          style={{ zIndex: 9999 }}
+        >
+          <div className="font-bold text-lg">
             {subjectData.subject.name}
-            <span className="ml-2 text-sm text-gray-500 dark:text-gray-400">
-              ({subjectData.totalScheduled}/{subjectData.lessonsPerWeek})
-            </span>
+          </div>
+          <div className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+            ({subjectData.totalScheduled}/{subjectData.lessonsPerWeek} geplant)
           </div>
         </div>
       );
-    } else {
-      const lesson = lessonsWithDetails.find(l => l.id === id);
-      if (!lesson) return null;
-      return <LessonCard lesson={lesson} />;
     }
+
+    // Normale Lektion
+    const lesson = lessonsWithDetails.find(l => l.id === id);
+    if (!lesson) return null;
+
+    return (
+      <div 
+        className="opacity-90 scale-105"
+        style={{ zIndex: 9999 }}
+      >
+        <LessonCard lesson={lesson} isDragging={true} />
+      </div>
+    );
   };
 
   const handleViewChange = (view) => {
@@ -845,8 +860,8 @@ function InnerTimetablePage() {
               subjects={subjects}
             />
           </div>
-          <DragOverlay dropAnimation={null}>
-            {null} {/* Kein Overlay beim normalen Draggen */}
+          <DragOverlay>
+            {activeDragId && renderDragOverlay(activeDragId)}
           </DragOverlay>
         </DndContext>
       ) : (
@@ -863,14 +878,10 @@ function InnerTimetablePage() {
       <TimetableOverlays
         hoverLesson={hoverLesson}
         hoverPosition={hoverPosition}
-        setHoverLesson={setHoverLesson}
-        debouncedShowRef={debouncedShowRef}
-        debouncedHideRef={debouncedHideRef}
         disableHover={disableHover}
         activeDragId={activeDragId}
         lessonsWithDetails={lessonsWithDetails}
         renderDragOverlay={renderDragOverlay}
-        setHoverPosition={setHoverPosition}
         overlayRef={overlayRef}
       />
 
@@ -886,7 +897,7 @@ function InnerTimetablePage() {
         slotInfo={slotInfo}
         currentWeek={currentWeek}
         allLessons={Array.isArray(allLessons) ? allLessons : []}
-        allYearlyLessons={yearlyLessons}
+        allYearlyLessons={allYearlyLessons}
         timeSlots={timeSlots}
         subjectColor={subjects.find(s => s.id === (editingLesson?.subject || initialSubjectForModal))?.color}
         initialSubject={initialSubjectForModal}

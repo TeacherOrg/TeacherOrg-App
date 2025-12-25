@@ -35,7 +35,6 @@ const useTimetableData = (currentYear, currentWeek) => {
         console.error('No user ID available for query');
         return {
           lessonsData: [],
-          yearlyLessonsData: [],
           allerleiLessonsData: [],
           topicsData: [],
           subjectsData: [],
@@ -46,15 +45,15 @@ const useTimetableData = (currentYear, currentWeek) => {
       }
       try {
         const [lessonsData, yearlyLessonsData, allerleiLessonsData, topicsData, subjectsData, classesData, settingsData, holidaysData] = await Promise.all([
-          Lesson.list({ user_id: userId, week_number: currentWeek }).catch(err => {
+          Lesson.list({ user_id: userId }).catch(err => {
             console.error('Lesson.list error:', err);
             return [];
           }),
-          YearlyLesson.list({ user_id: userId, week_number: currentWeek, school_year: currentYear }).catch(err => {
+          YearlyLesson.list({ user_id: userId }).catch(err => {
             console.error('YearlyLesson.list error:', err);
             return [];
           }),
-          AllerleiLesson.list({ user_id: userId, week_number: currentWeek }).catch(err => {
+          AllerleiLesson.list({ user_id: userId }).catch(err => {
             console.error('AllerleiLesson.list error:', err);
             return [];
           }),
@@ -82,7 +81,6 @@ const useTimetableData = (currentYear, currentWeek) => {
         console.log('Debug: Fetched data', {
           classesData,
           subjectsData: subjectsData.length,
-          yearlyLessonsData: yearlyLessonsData.length,
           lessonsData: lessonsData.length,
           topicsData: topicsData.length,
         });
@@ -125,10 +123,6 @@ const useTimetableData = (currentYear, currentWeek) => {
           setAllLessons(data.lessonsData || []);
           console.log('Debug: Updated allLessons');
         }
-      }
-      if (!isEqual(yearlyLessons, data.yearlyLessonsData?.map(l => ({ ...l, lesson_number: Number(l.lesson_number) })) || [])) {
-        setYearlyLessons(data.yearlyLessonsData?.map(l => ({ ...l, lesson_number: Number(l.lesson_number) })) || []);
-        console.log('Debug: Updated yearlyLessons');
       }
       if (!isEqual(allerleiLessons, data.allerleiLessonsData || [])) {
         setAllerleiLessons(data.allerleiLessonsData || []);

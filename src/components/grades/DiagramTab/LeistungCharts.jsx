@@ -548,7 +548,7 @@ const Leistungscharts = ({ performances, students, subjects, selectedStudents, s
           <div className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-700">
             <div className="text-center">
               <p className="text-sm text-slate-600 dark:text-slate-400 mb-1">
-                Fachbereiche Klassenschnitt
+                Durchschnitt aller Fachbereiche
               </p>
               <p className="text-4xl font-bold text-blue-600 dark:text-blue-400">
                 {fachbereichData.length > 0 ? (fachbereichData.reduce((sum, item) => sum + (item.Klassenschnitt || 0), 0) / fachbereichData.length).toFixed(2) : '—'}
@@ -719,9 +719,6 @@ const Leistungscharts = ({ performances, students, subjects, selectedStudents, s
                                                className="bg-red-100 dark:bg-red-900/30 border-red-300 dark:border-red-700 text-red-800 dark:text-red-300 font-medium px-3 py-1 cursor-help"
                                              >
                                                {fb.name}
-                                               <span className="ml-2 font-bold text-red-700 dark:text-red-400">
-                                                 {fb.average}
-                                               </span>
                                              </Badge>
                                              
                                              <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-10 shadow-sm">

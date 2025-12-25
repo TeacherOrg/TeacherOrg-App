@@ -262,7 +262,7 @@ class PbEntity {
       }
     }
 
-    const baseFilter = this.buildFilter({ ...query, $cancelKey: undefined });
+    const baseFilter = this.buildFilter({ ...query, $cancelKey: undefined }); // $cancelKey nicht als Filter
 
     let finalFilter = '';
     if (baseFilter && customFilter) finalFilter = `(${baseFilter}) && ${customFilter}`;
@@ -273,7 +273,7 @@ class PbEntity {
       filter: finalFilter || '',
       perPage: 500,
       expand: this.expandFields,
-      $cancelKey: cancelKey
+      $cancelKey: cancelKey  // ← DAS HINZUFÜGEN – das ist alles!
     };
 
     try {

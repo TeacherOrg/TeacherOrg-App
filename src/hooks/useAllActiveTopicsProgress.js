@@ -13,8 +13,9 @@ function getCurrentWeek(date = new Date()) {
 export function useAllActiveTopicsProgress() {
   const { allYearlyLessons, allLessons, topics } = useLessonStore();
 
-  const currentYear = new Date().getFullYear();
-  const currentWeek = getCurrentWeek();
+  const today = new Date();
+  const realCurrentYear = today.getFullYear();
+  const realCurrentWeek = getCurrentWeek(today);
 
   return useMemo(() => {
     const topicMap = new Map();
@@ -44,6 +45,7 @@ export function useAllActiveTopicsProgress() {
           completedCount: 0,
           hasExam: false,
           lessonsUntilExam: null,
+          halfClassCount: new Map(),
         });
       }
 
@@ -70,21 +72,50 @@ export function useAllActiveTopicsProgress() {
       if (!entry) return;
 
       const lessonWeek = lesson.week_number;
-      const lessonYear = lesson.week_year || currentYear;
+      const lessonYear = lesson.week_year || realCurrentYear;
 
       const isPastOrToday =
-        lessonYear < currentYear ||
-        (lessonYear === currentYear && lessonWeek <= currentWeek);
+        lessonYear < realCurrentYear ||
+        (lessonYear === realCurrentYear && lessonWeek <= realCurrentWeek);
 
       if (isPastOrToday) {
         // Finde Index dieser Lektion in der sortierten Liste
         const index = entry.sortedLessons.findIndex(l => l.id === ylId);
         if (index >= 0) {
-          // Jede vergangene Lektion zählt – auch wenn dazwischen Lücken sind
-          entry.completedCount = Math.max(entry.completedCount, index + 1);
-          if (lesson.is_double_lesson) entry.completedCount += 1;
+          const yl = entry.sortedLessons[index];
+
+          if (yl.is_half_class) {
+            // Halbklasse: Nur exakt zählen, KEIN Math.max
+            const currentCount = entry.halfClassCount.get(ylId) || 0;
+            entry.halfClassCount.set(ylId, currentCount + 1);
+
+            if (currentCount + 1 === 2) {
+              entry.completedCount += 1;
+            }
+            // KEIN Math.max hier!
+          } else {
+            // Normale Lektion: nur +1 (oder +2 bei double)
+            entry.completedCount += 1;
+            if (lesson.is_double_lesson) {
+              entry.completedCount += 1;
+            }
+          }
         }
       }
+    });
+
+    // Debug-Logs für jedes Thema
+    topicMap.forEach((entry) => {
+      console.log("Topic Progress Debug:", {
+        topicId: entry.topic.id,
+        topicTitle: entry.topic.title,
+        planned: entry.planned,
+        completedCount: entry.completedCount,
+        lessonsChecked: allLessons.filter(l => {
+          const id = l.yearly_lesson_id || l.second_yearly_lesson_id;
+          return entry.sortedLessons.some(yl => yl.id === id);
+        }).map(l => ({week: l.week_number, year: l.week_year || realCurrentYear, isDouble: l.is_double_lesson}))
+      });
     });
 
     // Prüfungs-Countdown
@@ -111,7 +142,7 @@ export function useAllActiveTopicsProgress() {
           );
           if (!lesson) return false;
 
-          const weekDiff = Math.abs(lesson.week_number - currentWeek);
+          const weekDiff = Math.abs(lesson.week_number - realCurrentWeek);
           return weekDiff <= 10;
         });
 
@@ -126,5 +157,5 @@ export function useAllActiveTopicsProgress() {
     return activeTopics.sort((a, b) => 
       (b.completed / b.planned) - (a.completed / a.planned)
     );
-  }, [allYearlyLessons, allLessons, topics]);
+  }, [allYearlyLessons, allLessons, topics, realCurrentYear, realCurrentWeek]);
 }

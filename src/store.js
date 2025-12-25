@@ -44,15 +44,21 @@ export const useLessonStore = create((set) => ({
       console.error('Error: Cannot delete lesson without id');
       return state;
     }
-    let newLessons = [...state.yearlyLessons];
+    let newYearlyLessons = [...state.yearlyLessons];
+    let newAllYearlyLessons = [...state.allYearlyLessons];
+    
     if (isDelete) {
-      newLessons = newLessons.filter(l => l.id !== updatedLesson.id);
+      newYearlyLessons = newYearlyLessons.filter(l => l.id !== updatedLesson.id);
+      newAllYearlyLessons = newAllYearlyLessons.filter(l => l.id !== updatedLesson.id);
     } else if (isNew) {
-      newLessons.push({ ...updatedLesson, lesson_number: Number(updatedLesson.lesson_number || 1) });
+      const normalizedLesson = { ...updatedLesson, lesson_number: Number(updatedLesson.lesson_number || 1) };
+      newYearlyLessons.push(normalizedLesson);
+      newAllYearlyLessons.push(normalizedLesson);
     } else {
-      newLessons = newLessons.map(l => l.id === updatedLesson.id ? { ...l, ...updatedLesson } : l);
+      newYearlyLessons = newYearlyLessons.map(l => l.id === updatedLesson.id ? { ...l, ...updatedLesson } : l);
+      newAllYearlyLessons = newAllYearlyLessons.map(l => l.id === updatedLesson.id ? { ...l, ...updatedLesson } : l);
     }
-    return { yearlyLessons: newLessons };
+    return { yearlyLessons: newYearlyLessons, allYearlyLessons: newAllYearlyLessons };
   }),
   optimisticUpdateAllLessons: (updatedLesson, isNew = false, isDelete = false) => set((state) => {
     let newLessons = [...state.allLessons];

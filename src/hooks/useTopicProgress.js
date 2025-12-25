@@ -13,8 +13,9 @@ function getCurrentWeek(date = new Date()) {
 export function useTopicProgress(currentLesson) {
   const { allYearlyLessons, allLessons, topics } = useLessonStore();
 
-  const currentYear = new Date().getFullYear();
-  const currentWeek = getCurrentWeek();
+  const today = new Date();
+  const realCurrentYear = today.getFullYear();
+  const realCurrentWeek = getCurrentWeek(today);
 
   return useMemo(() => {
     let topicId = null;
@@ -43,6 +44,7 @@ export function useTopicProgress(currentLesson) {
 
     // Chronologisches Zählen – exakt wie in useAllActiveTopicsProgress
     let completedCount = 0;
+    let halfClassCount = new Map(); // außerhalb der Schleife
 
     allLessons.forEach((lesson) => {
       const ylId = lesson.yearly_lesson_id || lesson.second_yearly_lesson_id;
@@ -53,21 +55,35 @@ export function useTopicProgress(currentLesson) {
       if (index === -1) return; // nicht in diesem Thema
 
       const lessonWeek = lesson.week_number;
-      const lessonYear = lesson.week_year || currentYear;
+      const lessonYear = lesson.week_year || realCurrentYear;
 
       const isPastOrToday =
-        lessonYear < currentYear ||
-        (lessonYear === currentYear && lessonWeek <= currentWeek);
+        lessonYear < realCurrentYear ||
+        (lessonYear === realCurrentYear && lessonWeek <= realCurrentWeek);
 
       if (isPastOrToday) {
         // Jede vergangene Lektion zählt – auch wenn dazwischen Lücken sind
-        completedCount = Math.max(completedCount, index + 1);
-        if (lesson.is_double_lesson) completedCount += 1;
+        const yl = plannedLessons[index];
+
+        if (yl.is_half_class) {
+          const current = halfClassCount.get(ylId) || 0;
+          halfClassCount.set(ylId, current + 1);
+          if (current + 1 === 2) {
+            completedCount += 1;
+          }
+          // KEIN Math.max hier!
+        } else {
+          // Normale Lektion: nur +1 (oder +2 bei double)
+          completedCount += 1;
+          if (lesson.is_double_lesson) {
+            completedCount += 1;
+          }
+        }
       }
     });
 
     console.log("TopicProgress Debug Final:", { planned, completedCount, topicId });
 
     return { topic, planned, completed: completedCount };
-  }, [currentLesson, allYearlyLessons, allLessons, topics, currentWeek]);
+  }, [currentLesson, allYearlyLessons, allLessons, topics, realCurrentYear, realCurrentWeek]);
 }

@@ -329,6 +329,21 @@ const useLessonHandlers = (editingLesson, currentYear, allLessons, yearlyLessons
             }
           }
           createDataWithoutSteps.user_id = pb.authStore.model.id;
+
+          // === HIER DIE NEUE LOGIK EINFÜGEN ===
+          function getMondayOfWeek(week, year) {
+            const jan4 = new Date(year, 0, 4);
+            const mondayOfWeek1 = new Date(jan4);
+            mondayOfWeek1.setDate(jan4.getDate() - ((jan4.getDay() + 6) % 7));
+            const monday = new Date(mondayOfWeek1);
+            monday.setDate(mondayOfWeek1.getDate() + (week - 1) * 7);
+            return monday;
+          }
+
+          const monday = getMondayOfWeek(currentWeek, currentYear);
+          createDataWithoutSteps.week_year = monday.getFullYear();
+          // === ENDE NEUE LOGIK ===
+
           console.log('Create payload for lesson:', createDataWithoutSteps);
           const newLesson = await Lesson.create(createDataWithoutSteps);
           if (!newLesson.yearly_lesson_id && !newLesson.is_allerlei && newLesson.subject) {

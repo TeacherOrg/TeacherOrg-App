@@ -274,9 +274,8 @@ export default function DailyView({ currentDate, onDateChange }) {
   const loadAllData = async () => {
     setIsLoading(true);
     try {
-      const [lessonsData, yearlyLessonsData, subjectsData, holidaysData, settingsData, classesData, choresData, assignmentsData, announcementsData, studentsData, topicsData, allerleiLessonsData] = await Promise.all([
+      const [lessonsData, subjectsData, holidaysData, settingsData, classesData, choresData, assignmentsData, announcementsData, studentsData, topicsData, allerleiLessonsData] = await Promise.all([
         Lesson.list(),
-        YearlyLesson.list(),
         Subject.list(),
         Holiday.list(),
         Setting.list(),
@@ -299,7 +298,6 @@ export default function DailyView({ currentDate, onDateChange }) {
       setStudents(studentsData || []);
       setAnnouncements(announcementsData || []);
       setTopics(topicsData || []);
-      setAllYearlyLessons(yearlyLessonsData || []); // Komplette Liste speichern // Hinzugefügt
       setAllerleiLessons(allerleiLessonsData || []); // ← NEU: Allerlei-Lektionen in Store speichern
 
       // Debug: Logge die geladenen Subjects

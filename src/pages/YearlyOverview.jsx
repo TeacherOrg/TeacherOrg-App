@@ -13,7 +13,7 @@ import TopicManager from "../components/yearly/TopicManager";
 import TopicLessonsModal from "../components/yearly/TopicLessonsModal";
 import QuickActionsFloating from "../components/yearly/QuickActionsFloating";
 import QuickActionsOverlay from "../components/yearly/QuickActionsOverlay";
-import { QueryClient, QueryClientProvider, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import debounce from 'lodash/debounce';
 import YearLessonOverlay from "../components/yearly/YearLessonOverlay";
 import { adjustColor } from '@/utils/colorUtils';
@@ -22,10 +22,9 @@ import pb from '@/api/pb';
 import { Plus } from "lucide-react";
 import toast from 'react-hot-toast';
 import { Calendar, GraduationCap } from 'lucide-react';
+import useAllYearlyLessons from '@/hooks/useAllYearlyLessons';
 
 const ACADEMIC_WEEKS = 52;
-
-const queryClient = new QueryClient();
 
 // SAFE STRING HELPER - gleiche Funktion wie in TopicLessonsModal
 const ultraSafeString = (value) => {
@@ -63,7 +62,7 @@ const safeSortByName = (items) => {
 };
 
 export default function YearlyOverviewPage() {
-  return <QueryClientProvider client={queryClient}><InnerYearlyOverviewPage /></QueryClientProvider>;
+  return <InnerYearlyOverviewPage />;
 }
 
 function InnerYearlyOverviewPage() {
@@ -74,8 +73,8 @@ function InnerYearlyOverviewPage() {
   const isAssignMode = mode === 'assign';
   const topicMode = searchParams.get('topic');
 
-  const yearlyLessons = useLessonStore((state) => state.yearlyLessons);
-  const { setYearlyLessons, optimisticUpdateYearlyLessons } = useLessonStore();
+  // Nicht mehr benötigt - verwenden jetzt optimisticUpdate aus Hook
+  // const { setAllYearlyLessons, optimisticUpdateYearlyLessons } = useLessonStore();
   const [topics, setTopics] = useState([]);
   const [subjects, setSubjects] = useState([]);
   const [classes, setClasses] = useState([]);
@@ -123,6 +122,7 @@ function InnerYearlyOverviewPage() {
 
   const [hoverLesson, setHoverLesson] = useState(null);
   const [hoverPosition, setHoverPosition] = useState({ top: 0, left: 0 });
+
   const handleAddTopic = useCallback(() => {
     setEditingTopic(null);
     setIsTopicModalOpen(true);
@@ -131,35 +131,36 @@ function InnerYearlyOverviewPage() {
 
   const [selectedLessons, setSelectedLessons] = useState([]); // Für Assign-Modus
 
-  const debouncedShowRef = useRef(null);
-  const debouncedHideRef = useRef(null);
-
-  useEffect(() => {
-    debouncedShowRef.current = debounce((lesson, position) => {
-      if (debouncedHideRef.current) debouncedHideRef.current.cancel();
-      setHoverLesson(lesson);
-      setHoverPosition(position);
-    }, 150, { leading: true, trailing: true });
-
-    debouncedHideRef.current = debounce(() => {
-      if (debouncedShowRef.current) debouncedShowRef.current.cancel();
-      setHoverLesson(null);
-    }, 150, { leading: false, trailing: true });
-
-    return () => {
-      if (debouncedShowRef.current) debouncedShowRef.current.cancel();
-      if (debouncedHideRef.current) debouncedHideRef.current.cancel();
-    };
-  }, []);
-
+  // Sofortiges Setzen beim Betreten
   const handleShowHover = useCallback((lesson, e) => {
     const rect = e.currentTarget.getBoundingClientRect();
-    if (debouncedShowRef.current) debouncedShowRef.current(lesson, { top: rect.bottom + 10, left: rect.left });
+    setHoverLesson(lesson);
+    setHoverPosition({
+      top: rect.bottom + 10,
+      left: rect.left + rect.width / 2, // zentriert
+    });
   }, []);
 
+  // Sofortiges Löschen beim Verlassen
   const handleHideHover = useCallback(() => {
-    if (debouncedHideRef.current) debouncedHideRef.current();
+    setHoverLesson(null);
+    setHoverPosition({ top: 0, left: 0 });
   }, []);
+
+  // Overlay schließen beim Ansichtswechsel oder Klassenwechsel
+  useEffect(() => {
+    handleHideHover();
+  }, [currentYear, activeClassId, yearViewMode, handleHideHover]);
+
+  // Overlay schließen beim Klicken irgendwo
+  useEffect(() => {
+    const handleClick = () => {
+      handleHideHover();
+    };
+
+    document.addEventListener('click', handleClick);
+    return () => document.removeEventListener('click', handleClick);
+  }, [handleHideHover]);
 
   // Füge hier ein:
   const handleSelectLesson = useCallback((slot) => {
@@ -232,70 +233,67 @@ function InnerYearlyOverviewPage() {
 
   const queryClientLocal = useQueryClient();
 
-  const { data, isLoading: queryLoading, refetch } = useQuery({
-    queryKey: ['yearlyData', currentYear],
-    queryFn: async () => {
-      const [lessonsData, topicsData, subjectsData, classesData, holidaysData] = await Promise.all([
-        YearlyLesson.list({ user_id: pb.authStore.model?.id }),
-        Topic.list({ 'class_id.user_id': pb.authStore.model?.id }),
-        Subject.list({ 'class_id.user_id': pb.authStore.model?.id }),
-        Class.list({ user_id: pb.authStore.model?.id }),
-        Holiday.list({ user_id: pb.authStore.model?.id })
-      ]);
-      return { lessonsData, topicsData, subjectsData, classesData, holidaysData };
-    },
-    staleTime: 0,
+  const { allYearlyLessons, isLoading: yearlyLoading, refetch: refetchYearly, optimisticUpdate } = useAllYearlyLessons(currentYear);
+
+  const { data: topicsData, isLoading: topicsLoading } = useQuery({
+    queryKey: ['topics', currentYear],
+    queryFn: () => Topic.list({ 'class_id.user_id': pb.authStore.model?.id }),
+  });
+
+  const { data: subjectsData, isLoading: subjectsLoading } = useQuery({
+    queryKey: ['subjects', currentYear],
+    queryFn: () => Subject.list({ 'class_id.user_id': pb.authStore.model?.id }),
+  });
+
+  const { data: classesData, isLoading: classesLoading } = useQuery({
+    queryKey: ['classes', currentYear],
+    queryFn: () => Class.list({ user_id: pb.authStore.model?.id }),
+  });
+
+  const { data: holidaysData, isLoading: holidaysLoading } = useQuery({
+    queryKey: ['holidays', currentYear],
+    queryFn: () => Holiday.list({ user_id: pb.authStore.model?.id }),
   });
 
   const prevModeRef = useRef(mode);
 
   useEffect(() => {
-    if (prevModeRef.current === 'assign' && mode !== 'assign') {
-      refetch();
-    }
-    prevModeRef.current = mode;
-  }, [mode, refetch]);
-
-  useEffect(() => {
-    if (data) {
-      console.log('Debug: Loaded yearlyLessons', data.lessonsData);
-      setYearlyLessons(data.lessonsData.map(l => ({ ...l, lesson_number: Number(l.lesson_number) })) || []);
-      
-      const safeTopics = safeSortByName(data.topicsData || []);
+    if (topicsData) {
+      const safeTopics = safeSortByName(topicsData || []);
       console.log('Debug: Safe topics after sorting:', safeTopics);
       setTopics(safeTopics);
-      
-      setSubjects(data.subjectsData || []);
-      setClasses(data.classesData || []);
-      setHolidays(data.holidaysData || []);
-
-      if (Array.isArray(data.classesData) && data.classesData.length > 0 && !activeClassId) {
-        setActiveClassId(data.classesData[0].id);
-      }
-
-      if (assignSubject && data.subjectsData) {
-        const matchingSubject = data.subjectsData.find(s => s.name.toLowerCase() === assignSubject.toLowerCase());
-        if (matchingSubject) {
-          setActiveSubjectName(matchingSubject.name);
-          console.log('Debug: Set activeSubjectName to', matchingSubject.name);
-        } else {
-          console.error('No subject found for assignSubject:', assignSubject);
-        }
-      }
-
-      // NEU: Schuljahr-Startwoche aus den Settings holen
-      // Angenommen, du lädst Settings separat oder sie sind in data; passe an, falls nötig
-      // Hier als Beispiel, falls du Setting.list() hinzufügst:
-      // const settingsData = await Setting.list({ user_id: pb.authStore.model?.id });
-      // if (settingsData && settingsData.length > 0) {
-      //   const latestSettings = settingsData.sort((a,b) => new Date(b.updated) - new Date(a.updated))[0];
-      //   setSchoolYearStartWeek(latestSettings.schoolYearStartWeek || 35);
-      // }
-      // Für jetzt: setze Standard
-      setSchoolYearStartWeek(35); // Passe an, wenn Settings geladen werden
     }
-    setIsLoading(queryLoading);
-  }, [data, queryLoading, assignSubject]);
+    if (subjectsData) {
+      setSubjects(subjectsData || []);
+    }
+    if (classesData) {
+      setClasses(classesData || []);
+      if (Array.isArray(classesData) && classesData.length > 0 && !activeClassId) {
+        setActiveClassId(classesData[0].id);
+      }
+    }
+    if (holidaysData) {
+      setHolidays(holidaysData || []);
+    }
+  }, [topicsData, subjectsData, classesData, holidaysData, activeClassId]);
+
+  useEffect(() => {
+    setIsLoading(yearlyLoading || topicsLoading || subjectsLoading || classesLoading || holidaysLoading);
+  }, [yearlyLoading, topicsLoading, subjectsLoading, classesLoading, holidaysLoading]);
+
+  useEffect(() => {
+    if (assignSubject && subjectsData) {
+      const matchingSubject = subjectsData.find(s => s.name.toLowerCase() === assignSubject.toLowerCase());
+      if (matchingSubject) {
+        setActiveSubjectName(matchingSubject.name);
+        console.log('Debug: Set activeSubjectName to', matchingSubject.name);
+      } else {
+        console.error('No subject found for assignSubject:', assignSubject);
+      }
+    }
+
+    setSchoolYearStartWeek(35);
+  }, [assignSubject, subjectsData]);
 
   useEffect(() => {
     const handleDataRefresh = () => queryClientLocal.invalidateQueries(['yearlyData', currentYear]);
@@ -369,18 +367,18 @@ function InnerYearlyOverviewPage() {
   const lessonsForYear = useMemo(() => {
     // Im Kalender-Modus: nur aktuelles Kalenderjahr
     if (yearViewMode === 'calendar') {
-      return yearlyLessons.filter(
+      return allYearlyLessons.filter(
         (lesson) => Number(lesson.school_year) === currentYear || !lesson.school_year
       );
     }
 
     // Im Schuljahr-Modus: aktuelles + nächstes Kalenderjahr anzeigen
     // (weil Schuljahr z. B. 2025/26 = KW 35 2025 bis KW 34 2026)
-    return yearlyLessons.filter((lesson) => {
+    return allYearlyLessons.filter((lesson) => {
       const lessonYear = Number(lesson.school_year);
       return lessonYear === currentYear || lessonYear === currentYear + 1 || !lesson.school_year;
     });
-  }, [yearlyLessons, currentYear, yearViewMode]);
+  }, [allYearlyLessons, currentYear, yearViewMode]);
 
   const handleLessonClick = useCallback(
     async (lesson, slot) => {
@@ -409,7 +407,7 @@ function InnerYearlyOverviewPage() {
         if (lesson && lesson.id) {
           const newTopicId = lesson.topic_id === activeTopicId ? null : activeTopicId;
           let lessonsToUpdate = lesson.mergedLessons || [lesson];
-          let tempUpdatedPrev = yearlyLessons.map(p => {
+          let tempUpdatedPrev = allYearlyLessons.map(p => {
             const toUpdate = lessonsToUpdate.find(l => l.id === p.id);
             if (toUpdate) {
               return { ...p, topic_id: newTopicId };
@@ -452,11 +450,11 @@ function InnerYearlyOverviewPage() {
                     class_id: activeClassId, // Sicherstellen, dass class_id gesetzt ist
                     subject: subjects.find(s => s.name === gapSlot.subject)?.id
                   }).then(gapCreated => {
-                    optimisticUpdateYearlyLessons(gapLesson, false, true);
-                    optimisticUpdateYearlyLessons(gapCreated, true);
+                    optimisticUpdate(gapLesson, false, true);
+                    optimisticUpdate(gapCreated, true);
                   }).catch(err => {
                     console.error("Error creating gap lesson:", err);
-                    optimisticUpdateYearlyLessons(gapLesson, false, true);
+                    optimisticUpdate(gapLesson, false, true);
                   });
 
                   gapPromises.push(createPromise);
@@ -465,7 +463,7 @@ function InnerYearlyOverviewPage() {
             }
           }
 
-          setYearlyLessons(tempUpdatedPrev);
+          // setAllYearlyLessons(tempUpdatedPrev); // Entfernt - optimistic updates verwalten den Cache
 
           try {
             await Promise.all(
@@ -474,10 +472,11 @@ function InnerYearlyOverviewPage() {
               )
             );
             await Promise.all(gapPromises);
-            await refetch();
+            // KEIN refetch - optimistic updates haben bereits aktualisiert
           } catch (error) {
             console.error("Error updating block lesson topics:", error);
-            setYearlyLessons(yearlyLessons);
+            // setAllYearlyLessons(allYearlyLessons); // Entfernt - Cache Rollback nicht nötig
+            await refetchYearly(); // Im Fehlerfall neu laden
           }
         } else if (slot) {
           if (!activeClassId) {
@@ -509,7 +508,7 @@ function InnerYearlyOverviewPage() {
             second_yearly_lesson_id: null,
             class_id: activeClassId // Hinzufügen von class_id
           };
-          optimisticUpdateYearlyLessons(newLesson, true);
+          optimisticUpdate(newLesson, true);
 
           const gapPromises = [];
 
@@ -531,10 +530,10 @@ function InnerYearlyOverviewPage() {
               is_allerlei: false,
               allerlei_subjects: []
             });
-            optimisticUpdateYearlyLessons(newLesson, false, true);
-            optimisticUpdateYearlyLessons({ ...createdLesson, lesson_number: Number(createdLesson.lesson_number) }, true);
+            optimisticUpdate(newLesson, false, true);
+            optimisticUpdate({ ...createdLesson, lesson_number: Number(createdLesson.lesson_number) }, true);
 
-            let tempUpdatedPrev = [...yearlyLessons, { ...createdLesson, lesson_number: Number(createdLesson.lesson_number) }];
+            let tempUpdatedPrev = [...allYearlyLessons, { ...createdLesson, lesson_number: Number(createdLesson.lesson_number) }];
 
             const weekLessons = tempUpdatedPrev
               .filter(l => l.week_number === slot.week_number && l.subject === subjectId && l.topic_id === activeTopicId) // ← Verwende subjectId
@@ -570,11 +569,11 @@ function InnerYearlyOverviewPage() {
                     class_id: activeClassId, // Sicherstellen, dass class_id gesetzt ist
                     subject: subjectId // ← Verwende ID
                   }).then(gapCreated => {
-                    optimisticUpdateYearlyLessons(gapLesson, false, true);
-                    optimisticUpdateYearlyLessons(gapCreated, true);
+                    optimisticUpdate(gapLesson, false, true);
+                    optimisticUpdate(gapCreated, true);
                   }).catch(err => {
                     console.error("Error creating gap lesson:", err);
-                    optimisticUpdateYearlyLessons(gapLesson, false, true);
+                    optimisticUpdate(gapLesson, false, true);
                   });
 
                   gapPromises.push(createPromise);
@@ -582,19 +581,19 @@ function InnerYearlyOverviewPage() {
               }
             }
 
-            setYearlyLessons(tempUpdatedPrev);
+            // setYearlyLessons(tempUpdatedPrev); // Removed - using optimistic updates and hook
             await Promise.all(gapPromises);
-            await refetch();
+            // KEIN refetch - optimistic updates haben bereits aktualisiert
           } catch (error) {
             console.error("Error creating lesson:", error);
-            optimisticUpdateYearlyLessons(newLesson, false, true);
+            optimisticUpdate(newLesson, false, true);
           }
         }
       } else {
         if (lesson && lesson.topic_id && ((lesson.mergedLessons && lesson.mergedLessons.length > 1) || lesson.is_double_lesson)) {
           let topicLessons = [];
           if (lesson.is_double_lesson && (!lesson.mergedLessons || lesson.mergedLessons.length <= 1)) {
-            const secondLesson = yearlyLessons.find(l => l.id === lesson.second_yearly_lesson_id);
+            const secondLesson = allYearlyLessons.find(l => l.id === lesson.second_yearly_lesson_id);
             topicLessons = [lesson];
             if (secondLesson) {
               topicLessons.push(secondLesson);
@@ -615,7 +614,7 @@ function InnerYearlyOverviewPage() {
         }
 
         if (lesson && lesson.id) {
-          const fullLesson = yearlyLessons.find(l => l.id === lesson.id);
+          const fullLesson = allYearlyLessons.find(l => l.id === lesson.id);
           setEditingLesson(fullLesson);
           setNewLessonSlot(null);
         } else {
@@ -642,12 +641,11 @@ function InnerYearlyOverviewPage() {
       activeTopicId,
       currentYear,
       topicsById,
-      yearlyLessons,
+      allYearlyLessons,
       activeClassId,
       subjects,
-      refetch,
-      setYearlyLessons,
-      optimisticUpdateYearlyLessons,
+      refetchYearly,
+      optimisticUpdate,
       setSelectedTopicLessons,
       setSelectedTopicInfo,
       setIsTopicLessonsModalOpen,
@@ -673,7 +671,7 @@ function InnerYearlyOverviewPage() {
     });
 
     if (finalLessonData.is_double_lesson) {
-      const nextLesson = yearlyLessons.find(l => l.id === finalLessonData.second_yearly_lesson_id);
+      const nextLesson = allYearlyLessons.find(l => l.id === finalLessonData.second_yearly_lesson_id);
       if (!nextLesson || parseInt(nextLesson.lesson_number) !== parseInt(originalLesson?.lesson_number || newLessonSlot?.lesson_number) + 1) {
         if (!nextLesson) {
           const subjectId = originalLesson?.subject || newLessonSlot?.subject;
@@ -696,7 +694,7 @@ function InnerYearlyOverviewPage() {
             topic_id: finalLessonData.topic_id || null
           });
           finalLessonData.second_yearly_lesson_id = newSecondLesson.id;
-          optimisticUpdateYearlyLessons(newSecondLesson, true);
+          optimisticUpdate(newSecondLesson, true);
         } else {
           finalLessonData.is_double_lesson = false;
           finalLessonData.second_yearly_lesson_id = null;
@@ -707,7 +705,7 @@ function InnerYearlyOverviewPage() {
 
     try {
       const { id, ...cleanLessonData } = finalLessonData;
-      optimisticUpdateYearlyLessons(cleanLessonData, true);
+      // Kein optimistic update hier - warten auf Server-Response
 
       let primaryId = originalLesson?.id;
 
@@ -719,7 +717,8 @@ function InnerYearlyOverviewPage() {
           subject: originalLesson.subject
         };
         await YearlyLesson.update(primaryId, updatePayload);
-        optimisticUpdateYearlyLessons({ id: primaryId, ...updatePayload }, false);
+        optimisticUpdate({ id: primaryId, ...updatePayload }, false);
+
       } else {
         // Neue Lektion → Create
         // Subject ID aus newLessonSlot oder fallback aus displayLesson in formData
@@ -746,7 +745,8 @@ function InnerYearlyOverviewPage() {
 
         const created = await YearlyLesson.create(createPayload);
         primaryId = created.id;
-        optimisticUpdateYearlyLessons({ ...created, lesson_number: Number(created.lesson_number) }, true);
+        optimisticUpdate({ ...created, lesson_number: Number(created.lesson_number) }, true);
+
       }
 
       if (finalLessonData.is_double_lesson && finalLessonData.second_yearly_lesson_id) {
@@ -757,7 +757,7 @@ function InnerYearlyOverviewPage() {
           name: finalLessonData.second_name,
           topic_id: finalLessonData.topic_id || null
         });
-        optimisticUpdateYearlyLessons({
+        optimisticUpdate({
           id: finalLessonData.second_yearly_lesson_id,
           steps: finalLessonData.secondSteps,
           is_double_lesson: false,     // ← false!
@@ -765,16 +765,18 @@ function InnerYearlyOverviewPage() {
           name: finalLessonData.second_name,
           topic_id: finalLessonData.topic_id || null
         }, false);
+
       }
 
       if (!finalLessonData.is_double_lesson && wasDoubleLesson && oldSecondYearlyId) {
-        const primaryYL = yearlyLessons.find(yl => yl.id === primaryId);
+        const primaryYL = allYearlyLessons.find(yl => yl.id === primaryId);
         const originalTopicId = primaryYL?.topic_id;
 
         await YearlyLesson.update(oldSecondYearlyId, { is_double_lesson: false, second_yearly_lesson_id: null, topic_id: originalTopicId });
-        optimisticUpdateYearlyLessons({ id: oldSecondYearlyId, is_double_lesson: false, second_yearly_lesson_id: null, topic_id: originalTopicId }, false);
+        optimisticUpdate({ id: oldSecondYearlyId, is_double_lesson: false, second_yearly_lesson_id: null, topic_id: originalTopicId }, false);
         await YearlyLesson.update(primaryId, { is_double_lesson: false, second_yearly_lesson_id: null, topic_id: originalTopicId });
-        optimisticUpdateYearlyLessons({ id: primaryId, is_double_lesson: false, second_yearly_lesson_id: null, topic_id: originalTopicId }, false);
+        optimisticUpdate({ id: primaryId, is_double_lesson: false, second_yearly_lesson_id: null, topic_id: originalTopicId }, false);
+
       }
 
       // Separater try-catch für Lesson.list()
@@ -801,28 +803,28 @@ function InnerYearlyOverviewPage() {
       setNewLessonSlot(null);
       // queryClientLocal.invalidateQueries(['yearlyData', currentYear]); // Entfernt, da optimistic updates die UI aktualisieren
       // queryClientLocal.invalidateQueries(['timetableData']);
-      import('react-hot-toast').then(({ toast }) => {
-        toast.success('Lektion erfolgreich gespeichert');
-      });
+
+      // KEIN refetch mehr hier - optimistic updates haben den Cache bereits aktualisiert!
+      // await refetchYearly(); // ← ENTFERNT: würde optimistic updates überschreiben
+
+      toast.success('Lektion erfolgreich gespeichert');
     } catch (error) {
       console.error("CRITICAL ERROR saving lesson:", error);
       if (originalLesson) {
-        optimisticUpdateYearlyLessons(originalLesson, false);
+        optimisticUpdate(originalLesson, false);
       }
-      queryClientLocal.invalidateQueries(['yearlyData', currentYear]);
+      await refetchYearly(); // auch im Fehlerfall: zurück auf Server-Stand
       queryClientLocal.invalidateQueries(['timetableData']);
-      import('react-hot-toast').then(({ toast }) => {
-        toast.error('Fehler beim Speichern der Lektion: ' + (error.message || 'Unbekannter Fehler'));
-      });
+      toast.error('Fehler beim Speichern der Lektion: ' + (error.message || 'Unbekannter Fehler'));
     }
-  }, [editingLesson, newLessonSlot, queryClientLocal, currentYear, yearlyLessons, subjects, activeClassId]);
+  }, [editingLesson, newLessonSlot, queryClientLocal, currentYear, allYearlyLessons, subjects, activeClassId, optimisticUpdate, refetchYearly]);
 
   const handleDeleteLesson = useCallback(async (lessonId) => {
     try {
-      const lessonToDelete = yearlyLessons.find(l => l.id === lessonId);
+      const lessonToDelete = allYearlyLessons.find(l => l.id === lessonId);
       if (lessonToDelete) {
-        optimisticUpdateYearlyLessons(lessonToDelete, false, true);
         await YearlyLesson.delete(lessonId);
+        optimisticUpdate({ id: lessonId }, false, true);
         setIsLessonModalOpen(false);
         setEditingLesson(null);
         setIsTopicLessonsModalOpen(false);
@@ -834,7 +836,7 @@ function InnerYearlyOverviewPage() {
       // queryClientLocal.invalidateQueries(['yearlyData', currentYear]); // Entfernt
       // queryClientLocal.invalidateQueries(['timetableData']);
     }
-  }, [yearlyLessons, queryClientLocal, currentYear]);
+  }, [allYearlyLessons, optimisticUpdate]);
 
   const handleEditTopic = useCallback((topic) => {
     setEditingTopic(topic);
@@ -866,7 +868,7 @@ function InnerYearlyOverviewPage() {
 
   const handleDeleteTopic = useCallback(async (topicId) => {
     try {
-      const affectedLessons = yearlyLessons.filter(l => l.topic_id === topicId);
+      const affectedLessons = allYearlyLessons.filter(l => l.topic_id === topicId);
       if (affectedLessons.length > 0) {
         await Promise.all(
           affectedLessons.map(l => YearlyLesson.update(l.id, { ...l, topic_id: null }))
@@ -883,7 +885,7 @@ function InnerYearlyOverviewPage() {
     } catch (error) {
       console.error("Error deleting topic:", error);
     }
-  }, [yearlyLessons, activeTopicId, queryClientLocal, currentYear]);
+  }, [allYearlyLessons, activeTopicId, queryClientLocal, currentYear]);
 
   const selectedSubject = useMemo(() => subjects.find(s => s.name === activeSubjectName), [subjects, activeSubjectName]);
 
@@ -1041,7 +1043,7 @@ function InnerYearlyOverviewPage() {
                     holidays={holidays}
                     onShowHover={handleShowHover}
                     onHideHover={handleHideHover}
-                    allYearlyLessons={yearlyLessons}
+                    allYearlyLessons={allYearlyLessons}
                     densityMode={densityMode}
                     isAssignMode={isAssignMode}
                     selectedLessons={selectedLessons}
@@ -1050,8 +1052,8 @@ function InnerYearlyOverviewPage() {
                     onSelectClass={setActiveClassId}
                     yearViewMode={yearViewMode}
                     schoolYearStartWeek={schoolYearStartWeek}
-                    refetch={refetch}
-                    optimisticUpdateYearlyLessons={optimisticUpdateYearlyLessons}  // ← NEU!
+                    refetch={refetchYearly}
+                    optimisticUpdateYearlyLessons={optimisticUpdate}
                   />
                 )}
               </>
@@ -1100,8 +1102,6 @@ function InnerYearlyOverviewPage() {
           lesson={hoverLesson}
           overlayRef={overlayRef}
           position={hoverPosition}
-          onMouseMove={() => { if (debouncedShowRef.current) debouncedShowRef.current(hoverLesson, hoverPosition); }}
-          onMouseLeave={() => { if (debouncedHideRef.current) debouncedHideRef.current(); }}
           lessonColor={hoverLesson?.color}
         />
       )}
@@ -1129,9 +1129,10 @@ function InnerYearlyOverviewPage() {
         onDelete={handleDeleteLesson}
         lesson={editingLesson}
         topics={topics}
+        subjects={subjects}
         newLessonSlot={newLessonSlot}
         subjectColor={subjects.find(s => s.name === (newLessonSlot?.subject || editingLesson?.subject))?.color}
-        allYearlyLessons={yearlyLessons}
+        allYearlyLessons={allYearlyLessons}
         currentWeek={editingLesson?.week_number || newLessonSlot?.week_number}
         currentYear={currentYear}
         onSaveAndNext={async (nextLessonNumber) => {
@@ -1143,7 +1144,7 @@ function InnerYearlyOverviewPage() {
             return;
           }
 
-          const nextLesson = yearlyLessons.find(
+          const nextLesson = allYearlyLessons.find(
             l =>
               l.week_number === currentWeek &&
               l.subject === currentSubjectId &&
@@ -1158,7 +1159,7 @@ function InnerYearlyOverviewPage() {
           }
 
           // Prüfe, ob in der aktuellen Woche noch Platz für die nächste Lektion ist
-          const subjectLessonsInWeek = yearlyLessons.filter(
+          const subjectLessonsInWeek = allYearlyLessons.filter(
             l => l.week_number === currentWeek && l.subject === currentSubjectId
           );
           const maxLessonNumber = subjectLessonsInWeek.length > 0 
@@ -1182,7 +1183,7 @@ function InnerYearlyOverviewPage() {
 
           // Erstelle die neue Lektion automatisch
           try {
-            const currentLesson = editingLesson || yearlyLessons.find(l => l.id === newLessonSlot?.id);
+            const currentLesson = editingLesson || allYearlyLessons.find(l => l.id === newLessonSlot?.id);
             const newLessonData = {
               subject: currentSubjectId,
               week_number: targetWeek,
@@ -1203,7 +1204,7 @@ function InnerYearlyOverviewPage() {
             };
 
             const createdLesson = await YearlyLesson.create(newLessonData);
-            optimisticUpdateYearlyLessons(createdLesson, true);
+            optimisticUpdate(createdLesson, true);
 
             // Setze editingLesson auf die neu erstellte Lektion
             setEditingLesson(createdLesson);
@@ -1215,6 +1216,7 @@ function InnerYearlyOverviewPage() {
       />
 
       <TopicLessonsModal
+        key={allYearlyLessons.length}
         isOpen={isTopicLessonsModalOpen}
         onClose={() => setIsTopicLessonsModalOpen(false)}
         topicLessons={selectedTopicLessons}
@@ -1223,7 +1225,7 @@ function InnerYearlyOverviewPage() {
         week={selectedTopicInfo?.week}
         activeTopicId={activeTopicId}
         subjectColor={subjects.find(s => s.name === selectedTopicInfo?.subject)?.color}
-        allYearlyLessons={yearlyLessons}
+        allYearlyLessons={allYearlyLessons}
         onSaveLesson={handleSaveLesson}
         onDeleteLesson={handleDeleteLesson}
         topics={topics}

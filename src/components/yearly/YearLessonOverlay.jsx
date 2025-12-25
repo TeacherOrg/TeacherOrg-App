@@ -17,7 +17,7 @@ const WORK_FORMS = {
     'experiment': '🧪'
 };
 
-const YearLessonOverlay = memo(({ lesson, overlayRef, position, onMouseLeave, lessonColor}) => {
+const YearLessonOverlay = memo(({ lesson, overlayRef, position, lessonColor}) => {
     if (position.top === 0 || position.left === 0) return null;
 
     const getLessonTitle = (les, numberFallback) => {
@@ -114,7 +114,6 @@ const YearLessonOverlay = memo(({ lesson, overlayRef, position, onMouseLeave, le
                 borderColor: adjustColor(lesson?.color || lesson?.mergedLessons?.[0]?.color || lessonColor || '#1e293b', -10),
                 borderWidth: '2px'
             }}
-            onMouseLeave={onMouseLeave}
         >
             {content}
         </div>

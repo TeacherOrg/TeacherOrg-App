@@ -9,7 +9,7 @@ const WORK_FORMS = {
   'Plenum': '🏛️ Plenum'
 };
 
-const OverlayView = forwardRef(({ lesson, schedule, overlayRef, disableHover, isDragging, onMouseMove, onMouseLeave, position, subjectColor }, ref) => {
+const OverlayView = forwardRef(({ lesson, schedule, overlayRef, disableHover, isDragging, position, subjectColor }, ref) => {
   if (disableHover || isDragging || position.top === 0) return null;
 
   // Use lesson.color for Allerlei lessons, fallback to single-color gradient
@@ -20,7 +20,7 @@ const OverlayView = forwardRef(({ lesson, schedule, overlayRef, disableHover, is
   const overlayContent = (
     <div
       ref={ref}
-      className="overlay fixed z-50 p-2 rounded-lg shadow-lg min-w-[300px]"
+      className="overlay fixed z-[200] p-2 rounded-lg shadow-lg min-w-[300px]"
       style={{ 
         transition: 'transform 0.2s ease-out', 
         transformOrigin: 'center', 
@@ -29,8 +29,6 @@ const OverlayView = forwardRef(({ lesson, schedule, overlayRef, disableHover, is
         display: 'block',
         background: backgroundStyle // Updated to use conditional background
       }}
-      onMouseMove={onMouseMove}
-      onMouseLeave={onMouseLeave}
     >
       <h3 className="font-bold mb-2 text-center text-white">
         {lesson.is_allerlei ? (

@@ -4,6 +4,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { X, BookOpen } from "lucide-react";
@@ -270,6 +271,9 @@ export default function TopicLessonsModal({
               </div>
               {safeTopicTitle}
             </DialogTitle>
+            <DialogDescription className="sr-only">
+              Lektionen des Themas {topic?.name} in Woche {week}
+            </DialogDescription>
             <div className="text-slate-500 dark:text-slate-400 text-sm">
               {safeSubject} • Woche {safeWeek} • {safeTopicLessons.length} Lektion{safeTopicLessons.length !== 1 ? 'en' : ''}
             </div>

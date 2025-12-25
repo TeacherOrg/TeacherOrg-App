@@ -283,8 +283,18 @@ function YearLessonCell({
 YearLessonCell.displayName = 'YearLessonCell';
 
 export default React.memo(YearLessonCell, (prevProps, nextProps) => {
+  // Vergleiche alle relevanten Properties, die sich ändern könnten
+  const lessonChanged = 
+    prevProps.lesson?.id !== nextProps.lesson?.id ||
+    prevProps.lesson?.name !== nextProps.lesson?.name ||
+    prevProps.lesson?.notes !== nextProps.lesson?.notes ||
+    prevProps.lesson?.topic_id !== nextProps.lesson?.topic_id ||
+    prevProps.lesson?.is_exam !== nextProps.lesson?.is_exam ||
+    prevProps.lesson?.is_half_class !== nextProps.lesson?.is_half_class ||
+    prevProps.lesson?.steps?.length !== nextProps.lesson?.steps?.length;
+  
   return (
-    prevProps.lesson?.id === nextProps.lesson?.id &&
+    !lessonChanged &&
     prevProps.activeTopicId === nextProps.activeTopicId &&
     prevProps.defaultColor === nextProps.defaultColor &&
     prevProps.isDoubleLesson === nextProps.isDoubleLesson &&

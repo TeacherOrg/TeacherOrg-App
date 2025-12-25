@@ -21,7 +21,21 @@ import { useQueryClient } from '@tanstack/react-query';
 import StepRow from '@/components/lesson-planning/StepRow';
 import { generateId } from '@/components/lesson-planning/utils';
 
+const dayTranslations = {
+  'monday': 'Montag',
+  'tuesday': 'Dienstag',
+  'wednesday': 'Mittwoch',
+  'thursday': 'Donnerstag',
+  'friday': 'Freitag',
+  'saturday': 'Samstag',
+  'sunday': 'Sonntag'
+};
 
+const translateDay = (day) => {
+  if (!day) return 'Wochentag';
+  const lowerDay = day.toLowerCase();
+  return dayTranslations[lowerDay] || day.charAt(0).toUpperCase() + day.slice(1);
+};
 
 export default function LessonModal({
   isOpen, onClose, onSave, onDelete, onDuplicate,
@@ -1052,13 +1066,16 @@ export default function LessonModal({
             >
               <BookOpen className="w-5 h-5 text-white" />
             </div>
-            {isAllerlei ? 
-              `Allerlei: ${formData.name || 'Allerlei'} ${allerleiSubjects.length > 0 ? `(${allerleiSubjects.join(', ')})` : ''}` :
-              (isEditing ? "Lektion bearbeiten" : (copiedLesson ? "Kopierte Lektion einfügen" : "Neue Lektion planen"))
-            }
+            {isAllerlei ? (
+              `Allerlei: ${formData.name || 'Allerlei'} ${allerleiSubjects.length > 0 ? `(${allerleiSubjects.join(', ')})` : ''}`
+            ) : (
+              isEditing 
+                ? `${lesson.expand?.subject?.name || subjects?.find(s => s.id === lesson.subject)?.name || lesson.subject} – ${translateDay(lesson.day_of_week)}, ${timeSlots && timeSlots[lesson.period_slot - 1] ? `${timeSlots[lesson.period_slot - 1].start}${formData.is_double_lesson ? '-' + (timeSlots[lesson.period_slot] ? timeSlots[lesson.period_slot].end : timeSlots[lesson.period_slot - 1].end) : '-' + timeSlots[lesson.period_slot - 1].end}` : `Period ${lesson.period_slot}`}`
+                : `${subjects?.find(s => s.id === selectedSubject)?.name || 'Fach'} – ${translateDay(slotInfo?.day)}, ${timeSlots && slotInfo?.period && timeSlots[slotInfo.period - 1] ? `${timeSlots[slotInfo.period - 1].start}-${timeSlots[slotInfo.period - 1].end}` : `Period ${slotInfo?.period || ''}`}`
+            )}
           </DialogTitle>
           <DialogDescription className="text-slate-500 dark:text-slate-400">
-            {isEditing ? `${lesson.expand?.subject?.name || lesson.subject} • ${lesson.day_of_week} • Period ${lesson.period_slot}` : `${slotInfo.day} • Period ${slotInfo.period}`}
+            {isEditing ? "Lektion bearbeiten" : (copiedLesson ? "Kopierte Lektion einfügen" : "Neue Lektion planen")}
           </DialogDescription>
         </DialogHeader>
         
@@ -1117,17 +1134,21 @@ export default function LessonModal({
               </Select>
             </div>
           </div>
-          <div className="grid grid-cols-4 items-center gap-4 mt-4">
-            <Label htmlFor="name" className="text-right text-sm font-semibold text-slate-900 dark:text-white">Titel (Lektion)</Label>
-            <Input
-              id="name"
-              value={formData.name || ''}
-              onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
-              className="col-span-3 bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white"
-              placeholder={`Lektion ${lesson?.yearly_lesson_id ? allYearlyLessons.find(yl => yl.id === lesson.yearly_lesson_id)?.lesson_number || '' : slotInfo?.period || ''}`}
-              maxLength={30}
-            />
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label className="text-sm font-semibold text-slate-900 dark:text-white">Titel (Lektion)</Label>
+              <Input
+                id="name"
+                value={formData.name || ''}
+                onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
+                className="bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white"
+                placeholder={`Lektion ${lesson?.yearly_lesson_id ? allYearlyLessons.find(yl => yl.id === lesson.yearly_lesson_id)?.lesson_number || '' : slotInfo?.period || ''}`}
+                maxLength={30}
+              />
+            </div>
           </div>
+
           {formData.is_double_lesson && addSecondLesson && (
             <div className="grid grid-cols-4 items-center gap-4 mt-4">
               <Label htmlFor="second_name" className="text-right text-sm font-semibold text-slate-900 dark:text-white">Titel (Zweite Lektion)</Label>
@@ -1277,7 +1298,21 @@ export default function LessonModal({
           )}
 
           <div className="space-y-4">
-            <Label className="font-semibold text-slate-900 dark:text-white">Primäre Lektion Schritte</Label>
+            <div className="flex items-center gap-2">
+              <Label className="font-semibold text-slate-900 dark:text-white">Primäre Lektion Schritte</Label>
+              <LessonTemplatePopover
+                subjectId={selectedSubject}
+                onInsert={(steps, templateName) => {
+                  const withNewIds = steps.map(s => ({ ...s, id: generateId() }));
+                  setPrimarySteps(prev => [...prev, ...withNewIds]);
+
+                  if (templateName) {
+                    setFormData(prev => ({ ...prev, name: templateName }));
+                  }
+                }}
+                currentSteps={primarySteps}
+              />
+            </div>
             <div className="space-y-3 p-4 border rounded-lg bg-slate-100/50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700">
               {primarySteps.length === 0 && topicMaterials.length > 0 ? (
                 <StepRow
@@ -1328,7 +1363,17 @@ export default function LessonModal({
 
           {addSecondLesson && !isUnifiedDouble && (
             <div className="space-y-4">
-              <Label className="font-semibold text-slate-900 dark:text-white">Zweite Lektion Schritte</Label>
+              <div className="flex items-center gap-2">
+                <Label className="font-semibold text-slate-900 dark:text-white">Zweite Lektion Schritte</Label>
+                <LessonTemplatePopover
+                  subjectId={selectedSubject}
+                  onInsert={(steps) => {
+                    const withNewIds = steps.map(s => ({ ...s, id: generateId() }));
+                    setSecondSteps(prev => [...prev, ...withNewIds]);
+                  }}
+                  currentSteps={secondSteps}
+                />
+              </div>
               <div className="space-y-3 p-4 border rounded-lg bg-slate-100/50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700">
                 {secondSteps.length === 0 && topicMaterials.length > 0 ? (
                   <StepRow
@@ -1355,20 +1400,10 @@ export default function LessonModal({
                     />
                   ))
                 )}
-                <div className="flex gap-2 mt-2">
-                  <Button type="button" variant="outline" onClick={handleAddSecondStep} className="w-full border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white bg-white dark:bg-slate-700 hover:bg-slate-100 dark:hover:bg-slate-600">
-                    <PlusCircle className="w-4 h-4 mr-2" />
-                    <span className="text-slate-900 dark:text-white">Schritt hinzufügen</span>
-                  </Button>
-                  <LessonTemplatePopover
-                    subjectId={selectedSubject}
-                    onInsert={(steps) => {
-                      const withNewIds = steps.map(s => ({ ...s, id: generateId() }));
-                      setSecondSteps(prev => [...prev, ...withNewIds]);
-                    }}
-                    currentSteps={secondSteps}
-                  />
-                </div>
+                <Button type="button" variant="outline" onClick={handleAddSecondStep} className="w-full mt-2 border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white bg-white dark:bg-slate-700 hover:bg-slate-100 dark:hover:bg-slate-600">
+                  <PlusCircle className="w-4 h-4 mr-2" />
+                  <span className="text-slate-900 dark:text-white">Schritt hinzufügen</span>
+                </Button>
               </div>
             </div>
           )}
@@ -1394,75 +1429,59 @@ export default function LessonModal({
                 title={!isFormValid ? 'Bitte wählen Sie mindestens ein Fach und eine Lektion aus.' : ''}
               >
                 <Save className="w-4 h-4 mr-2" />
-                {isEditing ? "Änderungen speichern" : "Lektion planen"}
+                Speichern
               </Button>
-              <div className="relative">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => {
-                    const defaultName = formData.name?.trim() || 
-                                        lesson?.name?.trim() || 
-                                        "Meine Vorlage";
-                    setTemplateName(defaultName);
-                    setShowTemplateSave(true);
-                  }}
-                >
-                  <Copy className="w-4 h-4 mr-2" />
-                  Als Vorlage speichern
-                </Button>
-
-                {/* Popup als fixed Overlay – ragt über alles hinaus */}
-                {showTemplateSave && (
-                  <div className="fixed inset-0 z-[9999] flex items-center justify-center">
-                    {/* Backdrop */}
-                    <div 
-                      className="absolute inset-0 bg-black/50"
-                      onClick={() => {
-                        setShowTemplateSave(false);
-                        setTemplateName("");
-                      }}
-                    />
-
-                    {/* Dialog */}
-                    <div className="relative bg-white dark:bg-slate-800 rounded-lg shadow-2xl p-6 w-96 max-w-[90vw]">
-                      <h3 className="text-lg font-semibold mb-4">Name der Vorlage</h3>
-                      
-                      <Input
-                        autoFocus
-                        value={templateName}
-                        onChange={(e) => setTemplateName(e.target.value)}
-                        onKeyDown={(e) => e.key === 'Enter' && handleSaveAsTemplate()}
-                        placeholder="z. B. Einstieg Photosynthese"
-                        className="mb-4"
-                      />
-
-                      <div className="flex justify-end gap-3">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => {
-                            setShowTemplateSave(false);
-                            setTemplateName("");
-                          }}
-                        >
-                          Abbrechen
-                        </Button>
-                        <Button
-                          size="sm"
-                          onClick={handleSaveAsTemplate}
-                          disabled={!templateName.trim()}
-                        >
-                          Speichern
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
             </div>
           </div>
         </form>
+
+        {/* Template-Popup Modal */}
+        {showTemplateSave && (
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center">
+            {/* Backdrop */}
+            <div 
+              className="absolute inset-0 bg-black/50"
+              onClick={() => {
+                setShowTemplateSave(false);
+                setTemplateName("");
+              }}
+            />
+
+            {/* Dialog */}
+            <div className="relative bg-white dark:bg-slate-800 rounded-lg shadow-2xl p-6 w-96 max-w-[90vw]">
+              <h3 className="text-lg font-semibold mb-4">Name der Vorlage</h3>
+              
+              <Input
+                autoFocus
+                value={templateName}
+                onChange={(e) => setTemplateName(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleSaveAsTemplate()}
+                placeholder="z. B. Einstieg Photosynthese"
+                className="mb-4"
+              />
+
+              <div className="flex justify-end gap-3">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setShowTemplateSave(false);
+                    setTemplateName("");
+                  }}
+                >
+                  Abbrechen
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={handleSaveAsTemplate}
+                  disabled={!templateName.trim()}
+                >
+                  Speichern
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
       </DialogContent>
     </Dialog>
   );

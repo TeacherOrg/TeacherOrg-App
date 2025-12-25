@@ -25,6 +25,14 @@ const getCurrentWeek = () => {
   return Math.max(1, Math.min(52, Math.floor(diffTime / (7 * 24 * 60 * 60 * 1000)) + 1));
 };
 
+const getSubjectId = (topicOrSubject) => {
+  if (typeof topicOrSubject === 'string') return topicOrSubject;
+  if (topicOrSubject?.id) return topicOrSubject.id;
+  if (typeof topicOrSubject?.subject === 'string') return topicOrSubject.subject;
+  if (topicOrSubject?.subject?.id) return topicOrSubject.subject.id;
+  return null;
+};
+
 const TopicsView = () => {
   const [subjects, setSubjects] = useState([]);
   const [allTopics, setAllTopics] = useState([]);
@@ -54,17 +62,15 @@ const TopicsView = () => {
   const loadData = async () => {
     setIsLoading(true);
     try {
-      const [subjectsData, topicsData, yearlyLessonsData, competenciesData] = await Promise.all([
+      const [subjectsData, topicsData, competenciesData] = await Promise.all([
         Subject.list(), // lädt alle Fächer (dank custom filter in entities.js)
         Topic.list(),   // <-- KEIN FILTER mehr – lädt ALLE Topics (alte + neue)
-        YearlyLesson.list(),
         CurriculumCompetency.list()
       ]);
       setSubjects(subjectsData || []);
       console.log('Loaded curriculumCompetencies:', competenciesData?.length, competenciesData?.map(c => c.fach_name));  // ← Ändern zu fach_name      
       setAllTopics(topicsData || []);
       
-      setAllYearlyLessons(yearlyLessonsData || []);
       setCurriculumCompetencies(competenciesData || []);
       console.log('Loaded curriculumCompetencies:', competenciesData?.length, competenciesData?.map(c => c.fach_name));  // Debug: Überprüfe geladene Kompetenzen
       
@@ -119,8 +125,12 @@ const TopicsView = () => {
       estimated_lessons: topicData.estimated_lessons || 0,
       goals: topicData.goals || '',
       department: topicData.department || '',
-      lehrplan_kompetenz_ids: topicData.lehrplan_kompetenz_ids || []
+      lehrplan_kompetenz_ids: topicData.lehrplan_kompetenz_ids || [],
+      school_year: new Date().getFullYear()
     };
+
+    console.log('SAVE PAYLOAD:', payload);
+    console.log('TOPIC ID:', topicData.id);
 
     try {
       let savedTopic;
@@ -131,16 +141,27 @@ const TopicsView = () => {
         savedTopic = await Topic.create(payload);
         toast.success('Thema erstellt');
       }
-      handleCloseAddModal(subjectId);
-      // Entfernt: await loadData();
-      // Stattdessen: Cache direkt updaten
-      queryClient.setQueryData(['topics'], (old = []) => {
-        const exists = old.find(t => t.id === savedTopic.id);
+
+      // DIREKT im lokalen State updaten → sofort sichtbar!
+      setAllTopics(prevTopics => {
+        const exists = prevTopics.find(t => t.id === savedTopic.id);
         if (exists) {
-          return old.map(t => t.id === savedTopic.id ? savedTopic : t);
+          // Update bestehendes Thema
+          return prevTopics.map(t => t.id === savedTopic.id ? savedTopic : t);
+        } else {
+          // Neues Thema hinzufügen
+          return [...prevTopics, savedTopic];
         }
-        return [...old, savedTopic];
       });
+
+      // Optional: Modal schließen (beim Erstellen)
+      if (!topicData.id) {
+        handleCloseAddModal(subjectId);
+      }
+
+      // Optional: Falls du irgendwo React Query verwendest (z. B. in TopicModal), dann auch invalidieren
+      queryClient.invalidateQueries({ queryKey: ['topics'] });
+
       return savedTopic;
     } catch (error) {
       console.error('Error saving topic:', error);
@@ -149,25 +170,16 @@ const TopicsView = () => {
   };
 
   const handleDeleteTopic = async (topicId) => {
-    // 1. Optimistic Update – Thema sofort aus UI entfernen
-    queryClient.setQueryData(['topics'], (oldTopics = []) => 
-      oldTopics.filter(t => t.id !== topicId)
-    );
-
-    // Optional: auch aus allTopics im lokalen State entfernen (falls du das noch irgendwo nutzt)
+    // Optimistic UI Update
     setAllTopics(prev => prev.filter(t => t.id !== topicId));
 
     try {
-      // 2. Jetzt wirklich löschen (inkl. Cascade über deinen Service!)
       await Topic.delete(topicId);
-
       toast.success('Thema und alle Lektionen gelöscht');
     } catch (error) {
-      // Falls was schiefgeht → zurückrollen
       toast.error('Löschen fehlgeschlagen – wird wieder angezeigt');
-      
-      // Cache wiederherstellen
-      queryClient.invalidateQueries(['topics']);
+      // Zurückrollen durch Neuladen
+      loadData();
     }
   };
 
@@ -375,13 +387,13 @@ const TopicsView = () => {
         <TopicModal
           isOpen={isModalOpen}
           onClose={() => setIsModalOpen(false)}
-          onSave={(topicData) => handleSaveTopic(topicData, selectedTopic.subject)}
+          onSave={(topicData) => handleSaveTopic(topicData, selectedTopic.subject?.id || selectedTopic.subject || selectedTopic.subject_id)}
           onDelete={handleDeleteTopic}
           topic={selectedTopic}
-          subjectColor={subjects.find(s => s.id === selectedTopic.subject)?.color}
-          subject={subjects.find(s => s.id === selectedTopic.subject)}
+          subjectColor={subjects.find(s => s.id === getSubjectId(selectedTopic))?.color}
+          subject={subjects.find(s => s.id === getSubjectId(selectedTopic))}
           topics={allTopics}
-          curriculumCompetencies={curriculumCompetencies.filter(c => c.fach_name === subjects.find(s => s.id === selectedTopic.subject)?.name)}
+          curriculumCompetencies={curriculumCompetencies.filter(c => c.fach_name === subjects.find(s => s.id === getSubjectId(selectedTopic))?.name)}
         />
       )}
     </div>

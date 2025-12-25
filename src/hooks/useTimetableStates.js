@@ -16,8 +16,6 @@ const useTimetableStates = (settings, currentYear, currentWeek) => {
   const [hoverPosition, setHoverPosition] = useState({ top: 0, left: 0 });
   const [disableHover, setDisableHover] = useState(false);
   const overlayRef = useRef(null);
-  const debouncedShowRef = useRef(null);
-  const debouncedHideRef = useRef(null);
   const [currentDate, setCurrentDate] = useState(new Date());
 
   const [autoFit, setAutoFit] = useState(settings.autoFit ?? true); // Neu: Auto-Fit-Flag aus Settings
@@ -82,19 +80,45 @@ const useTimetableStates = (settings, currentYear, currentWeek) => {
     }
   }, [currentView]);
 
-  const handleShowHover = (lesson, event) => {
+  const handleShowHover = useCallback((lesson, event) => {
     if (disableHover) return;
     const rect = event.currentTarget.getBoundingClientRect();
-    const position = {
+    setHoverLesson(lesson);
+    setHoverPosition({
       top: rect.top + window.scrollY,
       left: rect.right + window.scrollX + 10,
-    };
-    debouncedShowRef.current(lesson, position);
-  };
+    });
+  }, [disableHover]);
 
   const handleHideHover = useCallback(() => {
-    if (debouncedHideRef.current) debouncedHideRef.current();
+    setHoverLesson(null);
+    setHoverPosition({ top: 0, left: 0 });
   }, []);
+
+  // Overlay schließen bei Rechtsklick
+  useEffect(() => {
+    const handleContextMenu = (e) => {
+      handleHideHover();
+    };
+
+    document.addEventListener('contextmenu', handleContextMenu);
+    return () => document.removeEventListener('contextmenu', handleContextMenu);
+  }, [handleHideHover]);
+
+  // Overlay schließen beim Ansichtswechsel
+  useEffect(() => {
+    handleHideHover();
+  }, [currentView, currentWeek, currentYear, handleHideHover]);
+
+  // Overlay schließen beim Klicken irgendwo
+  useEffect(() => {
+    const handleClick = () => {
+      handleHideHover();
+    };
+
+    document.addEventListener('click', handleClick);
+    return () => document.removeEventListener('click', handleClick);
+  }, [handleHideHover]);
 
   return {
     renderKey, setRenderKey,
@@ -111,8 +135,6 @@ const useTimetableStates = (settings, currentYear, currentWeek) => {
     hoverPosition, setHoverPosition,
     disableHover, setDisableHover,
     overlayRef,
-    debouncedShowRef,
-    debouncedHideRef,
     handleShowHover,
     handleHideHover,
     currentDate, setCurrentDate,

@@ -412,6 +412,7 @@ export default function TopicModal({ isOpen, onClose, onSave, onDelete, topic, s
     }
 
     const payload = {
+      id: topic?.id, // ← WICHTIG: ID mitschicken, wenn vorhanden!
       name: formData.name,
       subject: subject?.id || '',  // Geändert: Verwende ID statt Name
       class_id: subject?.class_id,  // Hinzugefügt: Erforderliches Feld
@@ -423,6 +424,8 @@ export default function TopicModal({ isOpen, onClose, onSave, onDelete, topic, s
       lehrplan_kompetenz_ids: selectedCompetencies,
       materials: allMaterials // ← neu
     };
+
+    console.log('TopicModal sending payload:', payload);
 
     onSave(payload);
     localStorage.removeItem('draftTopic');
