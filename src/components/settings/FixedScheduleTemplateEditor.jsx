@@ -13,7 +13,7 @@ const DAYS = [
 
 export default function FixedScheduleTemplateEditor({ initialTemplate, onSave, classes, subjects, lessonsPerDay }) {
     const [template, setTemplate] = useState(initialTemplate || {});
-    const [selectedClassId, setSelectedClassId] = useState(classes.length > 0 ? classes[0].id : '');
+    const [selectedClassId, setSelectedClassId] = useState(classes.length > 0 ? String(classes[0].id) : '');
 
     useEffect(() => {
         setTemplate(initialTemplate || {});
@@ -95,7 +95,7 @@ export default function FixedScheduleTemplateEditor({ initialTemplate, onSave, c
     
     const subjectsForClass = useMemo(() => {
         if (!selectedClassId) return [];
-        return subjects.filter(s => s.class_id === selectedClassId);
+        return subjects.filter(s => String(s.class_id) === selectedClassId);
     }, [selectedClassId, subjects]);
 
     const placedCounts = useMemo(() => {
@@ -107,7 +107,7 @@ export default function FixedScheduleTemplateEditor({ initialTemplate, onSave, c
         });
 
         Object.values(template).flat().forEach(assignment => {
-            if (assignment.class_id === selectedClassId) {
+            if (String(assignment.class_id) === selectedClassId) {
                 const key = `${assignment.subject}_${assignment.class_id}`;
                 if (counts[key] !== undefined) {
                     counts[key]++;
@@ -162,9 +162,9 @@ export default function FixedScheduleTemplateEditor({ initialTemplate, onSave, c
                                                                 className={`w-full h-full p-2 rounded-md text-white font-semibold shadow-md flex items-center justify-center cursor-grab active:cursor-grabbing transition-transform ${
                                                                     dragSnapshot.isDragging ? 'scale-105 rotate-2' : ''
                                                                 }`}
-                                                                style={{ 
+                                                                style={{
                                                                     backgroundColor: subjectInfo?.color || '#374151',
-                                                                    ...dragProvided.draggableProps.style 
+                                                                    ...dragProvided.draggableProps.style
                                                                 }}
                                                             >
                                                                 {assignment.subject}
@@ -176,7 +176,7 @@ export default function FixedScheduleTemplateEditor({ initialTemplate, onSave, c
                                                             <span className="text-xs opacity-50">Fach hier ablegen</span>
                                                         </div>
                                                     )}
-                                                    {provided.placeholder}
+                                                    {/* Placeholder removed for clean grid appearance */}
                                                 </div>
                                             )}
                                         </Droppable>
@@ -192,13 +192,16 @@ export default function FixedScheduleTemplateEditor({ initialTemplate, onSave, c
                     {/* Class Selection */}
                     <div className="space-y-2">
                         <label className="text-sm font-medium text-white">Klasse auswählen</label>
-                        <Select value={selectedClassId} onValueChange={setSelectedClassId}>
+                        <Select
+                            value={selectedClassId}
+                            onValueChange={setSelectedClassId}
+                        >
                             <SelectTrigger className="bg-slate-800 border-slate-600 text-white">
                                 <SelectValue placeholder="Klasse auswählen" />
                             </SelectTrigger>
                             <SelectContent>
                                 {classes.map(cls => (
-                                    <SelectItem key={cls.id} value={cls.id}>{cls.name}</SelectItem>
+                                    <SelectItem key={cls.id} value={String(cls.id)}>{cls.name}</SelectItem>
                                 ))}
                             </SelectContent>
                         </Select>

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
-import { YearlyLesson, Topic, Subject, Class, Holiday, Lesson } from "@/api/entities"; 
+import { YearlyLesson, Topic, Subject, Class, Holiday, Lesson, Setting } from "@/api/entities"; 
 import { Button } from "@/components/ui/button";
 import { ChevronsLeft, ChevronsRight } from "lucide-react";
 import { motion } from "framer-motion";
@@ -23,6 +23,7 @@ import { Plus } from "lucide-react";
 import toast from 'react-hot-toast';
 import { Calendar, GraduationCap } from 'lucide-react';
 import useAllYearlyLessons from '@/hooks/useAllYearlyLessons';
+import { syncYearlyLessonToWeekly } from '@/hooks/useYearlyLessonSync';
 
 const ACADEMIC_WEEKS = 52;
 
@@ -79,6 +80,7 @@ function InnerYearlyOverviewPage() {
   const [subjects, setSubjects] = useState([]);
   const [classes, setClasses] = useState([]);
   const [holidays, setHolidays] = useState([]);
+  const [settings, setSettings] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
 
   const [activeClassId, setActiveClassId] = useState(null);
@@ -255,6 +257,11 @@ function InnerYearlyOverviewPage() {
     queryFn: () => Holiday.list({ user_id: pb.authStore.model?.id }),
   });
 
+  const { data: settingsData, isLoading: settingsLoading } = useQuery({
+    queryKey: ['settings', currentYear],
+    queryFn: () => Setting.list({ user_id: pb.authStore.model?.id }),
+  });
+
   const prevModeRef = useRef(mode);
 
   useEffect(() => {
@@ -268,18 +275,22 @@ function InnerYearlyOverviewPage() {
     }
     if (classesData) {
       setClasses(classesData || []);
-      if (Array.isArray(classesData) && classesData.length > 0 && !activeClassId) {
-        setActiveClassId(classesData[0].id);
-      }
+      // REMOVED: Auto-selection to first class
+      // activeClassId starts as null → shows "Alle Klassen" by default
+      // User can explicitly select a class if desired
     }
     if (holidaysData) {
       setHolidays(holidaysData || []);
     }
-  }, [topicsData, subjectsData, classesData, holidaysData, activeClassId]);
+    if (settingsData && settingsData.length > 0) {
+      const latestSettings = settingsData.sort((a, b) => new Date(b.updated) - new Date(a.updated))[0];
+      setSettings(latestSettings);
+    }
+  }, [topicsData, subjectsData, classesData, holidaysData, settingsData, activeClassId, yearViewMode]);
 
   useEffect(() => {
-    setIsLoading(yearlyLoading || topicsLoading || subjectsLoading || classesLoading || holidaysLoading);
-  }, [yearlyLoading, topicsLoading, subjectsLoading, classesLoading, holidaysLoading]);
+    setIsLoading(yearlyLoading || topicsLoading || subjectsLoading || classesLoading || holidaysLoading || settingsLoading);
+  }, [yearlyLoading, topicsLoading, subjectsLoading, classesLoading, holidaysLoading, settingsLoading]);
 
   useEffect(() => {
     if (assignSubject && subjectsData) {
@@ -357,7 +368,9 @@ function InnerYearlyOverviewPage() {
       return allSubjects;
     }
 
-    return subjects.filter((s) => s.class_id === activeClassId);
+    return subjects
+      .filter((s) => s.class_id === activeClassId)
+      .sort((a, b) => a.name.localeCompare(b.name));
   }, [isAssignMode, assignSubject, subjects, activeClassId, classes]);
 
   const activeClassName = useMemo(() => classes.find(c => c.id === activeClassId)?.name || '', [classes, activeClassId]);
@@ -365,20 +378,27 @@ function InnerYearlyOverviewPage() {
   const activeClassDisplayName = activeClassId === null ? 'Alle Klassen' : activeClassName;
 
   const lessonsForYear = useMemo(() => {
-    // Im Kalender-Modus: nur aktuelles Kalenderjahr
+    let filtered = allYearlyLessons;
+
+    // CRITICAL: Filter by activeClassId first
+    if (activeClassId !== null) {
+      filtered = filtered.filter(l => l.class_id === activeClassId);
+    }
+
+    // Then filter by year mode
     if (yearViewMode === 'calendar') {
-      return allYearlyLessons.filter(
+      return filtered.filter(
         (lesson) => Number(lesson.school_year) === currentYear || !lesson.school_year
       );
     }
 
     // Im Schuljahr-Modus: aktuelles + nächstes Kalenderjahr anzeigen
     // (weil Schuljahr z. B. 2025/26 = KW 35 2025 bis KW 34 2026)
-    return allYearlyLessons.filter((lesson) => {
+    return filtered.filter((lesson) => {
       const lessonYear = Number(lesson.school_year);
       return lessonYear === currentYear || lessonYear === currentYear + 1 || !lesson.school_year;
     });
-  }, [allYearlyLessons, currentYear, yearViewMode]);
+  }, [allYearlyLessons, currentYear, yearViewMode, activeClassId]);
 
   const handleLessonClick = useCallback(
     async (lesson, slot) => {
@@ -479,12 +499,16 @@ function InnerYearlyOverviewPage() {
             await refetchYearly(); // Im Fehlerfall neu laden
           }
         } else if (slot) {
-          if (!activeClassId) {
-            console.error('Error: No activeClassId set for creating new lesson');
+          // NEW: Get class_id from slot instead of activeClassId
+          // This allows creating lessons in "Alle Klassen" view
+          const slotClassId = slot.class_id || activeClassId;
+
+          if (!slotClassId) {
+            console.error('Error: No class_id available for creating new lesson');
             alert('Bitte wählen Sie eine Klasse aus, bevor Sie eine neue Lektion erstellen.');
             return;
           }
-          const subjectId = subjects.find(s => s.name === slot.subject)?.id;
+          const subjectId = subjects.find(s => s.name === slot.subject && s.class_id === slotClassId)?.id;
           console.log('Debug: Subject mapping in handleLessonClick', {
             slotSubject: slot.subject,
             subjectId,
@@ -506,7 +530,7 @@ function InnerYearlyOverviewPage() {
             notes: '',
             is_double_lesson: false,
             second_yearly_lesson_id: null,
-            class_id: activeClassId // Hinzufügen von class_id
+            class_id: slotClassId // Use class from slot, not activeClassId
           };
           optimisticUpdate(newLesson, true);
 
@@ -520,7 +544,7 @@ function InnerYearlyOverviewPage() {
               name: 'Neue Lektion',
               description: '',
               user_id: pb.authStore.model.id,
-              class_id: activeClassId, // Sicherstellen, dass class_id gesetzt ist
+              class_id: slotClassId, // Use class from slot, not activeClassId
               subject: subjectId, // ← Verwende ID
               notes: '',
               is_double_lesson: false,
@@ -533,7 +557,18 @@ function InnerYearlyOverviewPage() {
             optimisticUpdate(newLesson, false, true);
             optimisticUpdate({ ...createdLesson, lesson_number: Number(createdLesson.lesson_number) }, true);
 
+            // Sync to weekly timetable if in fixed schedule mode
+            console.log('YearlyOverview: Syncing created lesson to weekly timetable');
+
             let tempUpdatedPrev = [...allYearlyLessons, { ...createdLesson, lesson_number: Number(createdLesson.lesson_number) }];
+
+            try {
+              // Include the newly created lesson in the array for placement calculation
+              await syncYearlyLessonToWeekly(createdLesson, settings, subjects, tempUpdatedPrev);
+              console.log('✓ Successfully synced to weekly timetable');
+            } catch (syncError) {
+              console.warn('Failed to sync to weekly timetable:', syncError);
+            }
 
             const weekLessons = tempUpdatedPrev
               .filter(l => l.week_number === slot.week_number && l.subject === subjectId && l.topic_id === activeTopicId) // ← Verwende subjectId
@@ -618,17 +653,21 @@ function InnerYearlyOverviewPage() {
           setEditingLesson(fullLesson);
           setNewLessonSlot(null);
         } else {
-          if (!activeClassId) {
-            console.error('Error: No activeClassId set for creating new lesson');
+          // NEW: Get class_id from slot instead of activeClassId
+          // This allows creating lessons in "Alle Klassen" view
+          const slotClassId = slot.class_id || activeClassId;
+
+          if (!slotClassId) {
+            console.error('Error: No class_id available for creating new lesson');
             alert('Bitte wählen Sie eine Klasse aus, bevor Sie eine neue Lektion erstellen.');
             return;
           }
           setEditingLesson(null);
-          setNewLessonSlot({ 
-            ...slot, 
-            subject: subjects.find(s => s.name === slot.subject)?.id || slot.subject, // ← fallback auf ID
+          setNewLessonSlot({
+            ...slot,
+            subject: subjects.find(s => s.name === slot.subject && s.class_id === slotClassId)?.id || slot.subject, // ← fallback auf ID
             school_year: currentYear,
-            class_id: activeClassId // Hinzufügen von class_id
+            class_id: slotClassId // Use class from slot, not activeClassId
           });
         }
         setIsLessonModalOpen(true);
@@ -670,7 +709,9 @@ function InnerYearlyOverviewPage() {
       subjectId: newLessonSlot?.subject || originalLesson?.subject
     });
 
-    if (finalLessonData.is_double_lesson) {
+    // Only create/link second lesson in FLEXIBLE mode (traditional two-lesson approach)
+    // In FIXED mode with unified doubles, second_yearly_lesson_id should be null
+    if (finalLessonData.is_double_lesson && settings?.scheduleType === 'flexible') {
       const nextLesson = allYearlyLessons.find(l => l.id === finalLessonData.second_yearly_lesson_id);
       if (!nextLesson || parseInt(nextLesson.lesson_number) !== parseInt(originalLesson?.lesson_number || newLessonSlot?.lesson_number) + 1) {
         if (!nextLesson) {
@@ -701,6 +742,10 @@ function InnerYearlyOverviewPage() {
           console.warn('Invalid double lesson pairing; resetting flags');
         }
       }
+    } else if (finalLessonData.is_double_lesson && settings?.scheduleType === 'fixed') {
+      // FIXED mode with unified double: ensure second_yearly_lesson_id is null
+      finalLessonData.second_yearly_lesson_id = null;
+      console.log('Unified double lesson in fixed mode - no second lesson created');
     }
 
     try {
@@ -714,10 +759,28 @@ function InnerYearlyOverviewPage() {
         const updatePayload = {
           ...cleanLessonData,
           steps: cleanLessonData.steps,
-          subject: originalLesson.subject
+          subject: originalLesson.subject,
+          class_id: originalLesson.class_id || activeClassId,
+          user_id: originalLesson.user_id || pb.authStore.model?.id,
+          name: cleanLessonData.name || originalLesson.name,
+          school_year: originalLesson.school_year || currentYear
         };
         await YearlyLesson.update(primaryId, updatePayload);
         optimisticUpdate({ id: primaryId, ...updatePayload }, false);
+
+        // Sync updated lesson to weekly timetable if in fixed schedule mode
+        console.log('handleSaveLesson: Syncing updated lesson to weekly timetable');
+        try {
+          const updatedLesson = { id: primaryId, ...updatePayload, ...originalLesson };
+          // Replace the old lesson with the updated one in the array
+          const updatedYearlyLessons = allYearlyLessons.map(yl =>
+            yl.id === primaryId ? updatedLesson : yl
+          );
+          await syncYearlyLessonToWeekly(updatedLesson, settings, subjects, updatedYearlyLessons);
+          console.log('✓ Successfully synced updated lesson to weekly timetable');
+        } catch (syncError) {
+          console.warn('Failed to sync updated lesson to weekly timetable:', syncError);
+        }
 
       } else {
         // Neue Lektion → Create
@@ -747,15 +810,32 @@ function InnerYearlyOverviewPage() {
         primaryId = created.id;
         optimisticUpdate({ ...created, lesson_number: Number(created.lesson_number) }, true);
 
+        // Sync to weekly timetable if in fixed schedule mode
+        console.log('handleSaveLesson: Syncing created lesson to weekly timetable');
+        try {
+          // Include the newly created lesson in the array for placement calculation
+          const updatedYearlyLessons = [...allYearlyLessons, created];
+          await syncYearlyLessonToWeekly(created, settings, subjects, updatedYearlyLessons);
+          console.log('✓ Successfully synced created lesson to weekly timetable');
+        } catch (syncError) {
+          console.warn('Failed to sync created lesson to weekly timetable:', syncError);
+        }
+
       }
 
-      if (finalLessonData.is_double_lesson && finalLessonData.second_yearly_lesson_id) {
+      // Only update second lesson in FLEXIBLE mode (traditional two-lesson approach)
+      // In FIXED mode, there is no second lesson to update
+      if (finalLessonData.is_double_lesson && finalLessonData.second_yearly_lesson_id && settings?.scheduleType === 'flexible') {
+        const secondLesson = allYearlyLessons.find(l => l.id === finalLessonData.second_yearly_lesson_id);
         await YearlyLesson.update(finalLessonData.second_yearly_lesson_id, {
           steps: finalLessonData.secondSteps,
           is_double_lesson: false,     // ← false!
           second_yearly_lesson_id: null, // ← null!
           name: finalLessonData.second_name,
-          topic_id: finalLessonData.topic_id || null
+          topic_id: finalLessonData.topic_id || null,
+          subject: secondLesson?.subject || originalLesson?.subject || newLessonSlot?.subject,
+          class_id: secondLesson?.class_id || activeClassId,
+          user_id: secondLesson?.user_id || pb.authStore.model?.id
         });
         optimisticUpdate({
           id: finalLessonData.second_yearly_lesson_id,
@@ -1054,6 +1134,7 @@ function InnerYearlyOverviewPage() {
                     schoolYearStartWeek={schoolYearStartWeek}
                     refetch={refetchYearly}
                     optimisticUpdateYearlyLessons={optimisticUpdate}
+                    settings={settings}
                   />
                 )}
               </>
@@ -1135,6 +1216,7 @@ function InnerYearlyOverviewPage() {
         allYearlyLessons={allYearlyLessons}
         currentWeek={editingLesson?.week_number || newLessonSlot?.week_number}
         currentYear={currentYear}
+        settings={settings}
         onSaveAndNext={async (nextLessonNumber) => {
           const currentWeek = newLessonSlot?.week_number || editingLesson?.week_number;
           const currentSubjectId = newLessonSlot ? subjects.find(s => s.name === newLessonSlot.subject)?.id : editingLesson?.subject;

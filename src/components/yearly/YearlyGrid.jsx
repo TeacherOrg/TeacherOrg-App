@@ -102,8 +102,9 @@ const YearlyGrid = ({
   onSelectClass,
   yearViewMode = 'calendar',
   schoolYearStartWeek = 35,
-  refetch, 
-  optimisticUpdateYearlyLessons, // ← hinzufügen
+  refetch,
+  optimisticUpdateYearlyLessons,
+  settings, // ← NEU: für Fixed Schedule Template
 }) => {
   const containerRef = useRef(null);
   const subjectHeaderRef = useRef(null);
@@ -140,13 +141,28 @@ const YearlyGrid = ({
 
   const lessonsByWeek = useMemo(() => {
     const result = {};
+    const missingSubjects = new Set();
+
     lessons.forEach(lesson => {
-      const subjectObj = subjects.find(s => s.id === lesson.subject) || { name: 'Unbekannt', color: '#3b82f6' };
+      const subjectObj = subjects.find(s => s.id === lesson.subject);
+
+      if (!subjectObj) {
+        missingSubjects.add(lesson.subject);
+        // Skip lessons whose subject is not in displayed subjects
+        return;
+      }
+
       const weekNum = Number(lesson.week_number);
       const lessonNum = Number(lesson.lesson_number);
-      const key = `${weekNum}-${subjectObj.name}-${lessonNum}`;
+      // Use subject ID instead of name - ID is unique per class
+      const key = `${weekNum}-${lesson.subject}-${lessonNum}`;
       result[key] = { ...lesson, subjectName: subjectObj.name };
     });
+
+    if (missingSubjects.size > 0) {
+      console.warn('YearlyGrid: Lessons with subjects not in displayedSubjects:', Array.from(missingSubjects));
+    }
+
     return result;
   }, [lessons, subjects]);
 
@@ -155,20 +171,10 @@ const YearlyGrid = ({
     return new Map(topics.map(t => [t.id, t]));
   }, [topics]);
 
-  const subjectsByName = useMemo(() => {
-    return subjects.reduce((acc, subject) => {
-      acc[subject.name] = subject;
-      return acc;
-    }, {});
-  }, [subjects]);
-
-  const uniqueSubjects = useMemo(() => [...new Set(subjects.map(s => s.name))], [subjects]);
-  
-  const lessonsPerWeekBySubject = useMemo(() => {
-    return subjects.reduce((acc, sub) => {
-      acc[sub.name] = sub.lessons_per_week || 4;
-      return acc;
-    }, {});
+  const uniqueSubjects = useMemo(() => {
+    // subjects is already filtered by active class in YearlyOverview.jsx
+    // Each subject has unique ID even if names are the same across classes
+    return subjects;
   }, [subjects]);
 
   const getDisplayName = useCallback((sub) => {
@@ -187,16 +193,157 @@ const YearlyGrid = ({
     return map;
   }, [lessons]);
 
+  // Helper function: Check if a slot (by position) is part of a template double lesson
+  const isSlotPartOfTemplateDouble = useCallback((week, subject, lessonNumber, classId) => {
+    if (!settings || settings.scheduleType !== 'fixed') return { isDouble: false, isFirst: false, isSecond: false };
+
+    const template = settings.fixedScheduleTemplate || {};
+    if (!template || Object.keys(template).length === 0) return { isDouble: false, isFirst: false, isSecond: false };
+
+    const days = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'];
+
+    // Get all template slots for this subject AND class (sorted)
+    const allSubjectSlots = [];
+    days.forEach(d => {
+      (template[d] || []).forEach(slot => {
+        // CRITICAL FIX: Also check class_id to avoid mixing subjects from different classes
+        if (slot.subject === subject && slot.class_id === classId) {
+          allSubjectSlots.push({ day: d, period: slot.period });
+        }
+      });
+    });
+    allSubjectSlots.sort((a, b) => {
+      const dayOrder = { monday: 1, tuesday: 2, wednesday: 3, thursday: 4, friday: 5 };
+      return dayOrder[a.day] - dayOrder[b.day] || a.period - b.period;
+    });
+
+    // Check if lessonNumber corresponds to a double lesson slot
+    if (lessonNumber <= allSubjectSlots.length) {
+      const currentSlot = allSubjectSlots[lessonNumber - 1];
+      const nextSlot = allSubjectSlots[lessonNumber];
+      const prevSlot = allSubjectSlots[lessonNumber - 2];
+
+      // Is this the first part of a double lesson?
+      if (nextSlot && currentSlot.day === nextSlot.day && currentSlot.period + 1 === nextSlot.period) {
+        return { isDouble: true, isFirst: true, isSecond: false };
+      }
+
+      // Is this the second part of a double lesson?
+      if (prevSlot && prevSlot.day === currentSlot.day && prevSlot.period + 1 === currentSlot.period) {
+        return { isDouble: true, isFirst: false, isSecond: true };
+      }
+    }
+
+    return { isDouble: false, isFirst: false, isSecond: false };
+  }, [settings]);
+
+  // ═══════════ NEU: AUTO-SPANNING DETECTION FÜR FIXED SCHEDULE ═══════════
+  const spanningInfo = useMemo(() => {
+    const spans = new Map(); // Maps lesson.id → { spanCount, isSecondPart, secondLessonId }
+
+    // Nur im Fixed-Modus aktivieren
+    if (!settings || settings.scheduleType !== 'fixed') {
+      return spans;
+    }
+
+    const template = settings.fixedScheduleTemplate || {};
+    if (!template || Object.keys(template).length === 0) {
+      return spans;
+    }
+
+    const days = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'];
+
+    // Erkenne Doppellektionen im Template
+    const doubleLessonPairs = []; // Array of { subject, day, periods: [p1, p2] }
+
+    days.forEach(day => {
+      const daySlots = (template[day] || []).sort((a, b) => a.period - b.period);
+
+      for (let i = 0; i < daySlots.length - 1; i++) {
+        const curr = daySlots[i];
+        const next = daySlots[i + 1];
+
+        // Prüfe: gleiches Fach, aufeinanderfolgende Perioden
+        if (curr.subject === next.subject &&
+            curr.class_id === next.class_id &&
+            curr.period + 1 === next.period) {
+          doubleLessonPairs.push({
+            subject: curr.subject,
+            class_id: curr.class_id,
+            day,
+            periods: [curr.period, next.period]
+          });
+          i++; // Skip next slot, da es schon Teil der Doppellektion ist
+        }
+      }
+    });
+
+    console.log('Detected double lesson pairs in template:', doubleLessonPairs);
+
+    // Für jede Woche: Mappe YearlyLessons auf Doppellektionen
+    for (let week = 1; week <= academicWeeks; week++) {
+      doubleLessonPairs.forEach(pair => {
+        // Hole alle Template-Slots für dieses Fach (sortiert)
+        const allSubjectSlots = [];
+        days.forEach(d => {
+          (template[d] || []).forEach(slot => {
+            if (slot.subject === pair.subject && slot.class_id === pair.class_id) {
+              allSubjectSlots.push({ day: d, period: slot.period });
+            }
+          });
+        });
+        allSubjectSlots.sort((a, b) => {
+          const dayOrder = { monday: 1, tuesday: 2, wednesday: 3, thursday: 4, friday: 5 };
+          return dayOrder[a.day] - dayOrder[b.day] || a.period - b.period;
+        });
+
+        // Finde den Index der ersten Periode des Doppellektion-Paares
+        const pairIndex = allSubjectSlots.findIndex(s =>
+          s.day === pair.day && s.period === pair.periods[0]
+        );
+
+        if (pairIndex === -1) return;
+
+        // Hole die YearlyLessons für dieses Fach in dieser Woche
+        const subjectLessons = lessons
+          .filter(yl => {
+            const ylSubjectName = yl.expand?.subject?.name || yl.subject_name ||
+                                 subjects.find(s => s.id === yl.subject)?.name;
+            return yl.week_number === week &&
+                   ylSubjectName === pair.subject &&
+                   yl.class_id === pair.class_id;
+          })
+          .sort((a, b) => Number(a.lesson_number) - Number(b.lesson_number));
+
+        // Die YearlyLessons an Position pairIndex und pairIndex+1 sind die Doppellektion
+        // WICHTIG: Nur spannen, wenn die YearlyLesson auch als Doppellektion markiert ist!
+        if (pairIndex < subjectLessons.length - 1) {
+          const firstYL = subjectLessons[pairIndex];
+          const secondYL = subjectLessons[pairIndex + 1];
+
+          // Check if this is actually marked as a double lesson
+          if (firstYL.is_double_lesson && firstYL.second_yearly_lesson_id === secondYL.id) {
+            // Markiere als Spanning
+            spans.set(firstYL.id, { spanCount: 2, isSecondPart: false, secondLessonId: secondYL.id });
+            spans.set(secondYL.id, { spanCount: 0, isSecondPart: true, firstLessonId: firstYL.id });
+          }
+        }
+      });
+    }
+
+    return spans;
+  }, [lessons, academicWeeks, settings, subjects]);
+
   const BASE_CELL_WIDTHS = { compact: 72, standard: 82, spacious: 92 };
   const minCellWidth = BASE_CELL_WIDTHS[densityMode] || 82;
   const maxCellWidth = 160;
 
   const effectiveAvailableWidth = availableWidth || 800;
 
-  const totalSlots = uniqueSubjects.reduce((sum, subject) => sum + (lessonsPerWeekBySubject[subject] || 4), 0) || 1;
+  const totalSlots = uniqueSubjects.reduce((sum, subjectObj) => sum + (subjectObj.lessons_per_week || subjectObj.weekly_lessons || 4), 0) || 1;
   const cellWidth = Math.min(maxCellWidth, Math.max(minCellWidth, effectiveAvailableWidth / totalSlots));
 
-  const subjectBlockWidths = useMemo(() => uniqueSubjects.map(s => (lessonsPerWeekBySubject[s] || 4) * cellWidth), [uniqueSubjects, lessonsPerWeekBySubject, cellWidth]);
+  const subjectBlockWidths = useMemo(() => uniqueSubjects.map(subjectObj => (subjectObj.lessons_per_week || subjectObj.weekly_lessons || 4) * cellWidth), [uniqueSubjects, cellWidth]);
   const totalWidth = weekColumnWidth + subjectBlockWidths.reduce((a, b) => a + b, 0);
   const rowHeight = densityMode === 'compact' ? 48 : densityMode === 'spacious' ? 80 : 68;
 
@@ -735,9 +882,9 @@ const YearlyGrid = ({
     const holiday = getHolidayForWeek(week);
     const holidayDisplay = getHolidayDisplay(holiday);
 
-    const subjectCells = uniqueSubjects.map((subject) => {
-      const lessonSlotsCount = lessonsPerWeekBySubject[subject] || 4;
-      const subjectColor = subjectsByName[subject]?.color || '#3b82f6';
+    const subjectCells = uniqueSubjects.map((subjectObj) => {
+      const lessonSlotsCount = subjectObj.lessons_per_week || subjectObj.weekly_lessons || 4;
+      const subjectColor = subjectObj.color || '#3b82f6';
       const renderedSlots = new Set();
       const cells = [];
 
@@ -745,13 +892,15 @@ const YearlyGrid = ({
         const lessonNumber = i + 1;
         if (renderedSlots.has(lessonNumber)) continue;
 
-        // Immer mit subject **Name** → konsistent mit selectedLessons
-        const key = `${weekNum}-${subject}-${lessonNumber}`;
+        // Use subject ID for lookup key - matches lessonsByWeek key structure
+        const key = `${weekNum}-${subjectObj.id}-${lessonNumber}`;
         const lesson = lessonsByWeek[key] || null;
 
         const slot = {
           week_number: weekNum,
-          subject: subject,           // ← Name!
+          subject: subjectObj.name,           // Store name for display
+          subject_id: subjectObj.id,          // Store ID for lookups
+          class_id: subjectObj.class_id,      // Store class_id
           lesson_number: lessonNumber,
           school_year: currentYear
         };
@@ -761,6 +910,32 @@ const YearlyGrid = ({
 
         // ================ LEERE SLOTS ================
         if (!lesson) {
+          // Check if this empty slot should be spanned (template double lesson)
+          const templateDoubleInfo = isSlotPartOfTemplateDouble(weekNum, subjectObj.name, lessonNumber, subjectObj.class_id);
+
+          // Skip if this is the second part of a template double lesson
+          if (templateDoubleInfo.isSecond) {
+            renderedSlots.add(lessonNumber);
+            continue;
+          }
+
+          // Determine width (1 or 2 cells for template double)
+          const spanCount = templateDoubleInfo.isFirst ? 2 : 1;
+          const emptyWidth = spanCount * cellWidth;
+
+          // Mark next slot as rendered if spanning
+          if (spanCount > 1) {
+            renderedSlots.add(lessonNumber + 1);
+            i += 1;
+          }
+
+          // Enhanced slot with double lesson info for modal
+          const enhancedSlot = {
+            ...slot,
+            is_double_lesson: templateDoubleInfo.isFirst,
+            _isTemplateDouble: templateDoubleInfo.isFirst
+          };
+
           cells.push(
             <div
               key={key}
@@ -768,26 +943,26 @@ const YearlyGrid = ({
                 relative border border-gray-200 dark:border-slate-700 p-0.5
                 ${isAssignMode ? 'cursor-pointer hover:bg-green-50 dark:hover:bg-green-900/30' : 'cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-900/30'}
                 ${isSelected ? 'ring-4 ring-green-500 ring-inset bg-green-50 dark:bg-green-900/30' : ''}
-                ${dragOverSlot?.week_number === weekNum && 
-                  dragOverSlot?.subject === subject && 
+                ${dragOverSlot?.week_number === weekNum &&
+                  dragOverSlot?.subject === subjectObj.name &&
                   dragOverSlot?.lesson_number === lessonNumber
-                    ? 'ring-4 ring-emerald-400 ring-inset bg-emerald-100 dark:bg-emerald-900/40 scale-105 z-10' 
+                    ? 'ring-4 ring-emerald-400 ring-inset bg-emerald-100 dark:bg-emerald-900/40 scale-105 z-10'
                     : ''
                 }
               `}
-              style={{ width: `${cellWidth}px`, height: `${rowHeight}px` }}
-              onClick={() => isAssignMode ? onSelectLesson(slot) : onLessonClick(null, slot)}
+              style={{ width: `${emptyWidth}px`, height: `${rowHeight}px` }}
+              onClick={() => isAssignMode ? onSelectLesson(enhancedSlot) : onLessonClick(null, enhancedSlot)}
               onDragOver={(e) => {
                 e.preventDefault();
-                handleDragOver(e, slot);
+                handleDragOver(e, enhancedSlot);
               }}
               onDragLeave={handleDragLeave}
               onDrop={(e) => {
                 e.preventDefault();
-                e.stopPropagation(); // wichtig!
+                e.stopPropagation();
                 const lessonId = e.dataTransfer.getData('lessonId');
                 const isCopy = e.dataTransfer.getData('isCopy') === 'true';
-                handleDrop(lessonId, slot, isCopy);
+                handleDrop(lessonId, enhancedSlot, isCopy);
               }}
             >
               {isAssignMode && (
@@ -802,8 +977,7 @@ const YearlyGrid = ({
                 activeTopicId={activeTopicId}
                 defaultColor={subjectColor}
                 densityMode={densityMode}
-                // === NEU ===
-                lessonSlot={slot}
+                lessonSlot={enhancedSlot}
                 lessonData={lesson}
                 onContextMenu={handleContextMenu}
               />
@@ -822,7 +996,7 @@ const YearlyGrid = ({
 
             let j = lessonNumber + 1;                // mit dem NÄCHSTEN Slot weitermachen
             while (j <= lessonSlotsCount) {
-              const checkKey = `${weekNum}-${subject}-${j}`;
+              const checkKey = `${weekNum}-${subjectObj.id}-${j}`;
               const check = lessonsByWeek[checkKey];
               if (check && check.topic_id === lesson.topic_id) {
                 topicLessons.push(check);
@@ -883,15 +1057,48 @@ const YearlyGrid = ({
         }
 
         // ================ DOUBLE-LEKTIONEN ================
-        if (lesson.is_double_lesson && lesson.second_yearly_lesson_id) {
-          const nextKey = `${week}-${subject}-${lessonNumber + 1}`;
-          const nextLesson = lessonsByWeek[nextKey];
+        // Check: template-based, unified (fixed mode), OR manual double lesson
+        const lessonSpanInfo = spanningInfo.get(lesson.id);
+        const hasSecondLessonId = lesson.is_double_lesson && lesson.second_yearly_lesson_id;
+        const isUnifiedDouble = lesson.is_double_lesson && !lesson.second_yearly_lesson_id;
+        const isTemplateDouble = lessonSpanInfo && !lessonSpanInfo.isSecondPart;
+
+        if (hasSecondLessonId || isUnifiedDouble || isTemplateDouble) {
           let span = 1;
-          if (nextLesson && nextLesson.id === lesson.second_yearly_lesson_id) {
+          let secondLessonId = null;
+
+          if (isTemplateDouble) {
+            // Template-based double lesson
+            span = lessonSpanInfo.spanCount || 1;
+            secondLessonId = lessonSpanInfo.secondLessonId;
+
+            // Mark second lesson as rendered
+            if (span === 2 && secondLessonId) {
+              const secondLesson = yearlyLessonsById.get(secondLessonId);
+              if (secondLesson) {
+                renderedSlots.add(Number(secondLesson.lesson_number));
+                i += 1; // Skip next iteration
+              }
+            }
+          } else if (isUnifiedDouble) {
+            // NEW: Unified double (fixed mode) - no second lesson ID
             span = 2;
+            secondLessonId = null;
+            // Mark next slot as rendered to prevent L3 from showing
             renderedSlots.add(lessonNumber + 1);
             i += 1;
+          } else {
+            // Traditional manual double lesson (flexible mode)
+            const nextKey = `${week}-${subjectObj.id}-${lessonNumber + 1}`;
+            const nextLesson = lessonsByWeek[nextKey];
+            if (nextLesson && nextLesson.id === lesson.second_yearly_lesson_id) {
+              span = 2;
+              secondLessonId = nextLesson.id;
+              renderedSlots.add(lessonNumber + 1);
+              i += 1;
+            }
           }
+
           const doubleWidth = span * cellWidth;
 
           cells.push(
@@ -901,10 +1108,10 @@ const YearlyGrid = ({
                 relative border border-gray-200 dark:border-slate-700 p-0.5
                 ${isAssignMode && !hasTopic ? 'cursor-pointer hover:bg-green-50 dark:hover:bg-green-900/30' : ''}
                 ${isSelected ? 'ring-4 ring-green-500 ring-inset bg-green-50 dark:bg-green-900/30' : ''}
-                ${dragOverSlot?.week_number === weekNum && 
-                  dragOverSlot?.subject === subject && 
+                ${dragOverSlot?.week_number === weekNum &&
+                  dragOverSlot?.subject === subjectObj.name &&
                   dragOverSlot?.lesson_number === lessonNumber
-                    ? 'ring-4 ring-emerald-400 ring-inset bg-emerald-100 dark:bg-emerald-900/40 scale-105 z-10' 
+                    ? 'ring-4 ring-emerald-400 ring-inset bg-emerald-100 dark:bg-emerald-900/40 scale-105 z-10'
                     : ''
                 }
               `}
@@ -927,7 +1134,13 @@ const YearlyGrid = ({
                 <Checkbox checked={isSelected} className="absolute top-2 left-2 z-50 pointer-events-none" />
               )}
               <YearLessonCell
-                lesson={{ ...lesson, color: subjectColor, subjectName: subject, is_double_lesson: true }}
+                lesson={{
+                  ...lesson,
+                  color: subjectColor,
+                  subjectName: subjectObj.name,
+                  is_double_lesson: true,
+                  second_yearly_lesson_id: secondLessonId
+                }}
                 onClick={isAssignMode && !hasTopic ? undefined : () => handleCellClick(lesson, slot)}
                 activeTopicId={activeTopicId}
                 defaultColor={subjectColor}
@@ -944,6 +1157,25 @@ const YearlyGrid = ({
         }
 
         // ================ NORMALE EINZELNE LEKTIONEN ================
+        // NEU: Prüfe auf Auto-Spanning (Fixed Schedule)
+        const spanInfo = spanningInfo.get(lesson.id);
+
+        // Überspringe, wenn dies der zweite Teil eines Spans ist
+        if (spanInfo?.isSecondPart) {
+          renderedSlots.add(lessonNumber);
+          continue;
+        }
+
+        // Bestimme die Breite (1 oder 2 Zellen)
+        const cellSpan = spanInfo?.spanCount || 1;
+        const spanWidth = cellSpan * cellWidth;
+
+        // Wenn Spanning, markiere nächsten Slot als gerendert
+        if (cellSpan > 1) {
+          renderedSlots.add(lessonNumber + 1);
+          i += 1;
+        }
+
         cells.push(
           <div
             key={key}
@@ -951,14 +1183,14 @@ const YearlyGrid = ({
               relative border border-gray-200 dark:border-slate-700 p-0.5
               ${isAssignMode && !hasTopic ? 'cursor-pointer hover:bg-green-50 dark:hover:bg-green-900/30' : ''}
               ${isSelected ? 'ring-4 ring-green-500 ring-inset bg-green-50 dark:bg-green-900/30' : ''}
-              ${dragOverSlot?.week_number === weekNum && 
-                dragOverSlot?.subject === subject && 
+              ${dragOverSlot?.week_number === weekNum &&
+                dragOverSlot?.subject === subjectObj.name &&
                 dragOverSlot?.lesson_number === lessonNumber
-                  ? 'ring-4 ring-emerald-400 ring-inset bg-emerald-100 dark:bg-emerald-900/40 scale-105 z-10' 
+                  ? 'ring-4 ring-emerald-400 ring-inset bg-emerald-100 dark:bg-emerald-900/40 scale-105 z-10'
                   : ''
               }
             `}
-            style={{ width: `${cellWidth}px`, height: `${rowHeight}px` }}
+            style={{ width: `${spanWidth}px`, height: `${rowHeight}px` }}
             onClick={() => isAssignMode && !hasTopic && onSelectLesson(slot)}
             onDragOver={(e) => {
               e.preventDefault();
@@ -980,7 +1212,7 @@ const YearlyGrid = ({
               />
             )}
             <YearLessonCell
-              lesson={{ ...lesson, color: subjectColor, subjectName: subject }}
+              lesson={{ ...lesson, color: subjectColor, subjectName: subjectObj.name }}
               onClick={isAssignMode && !hasTopic ? undefined : () => handleCellClick(lesson, slot)}
               activeTopicId={activeTopicId}
               defaultColor={subjectColor}
@@ -1001,7 +1233,7 @@ const YearlyGrid = ({
         );
       }
 
-      return <div key={subject} className="flex">{cells}</div>;
+      return <div key={subjectObj.id} className="flex">{cells}</div>;
     });
 
     // Rest der renderWeekRow bleibt unverändert (Wochen-Header, Holiday-Overlay usw.)

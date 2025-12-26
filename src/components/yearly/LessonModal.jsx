@@ -14,22 +14,71 @@ import LessonTemplatePopover from '@/components/lesson-planning/LessonTemplatePo
 import StepRow from '@/components/lesson-planning/StepRow';
 import { generateId } from '@/components/lesson-planning/utils';
 
-export default function LessonModal({ 
-  isOpen, 
-  onClose, 
-  onSave, 
-  onDelete, 
-  lesson, 
-  topics = [], 
-  newLessonSlot, 
-  subjectColor, 
-  allYearlyLessons = [], 
-  currentWeek = null, 
+export default function LessonModal({
+  isOpen,
+  onClose,
+  onSave,
+  onDelete,
+  lesson,
+  topics = [],
+  newLessonSlot,
+  subjectColor,
+  allYearlyLessons = [],
+  currentWeek = null,
   currentYear = new Date().getFullYear(),
   autoAssignTopicId,
   onSaveAndNext, // new prop
-  subjects = [] // new prop
+  subjects = [], // new prop
+  settings = null // new prop for fixed schedule template
 }) {
+  // Check if this lesson slot is part of a template double lesson
+  const isTemplateDoubleLesson = useMemo(() => {
+    // Only apply to NEW lessons (empty slots), not existing lessons
+    if (!newLessonSlot || lesson) return false;
+    if (!settings || settings.scheduleType !== 'fixed') return false;
+
+    const template = settings.fixedScheduleTemplate || {};
+    if (!template || Object.keys(template).length === 0) return false;
+
+    // Get subject name and lesson number
+    const subjectName = newLessonSlot?.subject;
+    const lessonNumber = newLessonSlot?.lesson_number;
+    const classId = newLessonSlot?.class_id;
+
+    if (!subjectName || !lessonNumber || !classId) return false;
+
+    // Get all template slots for this subject, sorted
+    const days = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'];
+    const allSubjectSlots = [];
+
+    days.forEach(day => {
+      (template[day] || []).forEach(slot => {
+        if (slot.subject === subjectName && slot.class_id === classId) {
+          allSubjectSlots.push({ day, period: slot.period });
+        }
+      });
+    });
+
+    allSubjectSlots.sort((a, b) => {
+      const dayOrder = { monday: 1, tuesday: 2, wednesday: 3, thursday: 4, friday: 5 };
+      return dayOrder[a.day] - dayOrder[b.day] || a.period - b.period;
+    });
+
+    // Map lesson_number to slot index (lesson_number is 1-based)
+    const slotIndex = lessonNumber - 1;
+    if (slotIndex < 0 || slotIndex >= allSubjectSlots.length) return false;
+
+    const currentSlot = allSubjectSlots[slotIndex];
+    const nextSlot = allSubjectSlots[slotIndex + 1];
+
+    // Check if current and next slot are consecutive on the same day
+    if (nextSlot && currentSlot.day === nextSlot.day && currentSlot.period + 1 === nextSlot.period) {
+      return true;
+    }
+
+    return false;
+  }, [settings, newLessonSlot, lesson]);
+
   const [formData, setFormData] = useState({
     name: '',
     second_name: '',
@@ -100,7 +149,7 @@ export default function LessonModal({
         name: currentLesson?.name || `Lektion ${currentLesson?.lesson_number || 1}`,
         second_name: secondLesson?.name || (hasSecondLesson ? `Lektion ${Number(currentLesson?.lesson_number || 1) + 1}` : ''),
         topic_id: initialTopicId,
-        is_double_lesson: currentLesson?.is_double_lesson || false,
+        is_double_lesson: currentLesson?.is_double_lesson || isTemplateDoubleLesson || false,
         is_exam: currentLesson?.is_exam || false,
         is_half_class: currentLesson?.is_half_class || false,
         notes: currentLesson?.notes || '',
@@ -109,12 +158,25 @@ export default function LessonModal({
         allerlei_subjects: currentLesson?.allerlei_subjects || []
       });
 
-      setAddSecondLesson(hasSecondLesson);
+      // In fixed mode: Template doubles should use unified mode (one lesson with is_double_lesson: true)
+      // In flexible mode: Use traditional two-lesson approach
+      if (isTemplateDoubleLesson) {
+        setIsUnifiedDouble(true); // Auto-enable unified mode for template doubles
+        setAddSecondLesson(false); // Don't create second lesson
+      } else if (hasSecondLesson) {
+        // Existing manual double lesson (flexible mode)
+        setIsUnifiedDouble(false);
+        setAddSecondLesson(true);
+      } else {
+        setIsUnifiedDouble(false);
+        setAddSecondLesson(false);
+      }
+
       setSecondYearlyLessonId(currentLesson?.second_yearly_lesson_id || '');
 
       setPrimarySteps(currentLesson?.steps?.map(step => ({ ...step, id: step.id || generateId() })) || []);
 
-      if (currentLesson?.is_double_lesson && hasSecondLesson && secondLesson) {
+      if ((currentLesson?.is_double_lesson || isTemplateDoubleLesson) && hasSecondLesson && secondLesson) {
         setSecondSteps(secondLesson.steps?.map(step => ({ ...step, id: `second-${step.id || generateId()}` })) || []);
       } else {
         setSecondSteps([]);
@@ -148,7 +210,7 @@ export default function LessonModal({
         name: currentLesson?.name || `Lektion ${currentLesson?.lesson_number || 1}`,
         second_name: secondLesson?.name || (hasSecondLesson ? `Lektion ${Number(currentLesson?.lesson_number || 1) + 1}` : ''),
         topic_id: initialTopicId,
-        is_double_lesson: currentLesson?.is_double_lesson || false,
+        is_double_lesson: currentLesson?.is_double_lesson || isTemplateDoubleLesson || false,
         is_exam: currentLesson?.is_exam || false,
         is_half_class: currentLesson?.is_half_class || false,
         notes: currentLesson?.notes || '',
@@ -157,12 +219,25 @@ export default function LessonModal({
         allerlei_subjects: currentLesson?.allerlei_subjects || []
       });
 
-      setAddSecondLesson(hasSecondLesson);
+      // In fixed mode: Template doubles should use unified mode (one lesson with is_double_lesson: true)
+      // In flexible mode: Use traditional two-lesson approach
+      if (isTemplateDoubleLesson) {
+        setIsUnifiedDouble(true); // Auto-enable unified mode for template doubles
+        setAddSecondLesson(false); // Don't create second lesson
+      } else if (hasSecondLesson) {
+        // Existing manual double lesson (flexible mode)
+        setIsUnifiedDouble(false);
+        setAddSecondLesson(true);
+      } else {
+        setIsUnifiedDouble(false);
+        setAddSecondLesson(false);
+      }
+
       setSecondYearlyLessonId(currentLesson?.second_yearly_lesson_id || '');
 
       setPrimarySteps(currentLesson?.steps?.map(step => ({ ...step, id: step.id || generateId() })) || []);
 
-      if (currentLesson?.is_double_lesson && hasSecondLesson && secondLesson) {
+      if ((currentLesson?.is_double_lesson || isTemplateDoubleLesson) && hasSecondLesson && secondLesson) {
         setSecondSteps(secondLesson.steps?.map(step => ({ ...step, id: `second-${step.id || generateId()}` })) || []);
       } else {
         setSecondSteps([]);
@@ -204,8 +279,9 @@ export default function LessonModal({
   };
 
   // Effect for toggling addSecondLesson and handling second lesson content
+  // This is only for flexible mode (traditional two-lesson approach)
   useEffect(() => {
-    if (!addSecondLesson) {
+    if (!addSecondLesson || isUnifiedDouble) {
       setSecondSteps([]);
       setSecondYearlyLessonId('');
       setFormData(prev => ({ ...prev, second_name: '', second_yearly_lesson_id: null }));
@@ -536,19 +612,19 @@ export default function LessonModal({
             </div>
           )}
           
-          {formData.is_double_lesson && (
+          {formData.is_double_lesson && settings?.scheduleType === 'flexible' && (
             <div className="p-3 rounded-lg bg-slate-100/50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 space-y-3">
               <div className="flex items-center gap-2">
-                <Switch 
-                  id="add-second-content" 
-                  checked={addSecondLesson} 
+                <Switch
+                  id="add-second-content"
+                  checked={addSecondLesson}
                   onCheckedChange={setAddSecondLesson}
                 />
                 <Label htmlFor="add-second-content" className="text-sm font-semibold text-slate-900 dark:text-white cursor-pointer">
                   Inhalte aus zweiter Lektion bearbeiten
                 </Label>
               </div>
-              
+
               {addSecondLesson && secondYearlyLessonId && (
                 <div className="text-xs text-slate-600 dark:text-slate-400 pl-8">
                   Verknüpft mit: <span className="font-medium">
@@ -560,7 +636,7 @@ export default function LessonModal({
             </div>
           )}
 
-          {formData.is_double_lesson && (
+          {formData.is_double_lesson && settings?.scheduleType === 'flexible' && (
             <div className="p-3 rounded-lg bg-slate-100/50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 space-y-3 mt-4">
               <div className="flex items-center gap-2">
                 <Switch 

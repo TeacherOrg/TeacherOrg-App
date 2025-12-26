@@ -72,6 +72,7 @@ function InnerTimetablePage() {
   // Neu: State für Pool-Refresh
   const [poolRefreshKey, setPoolRefreshKey] = useState(0);
 
+
   // Initialize currentYear and currentWeek
   const [currentWeek, setCurrentWeek] = useState(getCurrentWeek());
   const [currentYear, setCurrentYear] = useState(new Date().getFullYear());
@@ -852,13 +853,17 @@ function InnerTimetablePage() {
                 isSelectingMerge={isSelectingMerge}
               />
             </motion.div>
-            <TimetablePool
-              classes={classes}
-              activeClassId={activeClassId}
-              setActiveClassId={setActiveClassId}
-              availableYearlyLessonsForPool={availableYearlyLessonsForPool}
-              subjects={subjects}
-            />
+
+            {/* Only show pool in flexible mode */}
+            {settings?.scheduleType === 'flexible' && (
+              <TimetablePool
+                classes={classes}
+                activeClassId={activeClassId}
+                setActiveClassId={setActiveClassId}
+                availableYearlyLessonsForPool={availableYearlyLessonsForPool}
+                subjects={subjects}
+              />
+            )}
           </div>
           <DragOverlay>
             {activeDragId && renderDragOverlay(activeDragId)}
@@ -907,7 +912,7 @@ function InnerTimetablePage() {
         setEditingLesson={setEditingLesson}
         setIsModalOpen={setIsModalOpen}
         currentYear={currentYear}
-        formData={formData} // DIESE ZEILE HINZUFÜGEN
+        formData={formData}
       />
     </div>
   );

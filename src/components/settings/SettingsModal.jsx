@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { Setting, Class, Subject, Holiday } from '@/api/entities';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { Setting, Class, Subject, Holiday, YearlyLesson, Lesson } from '@/api/entities';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -9,6 +9,10 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { X, User as UserIcon, Sun, Moon, Monitor, Home, RotateCcw, Mail, Lock, LogOut } from 'lucide-react';
 import pb from '@/api/pb';
 import CalendarLoader from '../ui/CalendarLoader';
+import { generateLessonsFromFixedTemplate } from '@/utils/fixedScheduleGenerator';
+import { syncYearlyLessonToWeekly } from '@/hooks/useYearlyLessonSync';
+import { isEqual } from 'lodash';
+import toast from 'react-hot-toast';
 
 import ClassesSettings from './ClassesSettings';
 import SubjectSettings from './SubjectSettings';
@@ -276,7 +280,7 @@ const SettingsModal = ({ isOpen, onClose }) => {
   const [user, setUser] = useState(null);
   const [pendingEmail, setPendingEmail] = useState('');
   const [pendingUserSettings, setPendingUserSettings] = useState({ preferred_theme: 'dark', default_start_page: 'Timetable' });
-  const [initialSettings, setInitialSettings] = useState(null);
+  const initialSettingsRef = useRef(null);
 
   const loadAllData = useCallback(async () => {
     setIsLoading(true);
@@ -300,7 +304,7 @@ const SettingsModal = ({ isOpen, onClose }) => {
         if (settingsData.length > 0) {
         const latestSettings = settingsData.sort((a, b) => new Date(b.updated) - new Date(a.updated))[0];
         setSettings(latestSettings);
-        setInitialSettings(latestSettings);
+        initialSettingsRef.current = latestSettings;
         } else {
         const defaultSettings = {
             user_id: userId,
@@ -322,13 +326,13 @@ const SettingsModal = ({ isOpen, onClose }) => {
         try {
             const newSettings = await Setting.create(defaultSettings);
             setSettings(newSettings);
-            setInitialSettings(newSettings);
+            initialSettingsRef.current = newSettings;
         } catch (error) {
             if (error.status === 409) {
             const existingSettings = await Setting.findOne({ user_id: userId });
             if (existingSettings) {
                 setSettings(existingSettings);
-                setInitialSettings(existingSettings);
+                initialSettingsRef.current = existingSettings;
             } else {
                 throw new Error('Failed to fetch existing settings after 409 error');
             }
@@ -368,17 +372,121 @@ const SettingsModal = ({ isOpen, onClose }) => {
   useEffect(() => {
     if (isOpen) {
       loadAllData();
+    } else {
+      // Reset states when modal closes
+      setSettings(null);
+      initialSettingsRef.current = null;
     }
   }, [isOpen, loadAllData]);
 
   const handleSave = async () => {
     try {
+      // Check if switching to fixed mode or template changed
+      const wasFixed = initialSettingsRef.current?.scheduleType === 'fixed';
+      const isNowFixed = settings?.scheduleType === 'fixed';
+      const templateChanged = !isEqual(
+        initialSettingsRef.current?.fixedScheduleTemplate,
+        settings?.fixedScheduleTemplate
+      );
+
+      // Save settings first
+      let updatedSettings = settings;
       if (settings && settings.id) {
-        // Erweitere mit autoFit (falls in SizeSettings geändert)
-        await Setting.update(settings.id, {
+        const dataToSave = {
           ...settings,
-          autoFit: settings.autoFit ?? true, // Speichere autoFit persistent
-        });
+          autoFit: settings.autoFit ?? true,
+        };
+
+        console.log('=== BEFORE SAVE ===');
+        console.log('Full settings object:', JSON.stringify(settings, null, 2));
+        console.log('Data being sent to Setting.update():', JSON.stringify(dataToSave, null, 2));
+        console.log('scheduleType in settings:', settings.scheduleType);
+        console.log('scheduleType in dataToSave:', dataToSave.scheduleType);
+
+        updatedSettings = await Setting.update(settings.id, dataToSave);
+
+        console.log('=== AFTER SAVE ===');
+        console.log('Full response from DB:', JSON.stringify(updatedSettings, null, 2));
+        console.log('scheduleType in updatedSettings:', updatedSettings.scheduleType);
+
+        // Update local state with saved settings
+        setSettings(updatedSettings);
+        initialSettingsRef.current = updatedSettings;
+      }
+
+      // Trigger bulk lesson generation if needed
+      if (isNowFixed && (!wasFixed || templateChanged)) {
+        // Check if template has content
+        const template = updatedSettings.fixedScheduleTemplate || {};
+        const hasTemplateContent = Object.keys(template).some(day =>
+          Array.isArray(template[day]) && template[day].length > 0
+        );
+
+        if (!hasTemplateContent) {
+          console.log('Template ist leer - überspringe Generierung');
+          // Don't show error, just skip generation - user can add lessons later
+          setErrorMessage('');
+          setIsLoading(false);
+        } else {
+          setIsLoading(true);
+          setErrorMessage('Generiere Stunden aus Vorlage...');
+
+          try {
+            const userId = pb.authStore.model?.id;
+            if (!userId) {
+              throw new Error('Nicht authentifiziert');
+            }
+
+            // Fetch all necessary data
+            const [allYearlyLessons, allLessons] = await Promise.all([
+              YearlyLesson.list({ user_id: userId }),
+              Lesson.list({ user_id: userId })
+            ]);
+
+            await generateLessonsFromFixedTemplate({
+              template: updatedSettings.fixedScheduleTemplate,
+              yearlyLessons: allYearlyLessons,
+              existingLessons: allLessons,
+              currentYear: new Date().getFullYear(),
+              activeClassId: classes[0]?.id,
+              userId: userId,
+              settings: updatedSettings,
+              subjects: subjects
+            });
+
+            // Synchronize all existing YearlyLessons to create missing weekly Lessons
+            toast.loading('Synchronisiere bestehende Jahresplanung...', { id: 'sync-yearly' });
+
+            try {
+              let syncCount = 0;
+              for (const yearlyLesson of allYearlyLessons) {
+                try {
+                  await syncYearlyLessonToWeekly(yearlyLesson, updatedSettings, subjects, allYearlyLessons);
+                  syncCount++;
+
+                  if (syncCount % 20 === 0) {
+                    toast.loading(`Synchronisiert: ${syncCount}/${allYearlyLessons.length}...`, { id: 'sync-yearly' });
+                  }
+                } catch (syncError) {
+                  console.warn('Error syncing yearly lesson:', yearlyLesson.id, syncError);
+                }
+              }
+
+              toast.success(`${syncCount} Jahres-Lektionen synchronisiert!`, { id: 'sync-yearly', duration: 3000 });
+            } catch (syncError) {
+              console.error('Error during sync:', syncError);
+              toast.error('Fehler bei der Synchronisierung', { id: 'sync-yearly' });
+            }
+
+            setErrorMessage('');
+            setIsLoading(false);
+          } catch (genError) {
+            console.error('Error generating lessons:', genError);
+            setErrorMessage(`Fehler beim Generieren: ${genError.message}`);
+            setIsLoading(false);
+            return; // Don't close modal
+          }
+        }
       }
 
       if (activeCategory === 'Profil') {
@@ -389,7 +497,15 @@ const SettingsModal = ({ isOpen, onClose }) => {
       }
 
       console.log("Settings saved!");
-      window.dispatchEvent(new CustomEvent('settings-changed'));
+
+      // Dispatch event with the updated settings
+      window.dispatchEvent(new CustomEvent('settings-changed', {
+        detail: { settings: updatedSettings || settings }
+      }));
+
+      // Small delay to ensure DB write completes before refetch
+      await new Promise(resolve => setTimeout(resolve, 100));
+
       onClose();
     } catch (error) {
       console.error("Failed to save settings:", error);
@@ -419,7 +535,7 @@ const SettingsModal = ({ isOpen, onClose }) => {
   };
 
   const hasPendingChanges = () => {
-    return pendingEmail !== user?.email || JSON.stringify(pendingUserSettings) !== JSON.stringify({ preferred_theme: user?.preferred_theme, default_start_page: user?.default_start_page }) || JSON.stringify(settings) !== JSON.stringify(initialSettings);
+    return pendingEmail !== user?.email || JSON.stringify(pendingUserSettings) !== JSON.stringify({ preferred_theme: user?.preferred_theme, default_start_page: user?.default_start_page }) || JSON.stringify(settings) !== JSON.stringify(initialSettingsRef.current);
   };
 
   return (

@@ -1,11 +1,21 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
-import FixedScheduleTemplateEditor from './FixedScheduleTemplateEditor';
+import { Button } from '@/components/ui/button';
+import { Edit3 } from 'lucide-react';
+import TemplateEditorModal from './TemplateEditorModal';
 
 export default function ScheduleSettings({ settings, setSettings, classes, subjects }) {
+    const [isTemplateEditorOpen, setIsTemplateEditorOpen] = useState(false);
+
     if (!settings) return <div className="text-slate-900 dark:text-white">Laden...</div>;
+
+    // Ensure scheduleType has a default value
+    const currentScheduleType = settings.scheduleType || 'flexible';
+
+    // Debug: Log current scheduleType
+    console.log('ScheduleSettings - Current scheduleType:', currentScheduleType);
 
     const handleSettingChange = (key, value) => {
         setSettings(prev => ({ ...prev, [key]: value }));
@@ -26,14 +36,19 @@ export default function ScheduleSettings({ settings, setSettings, classes, subje
                 <Label htmlFor="schedule-type" className="flex-1">
                     <span className="font-semibold">Stundenplan-Modus</span>
                     <p className="text-sm text-slate-600 dark:text-slate-400">
-                        Aktuell: <span className="font-bold text-blue-400">{settings.scheduleType === 'flexible' ? 'Flexibler Plan' : 'Fixer Plan'}</span>
+                        Wählen Sie zwischen flexiblem und fixem Stundenplan
                     </p>
                 </Label>
-                <Switch
-                    id="schedule-type"
-                    checked={settings.scheduleType === 'fixed'}
-                    onCheckedChange={(isChecked) => handleSettingChange('scheduleType', isChecked ? 'fixed' : 'flexible')}
-                />
+                <div className="flex items-center gap-3">
+                    <span className="text-sm text-slate-600 dark:text-slate-400">
+                        {currentScheduleType === 'flexible' ? 'Flexibel' : 'Fix'}
+                    </span>
+                    <Switch
+                        id="schedule-type"
+                        checked={currentScheduleType === 'fixed'}
+                        onCheckedChange={(isChecked) => handleSettingChange('scheduleType', isChecked ? 'fixed' : 'flexible')}
+                    />
+                </div>
             </div>
 
             {/* === NEU: Schuljahr-Startwoche === */}
@@ -55,19 +70,36 @@ export default function ScheduleSettings({ settings, setSettings, classes, subje
                 />
             </div>
 
-            {settings.scheduleType === 'fixed' && (
-                <div className="space-y-4">
-                    <h4 className="text-md font-semibold">Vorlagen-Editor für fixen Stundenplan</h4>
-                    <p className="text-sm text-slate-600 dark:text-slate-400">Ziehen Sie Fächer in die Zeitfenster.</p>
-                    <FixedScheduleTemplateEditor
-                        initialTemplate={settings.fixedScheduleTemplate || {}}
-                        onSave={handleTemplateSave}
-                        classes={classes}
-                        subjects={subjects}
-                        lessonsPerDay={settings.lessonsPerDay || 8}
-                    />
+            {currentScheduleType === 'fixed' && (
+                <div className="space-y-4 rounded-lg border border-slate-300 dark:border-slate-600 p-4">
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <h4 className="text-md font-semibold">Stundenplan-Vorlage</h4>
+                            <p className="text-sm text-slate-600 dark:text-slate-400">
+                                Öffnen Sie den Editor, um Fächer in Zeitfenster zu ziehen
+                            </p>
+                        </div>
+                        <Button
+                            variant="outline"
+                            onClick={() => setIsTemplateEditorOpen(true)}
+                            className="flex items-center gap-2"
+                        >
+                            <Edit3 className="w-4 h-4" />
+                            Vorlage bearbeiten
+                        </Button>
+                    </div>
                 </div>
             )}
+
+            <TemplateEditorModal
+                isOpen={isTemplateEditorOpen}
+                onClose={() => setIsTemplateEditorOpen(false)}
+                initialTemplate={settings.fixedScheduleTemplate || {}}
+                onSave={handleTemplateSave}
+                classes={classes}
+                subjects={subjects}
+                lessonsPerDay={settings.lessonsPerDay || 8}
+            />
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-2">

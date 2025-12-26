@@ -59,11 +59,11 @@ const LessonCard = ({ lesson, isDragging, onMouseEnter, onMouseLeave, onMouseMov
           <div>
             <div>{subjectName}</div> {/* Display subject name first */}
             <div className="text-xs opacity-75">
-              {topic?.title || ( // Display topic if available, else fallback to lesson title
+              {topic?.title || lesson?.primaryYearlyLesson?.name || ( // Prioritize topic title, then lesson name
                 lesson?.is_double_lesson && lesson?.second_yearly_lesson_id && lesson?.secondYearlyLesson ? (
                   `${lesson?.primaryYearlyLesson?.name || `Lektion ${lesson?.primaryYearlyLesson?.lesson_number || ''}`} + ${lesson?.secondYearlyLesson?.name || `Lektion ${Number(lesson?.primaryYearlyLesson?.lesson_number || 1) + 1}`}`
                 ) : (
-                  lesson?.primaryYearlyLesson?.name || `Lektion ${lesson?.primaryYearlyLesson?.lesson_number || ''}` || 'Primäre (fehlt)'
+                  `Lektion ${lesson?.primaryYearlyLesson?.lesson_number || ''}` || 'Primäre (fehlt)'
                 )
               )}
             </div>

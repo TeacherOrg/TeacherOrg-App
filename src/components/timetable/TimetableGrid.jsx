@@ -187,15 +187,15 @@ const TimetableGrid = React.forwardRef(
             const holidayDisplay = holiday ? getHolidayDisplay(holiday) : null;
 
             // NEU: Prüfen, ob dieser Slot von einer höheren Lektion überdeckt wird
-            const isCoveredBySpan = lessons.some(l => 
-              l.day_of_week === day.key && 
-              l.period_slot < slot.period && 
+            const coveringLesson = lessons.find(l =>
+              l.day_of_week === day.key &&
+              l.period_slot < slot.period &&
               l.period_slot + (l.period_span || (l.is_double_lesson ? 2 : 1)) - 1 >= slot.period
             );
 
             // Wenn der Slot überdeckt ist → nichts rendern
-            if (isCoveredBySpan) {
-              return <div key={droppableId} />; // leere Zelle, nimmt Platz ein, aber kein Border
+            if (coveringLesson) {
+              return null; // Don't render covered slots at all - allows CSS Grid spanning to work
             }
 
             const lesson = getLessonForSlot(day.key, slot.period);
@@ -262,6 +262,16 @@ const TimetableGrid = React.forwardRef(
             minHeight: 'var(--cell-height, 80px)',
             ...(lesson ? (() => {
               const span = lesson?.period_span ?? (lesson?.is_double_lesson ? 2 : 1);
+              if (lesson?.is_double_lesson) {
+                console.log('TimetableGrid: Double lesson rendering', {
+                  lessonId: lesson.id,
+                  is_double_lesson: lesson.is_double_lesson,
+                  period_span: lesson.period_span,
+                  calculated_span: span,
+                  day: day.key,
+                  period: slot.period
+                });
+              }
               return span > 1 ? {
                 gridRow: `${rowNum} / span ${span}`,
                 minHeight: `calc(var(--cell-height, 80px) * ${span} - 1px)`, // -1px wegen Border

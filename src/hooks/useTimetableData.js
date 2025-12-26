@@ -181,9 +181,15 @@ const useTimetableData = (currentYear, currentWeek) => {
 
       if (data.settingsData?.length > 0) {
         const latestSettings = data.settingsData.sort((a, b) => new Date(b.updated) - new Date(a.updated))[0];
+        console.log('=== REFETCH SETTINGS ===');
+        console.log('Full settingsData array:', JSON.stringify(data.settingsData, null, 2));
+        console.log('Latest settings (after sort):', JSON.stringify(latestSettings, null, 2));
+        console.log('scheduleType in latestSettings:', latestSettings.scheduleType);
         if (!isEqual(settings, latestSettings)) {
           setSettings(latestSettings);
-          console.log('Debug: Updated settings');
+          console.log('Debug: Updated settings in store');
+        } else {
+          console.log('Debug: Settings unchanged (isEqual returned true)');
         }
       } else {
         const defaultSettings = {
