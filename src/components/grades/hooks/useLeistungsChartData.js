@@ -123,10 +123,13 @@ export const useLeistungsChartData = ({
 
     const fachbereichToPerfs = {};
     const fachbereichToStudentPerfs = {};
+    const fachbereichToSubjects = {}; // Track which subjects contain each fachbereich
 
     filteredPerfs.forEach(perf => {
       if (Array.isArray(perf.fachbereiche) && perf.fachbereiche.length > 0) {
         const weightPerFachbereich = (perf.weight ?? 1) / perf.fachbereiche.length;
+        const subjectId = getSubjectId(perf.subject);
+        const subjectName = getSubjectName(perf.subject, subjectId);
 
         perf.fachbereiche.forEach(fb => {
           if (typeof fb !== 'string') return;
@@ -134,7 +137,14 @@ export const useLeistungsChartData = ({
           if (!fachbereichToPerfs[fb]) {
             fachbereichToPerfs[fb] = [];
             fachbereichToStudentPerfs[fb] = {};
+            fachbereichToSubjects[fb] = {};
           }
+
+          // Track subject occurrences for this fachbereich
+          if (!fachbereichToSubjects[fb][subjectId]) {
+            fachbereichToSubjects[fb][subjectId] = { id: subjectId, name: subjectName, count: 0 };
+          }
+          fachbereichToSubjects[fb][subjectId].count++;
 
           // Push ein "geteiltes" Performance-Objekt
           fachbereichToPerfs[fb].push({
@@ -156,7 +166,16 @@ export const useLeistungsChartData = ({
     });
 
     return Object.entries(fachbereichToPerfs).map(([fb, perfs]) => {
-      const entry = { name: fb };
+      // Find the most common subject for this fachbereich
+      const subjectEntries = Object.values(fachbereichToSubjects[fb] || {});
+      const primarySubject = subjectEntries.sort((a, b) => b.count - a.count)[0] || null;
+
+      const entry = {
+        name: fb,
+        subjectId: primarySubject?.id || null,
+        subjectName: primarySubject?.name || null,
+        subjects: subjectEntries.map(s => s.name).sort()
+      };
 
       if (showClassAverage && perfs.length > 0) {
         entry['Klassenschnitt'] = calculateWeightedGrade(perfs);
@@ -219,5 +238,278 @@ export const useLeistungsChartData = ({
     return Object.values(assessmentMap);
   }, [performances, students, selectedSubject, selectedStudents, showClassAverage, selectedFachbereich]);
 
-  return { lineData, subjectData, fachbereichData, fachbereichDetailData, getStudentColor };
+  // NEW: Heatmap data - Fachbereiche grouped by subject (not merged)
+  const fachbereichHeatmapData = useMemo(() => {
+    if (!Array.isArray(performances) || !Array.isArray(students) || !Array.isArray(subjects)) {
+      return { subjects: [], fachbereiche: [], matrix: [], rawData: {} };
+    }
+
+    // Only for "all subjects" view - otherwise use regular fachbereichData
+    if (selectedSubject !== 'all') {
+      return { subjects: [], fachbereiche: [], matrix: [], rawData: {} };
+    }
+
+    const filteredPerfs = performances.filter(p =>
+      p && (typeof p.subject === 'string' || (typeof p.subject === 'object' && p.subject.id)) &&
+      Array.isArray(p.fachbereiche) && p.fachbereiche.length > 0
+    );
+
+    if (filteredPerfs.length === 0) {
+      return { subjects: [], fachbereiche: [], matrix: [], rawData: {} };
+    }
+
+    // Group performances by subject and fachbereich
+    const dataBySubjectAndFachbereich = {};
+    const allFachbereiche = new Set();
+    const subjectsWithData = new Set();
+
+    filteredPerfs.forEach(perf => {
+      const subjectId = getSubjectId(perf.subject);
+      const subjectName = getSubjectName(perf.subject, subjectId);
+
+      if (!dataBySubjectAndFachbereich[subjectName]) {
+        dataBySubjectAndFachbereich[subjectName] = {};
+      }
+      subjectsWithData.add(subjectName);
+
+      const weightPerFachbereich = (perf.weight ?? 1) / perf.fachbereiche.length;
+
+      perf.fachbereiche.forEach(fb => {
+        if (typeof fb !== 'string') return;
+        allFachbereiche.add(fb);
+
+        if (!dataBySubjectAndFachbereich[subjectName][fb]) {
+          dataBySubjectAndFachbereich[subjectName][fb] = [];
+        }
+
+        dataBySubjectAndFachbereich[subjectName][fb].push({
+          ...perf,
+          weight: weightPerFachbereich
+        });
+      });
+    });
+
+    const sortedSubjects = Array.from(subjectsWithData).sort();
+    const sortedFachbereiche = Array.from(allFachbereiche).sort();
+
+    // Build matrix for heatmap
+    const matrix = sortedSubjects.map(subjectName => {
+      return {
+        subject: subjectName,
+        values: sortedFachbereiche.map(fb => {
+          const perfs = dataBySubjectAndFachbereich[subjectName]?.[fb] || [];
+          if (perfs.length === 0) return null;
+
+          // Calculate weighted average for this subject-fachbereich combination
+          const avg = calculateWeightedGrade(perfs);
+          return {
+            fachbereich: fb,
+            average: avg,
+            count: perfs.length
+          };
+        })
+      };
+    });
+
+    return {
+      subjects: sortedSubjects,
+      fachbereiche: sortedFachbereiche,
+      matrix,
+      rawData: dataBySubjectAndFachbereich
+    };
+  }, [performances, students, subjects, selectedSubject]);
+
+  // NEW: Scatter plot data - all individual grades as points
+  const scatterData = useMemo(() => {
+    if (!Array.isArray(performances)) return [];
+
+    // Filter performances - if single student selected, only their grades
+    const isSingleStudent = selectedStudents.length === 1;
+    let filteredPerfs = performances.filter(p =>
+      p && typeof p.grade === 'number' && typeof p.date === 'string'
+    );
+
+    if (isSingleStudent) {
+      filteredPerfs = filteredPerfs.filter(p => p.student_id === selectedStudents[0]);
+    }
+
+    if (filteredPerfs.length === 0) return [];
+
+    // Sort by date
+    const sortedPerfs = [...filteredPerfs].sort((a, b) => new Date(a.date) - new Date(b.date));
+
+    // Create scatter points
+    return sortedPerfs.map((perf, index) => {
+      const subjectId = getSubjectId(perf.subject);
+      const subjectName = getSubjectName(perf.subject, subjectId);
+      const student = students.find(s => s.id === perf.student_id);
+
+      return {
+        x: index,
+        y: perf.grade,
+        grade: perf.grade,
+        assessmentName: perf.assessment_name || 'Unbekannt',
+        date: perf.date ? format(new Date(perf.date), 'dd.MM.yyyy') : '',
+        subject: subjectName,
+        studentName: student?.name || 'Unbekannt',
+        studentId: perf.student_id
+      };
+    });
+  }, [performances, students, subjects, selectedStudents]);
+
+  // NEW: Combined chart data - Fachbereiche grouped by subject with subject averages
+  const combinedChartData = useMemo(() => {
+    if (!Array.isArray(performances) || !Array.isArray(students) || !Array.isArray(subjects)) {
+      return { data: [], subjectGroups: [] };
+    }
+
+    // Only for "all subjects" view
+    if (selectedSubject !== 'all') {
+      return { data: [], subjectGroups: [] };
+    }
+
+    const filteredPerfs = performances.filter(p =>
+      p && (typeof p.subject === 'string' || (typeof p.subject === 'object' && p.subject.id)) &&
+      Array.isArray(p.fachbereiche) && p.fachbereiche.length > 0
+    );
+
+    if (filteredPerfs.length === 0) {
+      return { data: [], subjectGroups: [] };
+    }
+
+    // Calculate subject averages first
+    const subjectAvgMap = {};
+    const subjectPerfsMap = {};
+
+    filteredPerfs.forEach(perf => {
+      const subjectId = getSubjectId(perf.subject);
+      const subjectName = getSubjectName(perf.subject, subjectId);
+
+      if (!subjectPerfsMap[subjectName]) {
+        subjectPerfsMap[subjectName] = [];
+      }
+      subjectPerfsMap[subjectName].push(perf);
+    });
+
+    Object.entries(subjectPerfsMap).forEach(([subjectName, perfs]) => {
+      subjectAvgMap[subjectName] = calculateWeightedGrade(perfs);
+    });
+
+    // Group Fachbereiche by subject
+    const dataBySubjectAndFachbereich = {};
+    const subjectOrder = [];
+
+    filteredPerfs.forEach(perf => {
+      const subjectId = getSubjectId(perf.subject);
+      const subjectName = getSubjectName(perf.subject, subjectId);
+
+      if (!dataBySubjectAndFachbereich[subjectName]) {
+        dataBySubjectAndFachbereich[subjectName] = {};
+        subjectOrder.push(subjectName);
+      }
+
+      const weightPerFachbereich = (perf.weight ?? 1) / perf.fachbereiche.length;
+
+      perf.fachbereiche.forEach(fb => {
+        if (typeof fb !== 'string') return;
+
+        if (!dataBySubjectAndFachbereich[subjectName][fb]) {
+          dataBySubjectAndFachbereich[subjectName][fb] = {
+            all: [],
+            byStudent: {}
+          };
+        }
+
+        dataBySubjectAndFachbereich[subjectName][fb].all.push({
+          ...perf,
+          weight: weightPerFachbereich
+        });
+
+        // Track student-specific data
+        if (selectedStudents.includes(perf.student_id)) {
+          if (!dataBySubjectAndFachbereich[subjectName][fb].byStudent[perf.student_id]) {
+            dataBySubjectAndFachbereich[subjectName][fb].byStudent[perf.student_id] = [];
+          }
+          dataBySubjectAndFachbereich[subjectName][fb].byStudent[perf.student_id].push({
+            ...perf,
+            weight: weightPerFachbereich
+          });
+        }
+      });
+    });
+
+    // Build flat data array for chart
+    const data = [];
+    const subjectGroups = [];
+    let currentIndex = 0;
+
+    // Sort subjects alphabetically
+    const sortedSubjects = [...new Set(subjectOrder)].sort();
+
+    sortedSubjects.forEach(subjectName => {
+      const fachbereiche = dataBySubjectAndFachbereich[subjectName];
+      const sortedFbs = Object.keys(fachbereiche).sort();
+
+      const groupStart = currentIndex;
+
+      sortedFbs.forEach(fb => {
+        const fbData = fachbereiche[fb];
+        const entry = {
+          name: fb,
+          fullName: `${subjectName} - ${fb}`,
+          subject: subjectName,
+          subjectAvg: subjectAvgMap[subjectName],
+          index: currentIndex
+        };
+
+        // Class average for this Fachbereich
+        if (showClassAverage && fbData.all.length > 0) {
+          entry['Klassenschnitt'] = calculateWeightedGrade(fbData.all);
+        }
+
+        // Student-specific values
+        selectedStudents.forEach(studentId => {
+          const student = students.find(s => s.id === studentId);
+          if (student) {
+            const studentPerfs = fbData.byStudent[studentId] || [];
+            entry[student.name || 'Unnamed'] = studentPerfs.length > 0
+              ? calculateWeightedGrade(studentPerfs)
+              : null;
+          }
+        });
+
+        data.push(entry);
+        currentIndex++;
+      });
+
+      subjectGroups.push({
+        name: subjectName,
+        start: groupStart,
+        end: currentIndex - 1,
+        avg: subjectAvgMap[subjectName],
+        count: sortedFbs.length
+      });
+    });
+
+    return { data, subjectGroups };
+  }, [performances, students, subjects, selectedSubject, selectedStudents, showClassAverage]);
+
+  // NEW: Weakest Fachbereiche - top 5 lowest scoring for dashboard overview
+  const weakestFachbereicheData = useMemo(() => {
+    if (!fachbereichData || fachbereichData.length === 0) return [];
+
+    // Determine which key to use for sorting (student or class)
+    const isSingleStudent = selectedStudents.length === 1;
+    const student = isSingleStudent ? students.find(s => s.id === selectedStudents[0]) : null;
+    const sortKey = student?.name || 'Klassenschnitt';
+
+    // Filter out entries without valid data and sort ascending (lowest = weakest)
+    const sorted = [...fachbereichData]
+      .filter(fb => fb[sortKey] !== null && fb[sortKey] !== undefined)
+      .sort((a, b) => (a[sortKey] || 6) - (b[sortKey] || 6));
+
+    return sorted.slice(0, 5);
+  }, [fachbereichData, selectedStudents, students]);
+
+  return { lineData, subjectData, fachbereichData, fachbereichDetailData, fachbereichHeatmapData, combinedChartData, scatterData, weakestFachbereicheData, getStudentColor };
 };

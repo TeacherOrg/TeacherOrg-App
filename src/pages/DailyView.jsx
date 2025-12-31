@@ -274,8 +274,9 @@ export default function DailyView({ currentDate, onDateChange }) {
   const loadAllData = async () => {
     setIsLoading(true);
     try {
-      const [lessonsData, subjectsData, holidaysData, settingsData, classesData, choresData, assignmentsData, announcementsData, studentsData, topicsData, allerleiLessonsData] = await Promise.all([
+      const [lessonsData, yearlyLessonsData, subjectsData, holidaysData, settingsData, classesData, choresData, assignmentsData, announcementsData, studentsData, topicsData, allerleiLessonsData] = await Promise.all([
         Lesson.list(),
+        YearlyLesson.list(),
         Subject.list(),
         Holiday.list(),
         Setting.list(),
@@ -283,9 +284,9 @@ export default function DailyView({ currentDate, onDateChange }) {
         Chore.list(),
         ChoreAssignment.list(),
         Announcement.list(),
-        Student.list(), // Hinzugefügt
-        Topic.list(), // Hinzugefügt
-        AllerleiLesson.list() // ← NEU: Allerlei-Lektionen laden
+        Student.list(),
+        Topic.list(),
+        AllerleiLesson.list()
       ]);
       
       setAllLessons(lessonsData || []);

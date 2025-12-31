@@ -1,28 +1,21 @@
 import React from 'react';
 import OverlayView from "./OverlayView";
-import { DragOverlay } from '@dnd-kit/core';
 
 const TimetableOverlays = ({
   hoverLesson, hoverPosition,
-  disableHover,
-  activeDragId, lessonsWithDetails, renderDragOverlay,
   overlayRef
 }) => {
+  // DragOverlay is rendered directly in Timetable.jsx inside DndContext
+  // This component only handles the hover overlay
+  if (!hoverLesson) return null;
 
   return (
-    <>
-      {hoverLesson && (
-        <OverlayView
-          ref={overlayRef}
-          lesson={hoverLesson}
-          position={hoverPosition}
-          subjectColor={hoverLesson.color}
-        />
-      )}
-      <DragOverlay>
-        {activeDragId ? renderDragOverlay(activeDragId) : null}
-      </DragOverlay>
-    </>
+    <OverlayView
+      ref={overlayRef}
+      lesson={hoverLesson}
+      position={hoverPosition}
+      subjectColor={hoverLesson.color}
+    />
   );
 };
 

@@ -24,12 +24,14 @@ const StepRow = ({
   topicColor,
   isLast = false,
   isUnifiedDouble = false,
+  lessonDuration = 45,
 }) => {
   const [isMaterialFocused, setIsMaterialFocused] = useState(false);
 
   const showQuickAdd = topicMaterials.length > 0 && (isLast || isMaterialFocused);
 
-  const maxTime = isUnifiedDouble ? 90 : 45;
+  // Calculate max time based on lesson duration and double lesson mode
+  const maxTime = isUnifiedDouble ? (lessonDuration * 2) : lessonDuration;
 
   return (
     <div className="grid grid-cols-[60px_140px_1fr_1fr_auto] gap-2 items-start">

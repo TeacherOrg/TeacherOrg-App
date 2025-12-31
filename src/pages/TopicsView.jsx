@@ -1,20 +1,22 @@
 import React, { useState, useEffect } from 'react';
-import { Subject, Topic, YearlyLesson, LehrplanKompetenz as CurriculumCompetency } from "@/api/entities";
+import { Subject, Topic, YearlyLesson, Lesson, LehrplanKompetenz as CurriculumCompetency, SharedTopic } from "@/api/entities";
+import { deleteTopicWithLessons } from '@/api/topicService';
 import TopicCard from '../components/topics/TopicCard';
 import AddTopicCard from '../components/topics/AddTopicCard';
 import TopicModal from '../components/topics/TopicModal';
+import ReceivedTopicModal from '../components/topics/ReceivedTopicModal';
+import SubjectSelectDialog from '../components/topics/SubjectSelectDialog';
 import CurriculumImport from '../components/curriculum/CurriculumImport';
 import CurriculumTree from '../components/curriculum/CurriculumTree';
 import { motion } from 'framer-motion';
 import { BookOpen, Loader2, GraduationCap } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Button } from "@/components/ui/button";
 import { toast } from 'sonner';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getLehrplanData } from '../components/curriculum/lehrplanData';
 import pb from '@/api/pb';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { useLessonStore } from '@/store';
 
 const getCurrentWeek = () => {
   const now = new Date();
@@ -36,7 +38,6 @@ const getSubjectId = (topicOrSubject) => {
 const TopicsView = () => {
   const [subjects, setSubjects] = useState([]);
   const [allTopics, setAllTopics] = useState([]);
-  const [allYearlyLessons, setAllYearlyLessons] = useState([]);
   const [curriculumCompetencies, setCurriculumCompetencies] = useState([]);
   const [addModalOpenBySubject, setAddModalOpenBySubject] = useState({});
   const [isLoading, setIsLoading] = useState(true);
@@ -44,17 +45,171 @@ const TopicsView = () => {
   const [selectedTopic, setSelectedTopic] = useState(null);  // Neu: Für Bearbeiten eines Topics
   const [isModalOpen, setIsModalOpen] = useState(false);  // Neu: Für Modal-Öffnung
   const [showCompetencySelection, setShowCompetencySelection] = useState(false);  // Neu: Für konditionale Anzeige
+  const [assignTopicId, setAssignTopicId] = useState(null);  // Für Kompetenz-Zuweisung
+  const [selectedCompetencyIds, setSelectedCompetencyIds] = useState([]);  // Ausgewählte Kompetenzen
+
+  // States für geteilte Themen
+  const [pendingSharedTopics, setPendingSharedTopics] = useState([]);
+  const [currentSharedTopic, setCurrentSharedTopic] = useState(null);
+  const [isReceivedModalOpen, setIsReceivedModalOpen] = useState(false);
+  const [isSubjectSelectOpen, setIsSubjectSelectOpen] = useState(false);
+
   const queryClient = useQueryClient();
   const location = useLocation();
+  const navigate = useNavigate();
+
+  // Store-Synchronisation für useCompetencyStatus Hook
+  const { setTopics, setAllYearlyLessons, setAllLessons } = useLessonStore();
 
   useEffect(() => {
     loadData();
+    checkPendingShares();
   }, []);
+
+  // Prüfe auf ausstehende geteilte Themen
+  const checkPendingShares = async () => {
+    try {
+      const userId = pb.authStore.model?.id;
+      if (!userId) return;
+
+      const pending = await SharedTopic.list({
+        filter: `recipient_id = '${userId}' && status = 'pending'`
+      });
+
+      if (pending && pending.length > 0) {
+        setPendingSharedTopics(pending);
+        setCurrentSharedTopic(pending[0]);
+        setIsReceivedModalOpen(true);
+      }
+    } catch (error) {
+      console.error('Error checking pending shares:', error);
+    }
+  };
+
+  // Handler für Annahme eines geteilten Themas
+  const handleAcceptShare = async (subjectId, sharedTopic) => {
+    try {
+      const topicData = sharedTopic.topic_snapshot;
+      const subject = subjects.find(s => s.id === subjectId);
+
+      if (!subject) {
+        toast.error('Fach nicht gefunden');
+        return;
+      }
+
+      // Neues Topic im Empfänger-Account erstellen
+      const newTopic = await Topic.create({
+        name: topicData.name,
+        description: topicData.description || '',
+        color: topicData.color || '#3b82f6',
+        goals: topicData.goals || '',
+        materials: topicData.materials || [],
+        lehrplan_kompetenz_ids: topicData.lehrplan_kompetenz_ids || [], // 1:1 vom Sender übernehmen
+        subject: subjectId,
+        class_id: subject.class_id,
+        user_id: pb.authStore.model.id,
+        school_year: new Date().getFullYear()
+      });
+
+      // Status des geteilten Themas aktualisieren
+      await SharedTopic.update(sharedTopic.id, {
+        status: 'accepted',
+        responded_at: new Date().toISOString()
+      });
+
+      // Lektionen für spätere Platzierung im localStorage speichern
+      const lessonsSnapshot = sharedTopic.lessons_snapshot || [];
+      if (lessonsSnapshot.length > 0) {
+        localStorage.setItem('pendingSharedLessons', JSON.stringify({
+          topicId: newTopic.id,
+          lessons: lessonsSnapshot
+        }));
+      }
+
+      toast.success('Thema uebernommen! Platzieren Sie die Lektionen in der Jahresuebersicht.');
+
+      // Topics-Liste aktualisieren
+      setAllTopics(prev => [...prev, newTopic]);
+      setTopics(prev => [...prev, newTopic]);
+
+      // Zum nächsten pending share wechseln oder schließen
+      const remaining = pendingSharedTopics.filter(s => s.id !== sharedTopic.id);
+      setPendingSharedTopics(remaining);
+
+      if (remaining.length > 0) {
+        setCurrentSharedTopic(remaining[0]);
+      } else {
+        setIsReceivedModalOpen(false);
+        setIsSubjectSelectOpen(false);
+        setCurrentSharedTopic(null);
+      }
+
+      // Zur Jahresübersicht navigieren wenn Lektionen vorhanden
+      if (lessonsSnapshot.length > 0) {
+        navigate(`/YearlyOverview?subject=${encodeURIComponent(subject.name)}&mode=assign&topic=${newTopic.id}`);
+      }
+    } catch (error) {
+      console.error('Error accepting share:', error);
+      toast.error('Fehler beim Uebernehmen des Themas');
+    }
+  };
+
+  // Handler für Ablehnung eines geteilten Themas
+  const handleRejectShare = async (sharedTopic) => {
+    try {
+      await SharedTopic.update(sharedTopic.id, {
+        status: 'rejected',
+        responded_at: new Date().toISOString()
+      });
+
+      const remaining = pendingSharedTopics.filter(s => s.id !== sharedTopic.id);
+      setPendingSharedTopics(remaining);
+
+      if (remaining.length > 0) {
+        setCurrentSharedTopic(remaining[0]);
+      } else {
+        setIsReceivedModalOpen(false);
+        setCurrentSharedTopic(null);
+      }
+
+      toast.success('Thema abgelehnt');
+    } catch (error) {
+      console.error('Error rejecting share:', error);
+      toast.error('Fehler beim Ablehnen');
+    }
+  };
 
   useEffect(() => {
     const searchParams = new URLSearchParams(location.search);
-    if (searchParams.get('select') === 'true') {
+    const selectMode = searchParams.get('select') === 'true';
+    const topicIdParam = searchParams.get('topic');
+
+    if (selectMode) {
       setShowCompetencySelection(true);
+      setActiveTab('curriculum');
+      if (topicIdParam) {
+        setAssignTopicId(topicIdParam);
+        // Lade vorhandene Kompetenzen aus localStorage falls vorhanden
+        const pending = localStorage.getItem('pendingCompetencyAssign');
+        if (pending) {
+          try {
+            const data = JSON.parse(pending);
+            if (data.currentCompetencies) {
+              setSelectedCompetencyIds(data.currentCompetencies);
+            }
+          } catch (e) {
+            console.error('Error parsing pendingCompetencyAssign:', e);
+          }
+        }
+      }
+    } else {
+      // Reset wenn nicht im select-Modus
+      setShowCompetencySelection(false);
+      setAssignTopicId(null);
+    }
+
+    // Handle direct tab navigation
+    if (searchParams.get('tab') === 'curriculum') {
       setActiveTab('curriculum');
     }
   }, [location]);
@@ -62,18 +217,23 @@ const TopicsView = () => {
   const loadData = async () => {
     setIsLoading(true);
     try {
-      const [subjectsData, topicsData, competenciesData] = await Promise.all([
+      const [subjectsData, topicsData, competenciesData, yearlyLessonsData, lessonsData] = await Promise.all([
         Subject.list(), // lädt alle Fächer (dank custom filter in entities.js)
         Topic.list(),   // <-- KEIN FILTER mehr – lädt ALLE Topics (alte + neue)
-        CurriculumCompetency.list()
+        CurriculumCompetency.list(),
+        YearlyLesson.list(), // Für automatischen Kompetenz-Status
+        Lesson.list()        // Für Wochenprüfung im Kompetenz-Status
       ]);
       setSubjects(subjectsData || []);
-      console.log('Loaded curriculumCompetencies:', competenciesData?.length, competenciesData?.map(c => c.fach_name));  // ← Ändern zu fach_name      
       setAllTopics(topicsData || []);
-      
+      setTopics(topicsData || []);  // Store-Sync für useCompetencyStatus
+
+      // Store-Sync für automatischen Kompetenz-Status (YearlyLessons und Lessons)
+      setAllYearlyLessons(yearlyLessonsData || []);
+      setAllLessons(lessonsData || []);
+
       setCurriculumCompetencies(competenciesData || []);
-      console.log('Loaded curriculumCompetencies:', competenciesData?.length, competenciesData?.map(c => c.fach_name));  // Debug: Überprüfe geladene Kompetenzen
-      
+
       if (competenciesData.length === 0 && subjectsData.some(s => s.name === 'Deutsch')) {
         await initializeLehrplan21();
         const updatedCompetencies = await CurriculumCompetency.list();
@@ -145,13 +305,17 @@ const TopicsView = () => {
       // DIREKT im lokalen State updaten → sofort sichtbar!
       setAllTopics(prevTopics => {
         const exists = prevTopics.find(t => t.id === savedTopic.id);
+        let updatedTopics;
         if (exists) {
           // Update bestehendes Thema
-          return prevTopics.map(t => t.id === savedTopic.id ? savedTopic : t);
+          updatedTopics = prevTopics.map(t => t.id === savedTopic.id ? savedTopic : t);
         } else {
           // Neues Thema hinzufügen
-          return [...prevTopics, savedTopic];
+          updatedTopics = [...prevTopics, savedTopic];
         }
+        // Store-Sync für useCompetencyStatus
+        setTopics(updatedTopics);
+        return updatedTopics;
       });
 
       // Optional: Modal schließen (beim Erstellen)
@@ -174,12 +338,103 @@ const TopicsView = () => {
     setAllTopics(prev => prev.filter(t => t.id !== topicId));
 
     try {
-      await Topic.delete(topicId);
+      // Verwende deleteTopicWithLessons um Topic und zugehörige Lektionen zu löschen
+      await deleteTopicWithLessons(topicId);
       toast.success('Thema und alle Lektionen gelöscht');
+      // Invalidiere Queries
+      queryClient.invalidateQueries({ queryKey: ['topics'] });
+      queryClient.invalidateQueries({ queryKey: ['yearlyLessons'] });
+      queryClient.invalidateQueries({ queryKey: ['allYearlyLessons'] });
     } catch (error) {
       toast.error('Löschen fehlgeschlagen – wird wieder angezeigt');
       // Zurückrollen durch Neuladen
       loadData();
+    }
+  };
+
+  // Callback für CurriculumTree - wird aufgerufen wenn Kompetenz-Status geändert wird
+  const handleTopicsUpdate = async () => {
+    try {
+      // Lade ALLE relevanten Daten neu für konsistenten Status
+      const [freshTopics, freshCompetencies, freshYearlyLessons, freshLessons] = await Promise.all([
+        Topic.list(),
+        CurriculumCompetency.list(),
+        YearlyLesson.list(),
+        Lesson.list()
+      ]);
+      setAllTopics(freshTopics || []);
+      setTopics(freshTopics || []);  // Store-Sync für useCompetencyStatus
+      setCurriculumCompetencies(freshCompetencies || []);  // Aktualisiert auch direkte Overrides
+      setAllYearlyLessons(freshYearlyLessons || []);  // Für automatischen Status
+      setAllLessons(freshLessons || []);  // Für Wochenprüfung
+      // Query-Cache invalidieren
+      queryClient.invalidateQueries({ queryKey: ['topics'] });
+      queryClient.invalidateQueries({ queryKey: ['curriculum-competencies'] });
+      queryClient.invalidateQueries({ queryKey: ['allYearlyLessons'] });
+      queryClient.invalidateQueries({ queryKey: ['lessons'] });
+    } catch (error) {
+      console.error('Fehler beim Aktualisieren:', error);
+    }
+  };
+
+  // Handler für Kompetenz-Auswahl im CurriculumTree
+  const handleCompetencySelect = (competencyId) => {
+    setSelectedCompetencyIds(prev => {
+      if (prev.includes(competencyId)) {
+        return prev.filter(id => id !== competencyId);
+      }
+      return [...prev, competencyId];
+    });
+  };
+
+  // Handler für Kompetenz-Zuweisung abschliessen
+  const handleCompetencyAssignComplete = async (competencyIds) => {
+    console.log('[handleCompetencyAssignComplete] Called with:', { assignTopicId, competencyIds });
+
+    if (!assignTopicId) {
+      console.warn('[handleCompetencyAssignComplete] No assignTopicId set');
+      return;
+    }
+
+    try {
+      // Topic mit neuen Kompetenzen aktualisieren
+      const updatedTopic = await Topic.update(assignTopicId, {
+        lehrplan_kompetenz_ids: competencyIds
+      });
+      console.log('[handleCompetencyAssignComplete] Topic updated:', updatedTopic);
+      toast.success('Kompetenzen zugewiesen');
+
+      // Zurück zum TopicModal navigieren
+      setShowCompetencySelection(false);
+      localStorage.removeItem('pendingCompetencyAssign');
+
+      // Topics aktualisieren und das aktualisierte Topic verwenden
+      const freshTopics = await Topic.list();
+      console.log('[handleCompetencyAssignComplete] Loaded fresh topics:',
+        freshTopics.filter(t => t.lehrplan_kompetenz_ids?.length > 0).map(t => ({
+          name: t.name,
+          id: t.id,
+          kompetenzIds: t.lehrplan_kompetenz_ids
+        }))
+      );
+      setAllTopics(freshTopics || []);
+      setTopics(freshTopics || []);
+
+      // Topic Modal öffnen mit dem aktualisierten Topic
+      const freshTopic = freshTopics.find(t => t.id === assignTopicId);
+      console.log('[handleCompetencyAssignComplete] Fresh topic:', freshTopic);
+      if (freshTopic) {
+        setSelectedTopic(freshTopic);
+        setIsModalOpen(true);
+      }
+
+      // URL Parameter entfernen
+      navigate('/Topics', { replace: true });
+      setAssignTopicId(null);
+      setSelectedCompetencyIds([]);
+    } catch (error) {
+      console.error('[handleCompetencyAssignComplete] Fehler:', error);
+      toast.error('Fehler beim Zuweisen der Kompetenzen');
     }
   };
 
@@ -194,7 +449,7 @@ const TopicsView = () => {
   }
 
   return (
-    <div className="p-6 bg-gradient-to-br from-slate-50 via-slate-100 to-slate-200 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 min-h-screen transition-colors duration-300">
+    <div className="p-6 bg-gradient-to-br from-slate-50 via-slate-100 to-slate-200 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 h-screen overflow-y-auto transition-colors duration-300">
       <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -239,7 +494,7 @@ const TopicsView = () => {
               </p>
             </div>
           ) : (
-            subjects.map((subject, index) => {
+            [...subjects].sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0)).map((subject, index) => {
               const isAddModalOpen = addModalOpenBySubject[subject.id] || false;
 
               // ROBUSTER FILTER mit trim + fallback
@@ -276,7 +531,7 @@ const TopicsView = () => {
                     </span>
                   </div>
 
-                  <div className="flex overflow-x-auto gap-4 pb-4">
+                  <div className="flex flex-wrap gap-4 pb-4">
                     {subjectTopics.map((topic) => (
                       <TopicCard
                         key={topic.id}
@@ -297,6 +552,7 @@ const TopicsView = () => {
                     topic={null}
                     subjectColor={subject.color}
                     subject={subject}
+                    subjects={subjects}
                     topics={allTopics}
                     curriculumCompetencies={curriculumCompetencies.filter(c => c.fach_name === subject.name)}
                   />
@@ -346,34 +602,15 @@ const TopicsView = () => {
                       </h2>
                     </div>
 
-                    {/* Neu: Auswahl-Liste für Kompetenzen – konditional */}
-                    {showCompetencySelection && (
-                      <div className="space-y-4">
-                        <h3 className="text-lg font-semibold">Kompetenzen auswählen</h3>
-                        {subjectCompetencies.map(comp => (
-                          <div key={comp.id} className="flex items-center gap-2 p-2 border rounded">
-                            <Checkbox 
-                              checked={selectedCompetencies.includes(comp.id)}
-                              onCheckedChange={() => toggleCompetency(comp.id)}
-                            />
-                            <div>
-                              <p>{comp.beschreibung} (Zyklus {comp.zyklus})</p>
-                              {/* Entferne assigned_count und assigned_topics, da Daten nicht verfügbar */}
-                            </div>
-                          </div>
-                        ))}
-                        <Button onClick={() => handleSaveSelectedCompetencies(subject.name)}>
-                          Auswahl speichern
-                        </Button>
-                      </div>
-                    )}
-
-                    {/* Bestehende Tree mit View-Daten erweitert – verwende subjectCompetencies */}
+                    {/* CurriculumTree mit View-Daten - im Selection-Modus wenn showCompetencySelection aktiv */}
                     <CurriculumTree
-                      competencies={subjectCompetencies}  // Verwende gefilterte curriculumCompetencies
-                      yearlyLessons={allYearlyLessons}
-                      topics={allTopics}
-                      currentWeek={currentWeek}
+                      competencies={subjectCompetencies}
+                      onTopicsUpdate={handleTopicsUpdate}
+                      isSelectable={showCompetencySelection}
+                      selectedCompetencyIds={selectedCompetencyIds}
+                      onSelectCompetency={handleCompetencySelect}
+                      assignTopicId={assignTopicId}
+                      onAssignComplete={handleCompetencyAssignComplete}
                     />
                   </motion.div>
                 );
@@ -392,9 +629,33 @@ const TopicsView = () => {
           topic={selectedTopic}
           subjectColor={subjects.find(s => s.id === getSubjectId(selectedTopic))?.color}
           subject={subjects.find(s => s.id === getSubjectId(selectedTopic))}
+          subjects={subjects}
           topics={allTopics}
           curriculumCompetencies={curriculumCompetencies.filter(c => c.fach_name === subjects.find(s => s.id === getSubjectId(selectedTopic))?.name)}
         />
+      )}
+
+      {/* Modals für geteilte Themen */}
+      {currentSharedTopic && (
+        <>
+          <ReceivedTopicModal
+            isOpen={isReceivedModalOpen}
+            onClose={() => setIsReceivedModalOpen(false)}
+            sharedTopic={currentSharedTopic}
+            onAccept={() => {
+              setIsReceivedModalOpen(false);
+              setIsSubjectSelectOpen(true);
+            }}
+            onReject={() => handleRejectShare(currentSharedTopic)}
+          />
+          <SubjectSelectDialog
+            isOpen={isSubjectSelectOpen}
+            onClose={() => setIsSubjectSelectOpen(false)}
+            sharedTopic={currentSharedTopic}
+            subjects={subjects}
+            onSubjectSelected={handleAcceptShare}
+          />
+        </>
       )}
     </div>
   );

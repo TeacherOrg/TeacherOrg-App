@@ -18,10 +18,10 @@ import { useToast } from "@/components/ui/use-toast";
 const InteractiveStarRating = ({ student, rating, onRatingChange, notes, onNotesChange }) => {
   const [showNotes, setShowNotes] = useState(false);
   const stars = [1, 2, 3, 4, 5];
-  
+
   return (
-    <div className="bg-slate-700/50 rounded-lg p-3 border border-slate-600">
-      <div className="text-sm font-medium text-white mb-2 truncate" title={student.name}>
+    <div className="bg-slate-100 dark:bg-slate-700/50 rounded-lg p-3 border border-slate-200 dark:border-slate-600">
+      <div className="text-sm font-medium text-slate-900 dark:text-white mb-2 truncate" title={student.name}>
         {student.name}
       </div>
       <div className="flex justify-center items-center gap-1 mb-2">
@@ -29,9 +29,9 @@ const InteractiveStarRating = ({ student, rating, onRatingChange, notes, onNotes
           <Star
             key={star}
             className={`w-5 h-5 cursor-pointer transition-all duration-200 hover:scale-110 ${
-              star <= rating 
-                ? 'text-yellow-400 fill-yellow-400' 
-                : 'text-slate-400 hover:text-yellow-300'
+              star <= rating
+                ? 'text-yellow-500 dark:text-yellow-400 fill-yellow-500 dark:fill-yellow-400'
+                : 'text-slate-300 dark:text-slate-400 hover:text-yellow-400 dark:hover:text-yellow-300'
             }`}
             onClick={() => onRatingChange(star)}
           />
@@ -43,7 +43,7 @@ const InteractiveStarRating = ({ student, rating, onRatingChange, notes, onNotes
           variant="ghost"
           size="sm"
           onClick={() => setShowNotes(!showNotes)}
-          className={`text-xs px-2 py-1 h-auto ${notes ? 'text-blue-400' : 'text-slate-400'} hover:text-blue-300`}
+          className={`text-xs px-2 py-1 h-auto ${notes ? 'text-blue-600 dark:text-blue-400' : 'text-slate-500 dark:text-slate-400'} hover:text-blue-500 dark:hover:text-blue-300`}
         >
           <FileText className="w-3 h-3 mr-1" />
           Notiz {notes ? '✓' : ''}
@@ -55,7 +55,7 @@ const InteractiveStarRating = ({ student, rating, onRatingChange, notes, onNotes
             value={notes || ''}
             onChange={(e) => onNotesChange(e.target.value)}
             placeholder="Notiz zur Bewertung..."
-            className="bg-slate-800 border-slate-600 text-white text-xs min-h-[60px] resize-none"
+            className="bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white text-xs min-h-[60px] resize-none"
           />
         </div>
       )}
@@ -266,18 +266,18 @@ export default function UeberfachlichModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent 
-        className="max-w-6xl w-full mx-4 my-4 bg-slate-900 border-slate-700 text-white overflow-hidden"  // Fix: overflow-hidden hier, um internes Scrolling zu kontrollieren
+      <DialogContent
+        className="max-w-6xl w-full mx-4 my-4 bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white overflow-hidden"
         style={{
           maxHeight: '95vh',
-          height: '95vh',  // Fix: Fixes Height, damit Modal nicht wächst
+          height: '95vh',
           display: 'flex',
           flexDirection: 'column'
         }}
       >
-        <DialogHeader className="flex-shrink-0 pb-4 border-b border-slate-700">
+        <DialogHeader className="flex-shrink-0 pb-4 border-b border-slate-200 dark:border-slate-700">
           <DialogTitle className="text-2xl font-bold">Neue Kompetenzerfassung</DialogTitle>
-          <DialogDescription className="text-sm text-slate-400">
+          <DialogDescription className="text-sm text-slate-600 dark:text-slate-400">
             Erfassen Sie Bewertungen und Notizen für überfachliche Kompetenzen der Schüler.
           </DialogDescription>
         </DialogHeader>
@@ -290,7 +290,7 @@ export default function UeberfachlichModal({
                   <Label className="text-base font-semibold mb-2 block">Kompetenz</Label>
                   <div className="flex gap-2 items-center">
                     <Select value={selectedCompetency} onValueChange={setSelectedCompetency}>
-                      <SelectTrigger className="flex-1 bg-slate-800 border-slate-600">
+                      <SelectTrigger className="flex-1 bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600">
                         <SelectValue placeholder="Bestehende Kompetenz auswählen..." />
                       </SelectTrigger>
                       <SelectContent>
@@ -299,11 +299,11 @@ export default function UeberfachlichModal({
                         ))}
                       </SelectContent>
                     </Select>
-                    <Input 
+                    <Input
                       value={newCompetencyName}
                       onChange={e => setNewCompetencyName(e.target.value)}
                       placeholder="Oder neue erstellen"
-                      className="flex-1 bg-slate-800 border-slate-600"
+                      className="flex-1 bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600"
                       onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), handleAddCompetency())}
                     />
                     <Button type="button" size="icon" onClick={handleAddCompetency} className="bg-blue-600 hover:bg-blue-700">
@@ -313,7 +313,7 @@ export default function UeberfachlichModal({
                 </div>
                 <div>
                   <Label htmlFor="date" className="text-base font-semibold mb-2 block">Datum</Label>
-                  <Input id="date" type="date" value={date} onChange={e => setDate(e.target.value)} required className="w-full bg-slate-800 border-slate-600" />
+                  <Input id="date" type="date" value={date} onChange={e => setDate(e.target.value)} required className="w-full bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600" />
                 </div>
               </div>
             </div>
@@ -342,8 +342,8 @@ export default function UeberfachlichModal({
           </form>
         </div>
 
-        <div className="flex-shrink-0 p-6 flex justify-end gap-3 border-t border-slate-700 bg-slate-900 sticky bottom-0 z-10"> 
-          <Button type="button" variant="outline" onClick={onClose} className="bg-slate-700 hover:bg-slate-600">
+        <div className="flex-shrink-0 p-6 flex justify-end gap-3 border-t border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 sticky bottom-0 z-10">
+          <Button type="button" variant="outline" onClick={onClose} className="bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 border-slate-300 dark:border-slate-600">
             <X className="w-4 h-4 mr-2" /> Abbrechen
           </Button>
           <Button type="submit" disabled={isSubmitting} className="bg-blue-600 hover:bg-blue-700">

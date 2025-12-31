@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { UeberfachlichKompetenz, Competency, UserPreferences, User } from '@/api/entities';
+import { UeberfachlichKompetenz, Competency, User } from '@/api/entities';
 import { Search, ChevronDown, ChevronRight, Trash2, Star, Clock, Plus, Save, X, FileText } from 'lucide-react';
 import { format } from "date-fns";
 import { useToast } from "@/components/ui/use-toast";
@@ -196,18 +196,19 @@ const EditableNote = ({ assessment, studentId, competencyId, onSave, isQuickAdd 
   );
 };
 
-export default function UeberfachlichTable({ 
-  students = [], 
-  ueberfachlich = [], 
-  activeClassId, 
-  onDataChange, 
+export default function UeberfachlichTable({
+  students = [],
+  ueberfachlich = [],
+  activeClassId,
+  onDataChange,
   setTab,
   setUeberfachlich,
-  expandedHistories, 
-  setExpandedHistories, 
-  expandedCompetencies, 
+  expandedHistories,
+  setExpandedHistories,
+  expandedCompetencies,
   setExpandedCompetencies,
   allCompetencies = [],
+  savePreferences, // Bug 9 Fix: savePreferences als Prop von PerformanceView
 }) {
   const [searchTerm, setSearchTerm] = useState('');
   const debouncedSearchTerm = useDebounce(searchTerm, 300);
@@ -341,22 +342,9 @@ export default function UeberfachlichTable({
 
       onDataChange?.(updatedUeberfachlich, preservedStates);
 
-      const user = User.current();
-      if (user && activeClassId) {
-        const preference = await UserPreferences.findOne({
-          user_id: user.id,
-          class_id: activeClassId,
-        });
-        const preferencesData = preference?.preferences || {};
-        if (preference) {
-          await UserPreferences.update(preference.id, { preferences: preferencesData });
-        } else {
-          await UserPreferences.create({
-            user_id: user.id,
-            class_id: activeClassId,
-            preferences: preferencesData,
-          });
-        }
+      // Bug 9 Fix: savePreferences statt direkte UserPreferences-Operationen
+      if (savePreferences) {
+        savePreferences(preservedStates);
       }
 
       toast({
@@ -391,30 +379,17 @@ export default function UeberfachlichTable({
         await UeberfachlichKompetenz.update(comp.id, { assessments: updatedAssessments });
       }
 
-      const user = User.current();
-      if (user && activeClassId) {
-        const preference = await UserPreferences.findOne({
-          user_id: user.id,
-          class_id: activeClassId,
-        });
-        const preferencesData = preference?.preferences || {};
-        if (preference) {
-          await UserPreferences.update(preference.id, { preferences: preferencesData });
-        } else {
-          await UserPreferences.create({
-            user_id: user.id,
-            class_id: activeClassId,
-            preferences: preferencesData,
-          });
-        }
-      }
-
       // NEU: Behalte aktuelle Expansion-States
       const preservedStates = {
         expandedUeberfachlichHistories: Array.from(expandedHistories || []),
         expandedUeberfachlichCompetencies: Array.from(expandedCompetencies || []),
         performanceTab: 'ueberfachlich'
       };
+
+      // Bug 9 Fix: savePreferences statt direkte UserPreferences-Operationen
+      if (savePreferences) {
+        savePreferences(preservedStates);
+      }
 
       onDataChange?.(null, preservedStates);
 
@@ -467,34 +442,17 @@ export default function UeberfachlichTable({
       newExpandedHistories.add(historyKey);
       setExpandedHistories(newExpandedHistories);
 
-      const user = User.current();
-      if (user && activeClassId) {
-        const preference = await UserPreferences.findOne({
-          user_id: user.id,
-          class_id: activeClassId,
-        });
-        const preferencesData = preference?.preferences || {};
-        preferencesData.expandedCompetencies = Array.from(newExpandedCompetencies);
-        preferencesData.expandedHistories = Array.from(newExpandedHistories);
-        preferencesData.performanceTab = 'ueberfachlich';
-
-        if (preference) {
-          await UserPreferences.update(preference.id, { preferences: preferencesData });
-        } else {
-          await UserPreferences.create({
-            user_id: user.id,
-            class_id: activeClassId,
-            preferences: preferencesData,
-          });
-        }
-      }
-
       // NEU: Speichere preserved states
       const preservedStates = {
         expandedUeberfachlichHistories: Array.from(newExpandedHistories),
         expandedUeberfachlichCompetencies: Array.from(newExpandedCompetencies),
         performanceTab: 'ueberfachlich'
       };
+
+      // Bug 9 Fix: savePreferences statt direkte UserPreferences-Operationen
+      if (savePreferences) {
+        savePreferences(preservedStates);
+      }
 
       onDataChange?.(null, preservedStates);
 
@@ -573,28 +531,19 @@ export default function UeberfachlichTable({
         expandedHistories: Array.from(newExpandedHistories)
       });
 
-      const preference = await UserPreferences.findOne({
-        user_id: user.id,
-        class_id: activeClassId,
-      });
-      const preferencesData = preference?.preferences || {};
-      preferencesData.expandedCompetencies = Array.from(newExpandedCompetencies);
-      preferencesData.expandedHistories = Array.from(newExpandedHistories);
-      preferencesData.performanceTab = 'ueberfachlich';
+      // NEU: Speichere Expansion-States
+      const preservedStates = {
+        expandedUeberfachlichHistories: Array.from(newExpandedHistories),
+        expandedUeberfachlichCompetencies: Array.from(newExpandedCompetencies),
+        performanceTab: 'ueberfachlich'
+      };
 
-      console.log('handleQuickAdd - Saving Preferences:', preferencesData);
-
-      if (preference) {
-        await UserPreferences.update(preference.id, { preferences: preferencesData });
-      } else {
-        await UserPreferences.create({
-          user_id: user.id,
-          class_id: activeClassId,
-          preferences: preferencesData,
-        });
+      // Bug 9 Fix: savePreferences statt direkte UserPreferences-Operationen
+      if (savePreferences) {
+        savePreferences(preservedStates);
       }
 
-      console.log('handleQuickAdd - Preferences Saved');
+      console.log('handleQuickAdd - Preferences Saved via savePreferences');
 
       const updatedUeberfachlich = await UeberfachlichKompetenz.list({
         filter: `class_id = '${activeClassId}'`,
@@ -605,13 +554,6 @@ export default function UeberfachlichTable({
       setUeberfachlich(updatedUeberfachlich || []);
 
       console.log('handleQuickAdd - Updated Ueberfachlich:', updatedUeberfachlich);
-
-      // NEU: Speichere Expansion-States vor onDataChange
-      const preservedStates = {
-        expandedUeberfachlichHistories: Array.from(newExpandedHistories),
-        expandedUeberfachlichCompetencies: Array.from(newExpandedCompetencies),
-        performanceTab: 'ueberfachlich'
-      };
 
       setQuickAddState({ key: null, score: 0, notes: '' });
 

@@ -7,11 +7,11 @@ import { useCallback, useEffect } from 'react';
 export default function useAllYearlyLessons(currentYear) {
   const queryClient = useQueryClient();
   const { setAllYearlyLessons } = useLessonStore();
+  const userId = pb.authStore.model?.id;
 
   const { data, isLoading } = useQuery({
-    queryKey: ['allYearlyLessons', currentYear],
+    queryKey: ['allYearlyLessons', userId, currentYear],
     queryFn: async () => {
-      const userId = pb.authStore.model?.id;
       if (!userId) return [];
 
       console.log('useAllYearlyLessons queryFn called for year:', currentYear);
@@ -37,8 +37,8 @@ export default function useAllYearlyLessons(currentYear) {
 
   const refetchAllYearlyLessons = useCallback(() => {
     console.log('refetchAllYearlyLessons called - invalidating query');
-    queryClient.invalidateQueries({ queryKey: ['allYearlyLessons', currentYear] });
-  }, [queryClient, currentYear]);
+    queryClient.invalidateQueries({ queryKey: ['allYearlyLessons', userId, currentYear] });
+  }, [queryClient, userId, currentYear]);
 
   // Optimistische Update-Funktion für React Query Cache
   const optimisticUpdate = useCallback((updatedLesson, isNew = false, isDelete = false) => {
@@ -54,7 +54,7 @@ export default function useAllYearlyLessons(currentYear) {
     console.log('optimisticUpdate - updating React Query cache:', { isNew, isDelete, lessonId: updatedLesson.id });
 
     // Update den Cache direkt
-    const newData = queryClient.setQueryData(['allYearlyLessons', currentYear], (oldData) => {
+    const newData = queryClient.setQueryData(['allYearlyLessons', userId, currentYear], (oldData) => {
       if (!oldData) return oldData;
       
       let updatedData = [...oldData];
@@ -81,7 +81,7 @@ export default function useAllYearlyLessons(currentYear) {
     }
     
     console.log('optimisticUpdate - cache updated, new length:', newData?.length);
-  }, [queryClient, currentYear, setAllYearlyLessons]);
+  }, [queryClient, userId, currentYear, setAllYearlyLessons]);
 
   return {
     allYearlyLessons: data || [],

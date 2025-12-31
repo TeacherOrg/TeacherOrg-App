@@ -1,21 +1,8 @@
 import React, { memo } from 'react';
 import { createPortal } from 'react-dom';
 import { adjustColor } from '@/utils/colorUtils';
-
-const WORK_FORMS = {
-    'single': '👤',
-    'einzel': '👤',
-    'partner': '👥',
-    'partnerarbeit': '👥',
-    'group': '👨‍👩‍👧‍👦',
-    'gruppe': '👨‍👩‍👧‍👦',
-    'gruppenarbeit': '👨‍👩‍👧‍👦',
-    'plenum': '🏛️',
-    'frontal': '🗣️',
-    'discussion': '💬',
-    'diskussion': '💬',
-    'experiment': '🧪'
-};
+import { getWorkFormIcon } from '@/utils/workFormUtils';
+import { LessonBadge } from '@/components/shared/lesson';
 
 const YearLessonOverlay = memo(({ lesson, overlayRef, position, lessonColor}) => {
     if (position.top === 0 || position.left === 0) return null;
@@ -32,16 +19,8 @@ const YearLessonOverlay = memo(({ lesson, overlayRef, position, lessonColor}) =>
             <div key={idx} className="mb-4 border-b border-slate-700 pb-4 last:border-0">
                 <h4 className="font-bold mb-2 text-center text-white flex items-center justify-center">
                     {title}
-                    {les.is_half_class && (
-                        <span className="ml-2 bg-black/30 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full shadow-md">
-                            1/2
-                        </span>
-                    )}
-                    {les.is_exam && (
-                        <span className="ml-2 bg-black/30 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full shadow-md">
-                            ❗
-                        </span>
-                    )}
+                    {les.is_half_class && <LessonBadge variant="half-class" position="inline" />}
+                    {les.is_exam && <LessonBadge variant="exam" position="inline" />}
                 </h4>
                 {showSteps && steps.length > 0 ? (
                     <div className="overflow-x-auto">
@@ -69,7 +48,7 @@ const YearLessonOverlay = memo(({ lesson, overlayRef, position, lessonColor}) =>
                                             {step.time ? `${step.time}min` : ''}
                                         </td>
                                         <td className="px-2 py-2 text-slate-200">
-                                            {WORK_FORMS[step.workForm?.toLowerCase()] || step.workForm || ''}
+                                            {getWorkFormIcon(step.workForm)}
                                         </td>
                                         <td className="px-2 py-2 text-white">
                                             {step.activity || ''}

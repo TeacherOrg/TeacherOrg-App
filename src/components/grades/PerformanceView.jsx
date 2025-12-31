@@ -6,14 +6,14 @@ import { Performance, UeberfachlichKompetenz, Subject, Competency, Fachbereich, 
 import CalendarLoader from '../ui/CalendarLoader';
 import PerformanceModal from './PerformanceModal';
 import UeberfachlichModal from './UeberfachlichModal';
-import { BarChart3, Plus } from 'lucide-react';
+import { BarChart3, Plus, GraduationCap, Users } from 'lucide-react';
 
 // Lazy-load Tabs for performance
 const DiagramTab = React.lazy(() => import('./DiagramTab/DiagramTab')); // Korrigierter Pfad
 const LeistungenTable = React.lazy(() => import('./LeistungenTable'));
 const UeberfachlichTable = React.lazy(() => import('./UeberfachlichTable'));
 
-const PerformanceView = ({ students = [], performances = [], activeClassId, classes = [], onDataChange, selectedStudentId }) => {
+const PerformanceView = ({ students = [], performances = [], activeClassId, setActiveClassId, classes = [], onDataChange, selectedStudentId }) => {
   const { toast } = useToast();
   const [subjects, setSubjects] = useState([]);
   const [allCompetencies, setAllCompetencies] = useState([]);
@@ -345,65 +345,130 @@ const PerformanceView = ({ students = [], performances = [], activeClassId, clas
 
   if (!activeClassId) {
     return (
-      <div className="flex items-center justify-center h-64 text-slate-400 dark:text-slate-400">
-        Bitte wählen Sie eine Klasse aus
+      <div className="p-4 sm:p-6">
+        {/* Header Row: Icon + Title + Tabs */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
+          <div className="flex items-center gap-4">
+            <div className="w-10 h-10 bg-gradient-to-br from-green-700 to-green-900 dark:from-green-600 dark:to-green-800 rounded-xl flex items-center justify-center shadow-lg">
+              <GraduationCap className="w-5 h-5 text-white" />
+            </div>
+            <h1 className="text-xl font-bold text-gray-900 dark:text-white">Noten</h1>
+          </div>
+        </div>
+
+        {/* Class Selector */}
+        <div className="flex flex-wrap items-center gap-3 mb-4 p-3 bg-white/50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700">
+          <div className="flex items-center gap-2 min-w-[140px]">
+            <Users className="w-4 h-4 text-slate-500 dark:text-slate-400" />
+            <select
+              value=""
+              onChange={(e) => setActiveClassId(e.target.value)}
+              className="bg-transparent text-sm text-gray-900 dark:text-white font-medium border-none outline-none cursor-pointer"
+            >
+              <option disabled value="">Klasse auswählen...</option>
+              {classes.map(cls => (
+                <option key={cls.id} value={String(cls.id)}>{cls.name}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        <div className="text-center py-16">
+          <Users className="w-12 h-12 mx-auto mb-4 text-slate-400" />
+          <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-2">Keine Klasse ausgewählt</h3>
+          <p className="text-slate-600 dark:text-slate-400 text-sm">Bitte wählen Sie eine Klasse aus, um die Leistungsübersicht anzuzeigen.</p>
+        </div>
       </div>
     );
   }
 
   return (
     <div className="p-4 sm:p-6 bg-white/0 dark:bg-slate-900/0">
-      <div className="flex justify-between items-center">
-        <div className="flex gap-2 bg-white/60 dark:bg-slate-800/60 backdrop-blur-md rounded-xl p-2 shadow-lg border border-slate-200/50 dark:border-slate-700/50">
+      {/* Header Row: Icon + Title + Tabs */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
+        <div className="flex items-center gap-4">
+          <div className="w-10 h-10 bg-gradient-to-br from-green-700 to-green-900 dark:from-green-600 dark:to-green-800 rounded-xl flex items-center justify-center shadow-lg">
+            <GraduationCap className="w-5 h-5 text-white" />
+          </div>
+          <h1 className="text-xl font-bold text-gray-900 dark:text-white">Noten</h1>
+        </div>
+
+        <div className="flex gap-2 bg-white/60 dark:bg-slate-800/60 backdrop-blur-md rounded-xl p-1.5 shadow-lg border border-slate-200/50 dark:border-slate-700/50">
           <Button
             onClick={() => handleTabChange('diagramme')}
             variant={tab === 'diagramme' ? 'default' : 'ghost'}
             disabled={preferencesLoading}
-            className={`${tab === 'diagramme' ? 'bg-green-600 text-white shadow-md' : 'text-slate-300 hover:bg-slate-700/50 hover:text-white'} transition-all duration-200 ${preferencesLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
+            size="sm"
+            className={`${tab === 'diagramme' ? 'bg-green-600 text-white shadow-md' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700/50 hover:text-slate-900 dark:hover:text-white'} transition-all duration-200 ${preferencesLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
           >
-            <BarChart3 className="w-4 h-4 mr-2" />
+            <BarChart3 className="w-4 h-4 mr-1.5" />
             Diagramme
           </Button>
           <Button
             onClick={() => handleTabChange('leistungen')}
             variant={tab === 'leistungen' ? 'default' : 'ghost'}
             disabled={preferencesLoading}
-            className={`${tab === 'leistungen' ? 'bg-green-600 text-white shadow-md' : 'text-slate-300 hover:bg-slate-700/50 hover:text-white'} transition-all duration-200 ${preferencesLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
+            size="sm"
+            className={`${tab === 'leistungen' ? 'bg-green-600 text-white shadow-md' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700/50 hover:text-slate-900 dark:hover:text-white'} transition-all duration-200 ${preferencesLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
           >
             Leistungen
           </Button>
           <Button
-            onClick={() => {
-              console.log('Button click: switching to ueberfachlich');
-              handleTabChange('ueberfachlich');
-            }}
+            onClick={() => handleTabChange('ueberfachlich')}
             variant={tab === 'ueberfachlich' ? 'default' : 'ghost'}
             disabled={preferencesLoading}
-            className={`${tab === 'ueberfachlich' ? 'bg-green-600 text-white shadow-md' : 'text-slate-300 hover:bg-slate-700/50 hover:text-white'} transition-all duration-200 ${preferencesLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
+            size="sm"
+            className={`${tab === 'ueberfachlich' ? 'bg-green-600 text-white shadow-md' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700/50 hover:text-slate-900 dark:hover:text-white'} transition-all duration-200 ${preferencesLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
           >
             Überfachlich
           </Button>
         </div>
+      </div>
+
+      {/* Filter Row: Class + Subject/Options + Create Button */}
+      <div className="flex flex-wrap items-center gap-3 mb-4 p-3 bg-white/50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700">
+        {/* Class Selector */}
+        <div className="flex items-center gap-2 min-w-[140px]">
+          <Users className="w-4 h-4 text-slate-500 dark:text-slate-400" />
+          <select
+            value={activeClassId || ''}
+            onChange={(e) => setActiveClassId(e.target.value)}
+            className="bg-transparent text-sm text-gray-900 dark:text-white font-medium border-none outline-none cursor-pointer"
+            disabled={classes.length === 0}
+          >
+            <option disabled value="">Klasse...</option>
+            {classes.map(cls => (
+              <option key={cls.id} value={String(cls.id)}>{cls.name}</option>
+            ))}
+          </select>
+        </div>
+
+        <div className="h-6 w-px bg-slate-300 dark:bg-slate-600 hidden sm:block" />
+
+        {/* Loading Indicator */}
         {preferencesLoading && (
-          <div className="flex items-center gap-2 text-sm text-slate-400 mt-2">
-            <div className="w-4 h-4 border-2 border-slate-400 border-t-transparent rounded-full animate-spin"></div>
-            <span>Lade Präferenzen...</span>
+          <div className="flex items-center gap-2 text-sm text-slate-400">
+            <div className="w-3 h-3 border-2 border-slate-400 border-t-transparent rounded-full animate-spin"></div>
+            <span>Lade...</span>
           </div>
         )}
-        <div className="flex gap-2">
-          {tab === 'leistungen' && (
-            <Button onClick={handleCreatePerformance} className="bg-blue-600 hover:bg-blue-700">
-              <Plus className="w-4 h-4 mr-2"/>
-              Neue Leistungsbeurteilung
-            </Button>
-          )}
-          {tab === 'ueberfachlich' && (
-            <Button onClick={handleCreateUeberfachlich} className="bg-purple-600 hover:bg-purple-700">
-              <Plus className="w-4 h-4 mr-2"/>
-              Neue Kompetenzerfassung
-            </Button>
-          )}
-        </div>
+
+        {/* Spacer */}
+        <div className="flex-1" />
+
+        {/* Create Buttons */}
+        {tab === 'leistungen' && (
+          <Button onClick={handleCreatePerformance} size="sm" className="bg-blue-600 hover:bg-blue-700">
+            <Plus className="w-4 h-4 mr-1.5"/>
+            Neue Leistung
+          </Button>
+        )}
+        {tab === 'ueberfachlich' && (
+          <Button onClick={handleCreateUeberfachlich} size="sm" className="bg-purple-600 hover:bg-purple-700">
+            <Plus className="w-4 h-4 mr-1.5"/>
+            Neue Kompetenz
+          </Button>
+        )}
       </div>
       <Suspense fallback={<CalendarLoader />}>
         {tab === 'diagramme' && (
@@ -427,6 +492,7 @@ const PerformanceView = ({ students = [], performances = [], activeClassId, clas
             onDataChange={onDataChange}
             expandedRows={expandedLeistungenRows}
             setExpandedRows={setExpandedLeistungenRows}
+            savePreferences={savePreferences}
             onDelete={handleDeletePerformance}
             onEdit={(performance) => {
               setEditingPerformance(performance);
@@ -447,6 +513,7 @@ const PerformanceView = ({ students = [], performances = [], activeClassId, clas
             expandedCompetencies={expandedUeberfachlichCompetencies}
             setExpandedCompetencies={setExpandedUeberfachlichCompetencies}
             allCompetencies={allCompetencies}
+            savePreferences={savePreferences}
           />
         )}
       </Suspense>

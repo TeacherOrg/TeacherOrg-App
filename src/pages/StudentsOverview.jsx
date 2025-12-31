@@ -99,15 +99,13 @@ export default function StudentsOverview() {
         subjects: Array.from(data.subjects)
       }));
 
-      const weakFachbereiche = allFachbereiche
-        .filter(fb => fb.average < 4.0)
-        .sort((a, b) => a.average - b.average)
-        .slice(0, 3);
+      // Top 3 Fachbereiche (nach Note absteigend sortiert)
+      const sortedByBest = [...allFachbereiche].sort((a, b) => b.average - a.average);
+      const strongFachbereiche = sortedByBest.slice(0, 3);
 
-      const strongFachbereiche = allFachbereiche
-        .filter(fb => fb.average >= 5.0)
-        .sort((a, b) => b.average - a.average)
-        .slice(0, 3);
+      // Bottom 3 Fachbereiche (nach Note aufsteigend sortiert)
+      const sortedByWorst = [...allFachbereiche].sort((a, b) => a.average - b.average);
+      const weakFachbereiche = sortedByWorst.slice(0, 3);
 
       // Überfachliche Kompetenzen
       const studentComps = classUeberfachlich.filter(u => u.student_id === student.id);
@@ -340,7 +338,6 @@ export default function StudentsOverview() {
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-4">
             {filteredAndSortedCards.map((card, index) => {
               const gradeColors = getGradeColor(card.average);
-              const hasWeakAreas = card.weakFachbereiche.length > 0;
 
               return (
                 <motion.div
@@ -381,34 +378,7 @@ export default function StudentsOverview() {
                     </div>
 
                     <CardContent className="p-4 space-y-3 flex-1 flex flex-col">
-                      {/* Förderbedarf */}
-                      {hasWeakAreas && (
-                        <div>
-                          <div className="flex items-center gap-1.5 mb-2">
-                            <TrendingDown className="w-3.5 h-3.5 text-red-600 dark:text-red-400" />
-                            <p className="text-xs font-semibold text-red-700 dark:text-red-300">
-                              Förderbedarf
-                            </p>
-                          </div>
-                          <div className="grid grid-cols-1 gap-1.5">
-                            {card.weakFachbereiche.map((fb, idx) => (
-                              <div 
-                                key={idx}
-                                className="flex items-center justify-between text-xs bg-red-50 dark:bg-red-900/20 px-2 py-1.5 rounded"
-                              >
-                                <span className="text-red-900 dark:text-red-100 font-medium truncate flex-1 mr-2">
-                                  {fb.name}
-                                </span>
-                                <Badge variant="outline" className="ml-auto bg-red-200 dark:bg-red-900/50 border-red-400 dark:border-red-700 text-red-900 dark:text-red-200 text-xs font-bold">
-                                  {fb.average}
-                                </Badge>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Stärken */}
+                      {/* Stärken (Top 3) - IMMER anzeigen */}
                       {card.strongFachbereiche.length > 0 && (
                         <div>
                           <div className="flex items-center gap-1.5 mb-2">
@@ -417,15 +387,46 @@ export default function StudentsOverview() {
                               Stärken
                             </p>
                           </div>
-                          <div className="flex flex-wrap gap-1.5">
+                          <div className="grid grid-cols-1 gap-1.5">
                             {card.strongFachbereiche.map((fb, idx) => (
-                              <Badge 
+                              <div
                                 key={idx}
-                                variant="outline"
-                                className="bg-green-50 dark:bg-green-900/20 border-green-300 dark:border-green-700 text-green-800 dark:text-green-300 text-xs"
+                                className="flex items-center justify-between text-xs bg-green-50 dark:bg-green-900/20 px-2 py-1.5 rounded"
                               >
-                                {fb.name} ({fb.average})
-                              </Badge>
+                                <span className="text-green-900 dark:text-green-100 font-medium truncate flex-1 mr-2">
+                                  {fb.name}
+                                </span>
+                                <Badge variant="outline" className="ml-auto bg-green-200 dark:bg-green-900/50 border-green-400 dark:border-green-700 text-green-900 dark:text-green-200 text-xs font-bold">
+                                  {fb.average.toFixed(1)}
+                                </Badge>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Förderbedarf (Bottom 3) - IMMER anzeigen */}
+                      {card.weakFachbereiche.length > 0 && (
+                        <div>
+                          <div className="flex items-center gap-1.5 mb-2">
+                            <TrendingDown className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
+                            <p className="text-xs font-semibold text-amber-700 dark:text-amber-300">
+                              Ausbaufähig
+                            </p>
+                          </div>
+                          <div className="grid grid-cols-1 gap-1.5">
+                            {card.weakFachbereiche.map((fb, idx) => (
+                              <div
+                                key={idx}
+                                className="flex items-center justify-between text-xs bg-amber-50 dark:bg-amber-900/20 px-2 py-1.5 rounded"
+                              >
+                                <span className="text-amber-900 dark:text-amber-100 font-medium truncate flex-1 mr-2">
+                                  {fb.name}
+                                </span>
+                                <Badge variant="outline" className="ml-auto bg-amber-200 dark:bg-amber-900/50 border-amber-400 dark:border-amber-700 text-amber-900 dark:text-amber-200 text-xs font-bold">
+                                  {fb.average.toFixed(1)}
+                                </Badge>
+                              </div>
                             ))}
                           </div>
                         </div>

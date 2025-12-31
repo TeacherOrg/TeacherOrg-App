@@ -162,6 +162,7 @@ html, body, #root {
   .yearly-main-grid {
     display: grid;
     grid-template-columns: 1fr minmax(320px, 400px);
+    grid-template-rows: 1fr;  /* Zeile füllt verfügbare Höhe */
     gap: 2rem;
     height: 100%;
     min-height: 0;
@@ -202,12 +203,7 @@ html, body, #root {
 
   .yearly-table-container {
     position: relative;
-    overflow-x: hidden; /* Verhindert native horizontale Scrollbar */
-    overflow-y: auto;
-    scroll-snap-type: none;
-    -webkit-overflow-scrolling: touch;
-    width: 100%;
-    height: 100%;
+    overflow: auto;     /* Beide Scrollbars erlauben */
   }
 
   /* Zentriere die Tabelle, wenn sie schmaler als der Container ist */
@@ -248,20 +244,6 @@ html, body, #root {
     .yearly-table-container {
       margin: 0 auto;
     }
-  }
-
-  /* Removed unnecessary styles for scrollbar and width adjustments */
-  .yearly-table-container {
-    position: relative;  /* Für absolute Positionierung des Buttons */
-    overflow-x: auto;
-    overflow-y: auto;
-    scroll-snap-type: none; /* Entferne Snap für einfaches Mausrad-Scrolling */
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: none; /* Verstecke vertikale Scrollbar (falls vorhanden) */
-  }
-
-  .yearly-table-container::-webkit-scrollbar {
-    display: none; /* Verstecke Scrollbar komplett */
   }
 
   .yearly-table-container [style*="width"] {
@@ -540,24 +522,17 @@ html, body, #root {
   .yearly-main-grid {
     display: grid;
     grid-template-columns: 1fr;  /* Nur eine Spalte für Tabelle */
+    grid-template-rows: 1fr;  /* Zeile füllt verfügbare Höhe */
     gap: 0;  /* Kein Gap mehr nötig */
     height: 100%;
     min-height: 0;
   }
 
-  /* Für größere Screens: Tabelle zentrieren/max-width */
+  /* Für größere Screens: Tabelle zentrieren */
   @media (min-width: 1280px) {
     .yearly-main-grid {
-      max-width: 90%;  /* Mehr Platz, aber nicht 100% für Padding */
       margin: 0 auto;
     }
-  }
-
-  /* Stelle sicher, dass Table-Container full-width ist */
-  .yearly-table-container {
-    width: 100%;
-    height: 100%;  /* Volle Höhe nutzen */
-    overflow: auto;  /* Scroll wenn nötig */
   }
 
   /* New: Make inner table adapt to content without stretching */
@@ -714,6 +689,7 @@ html, body, #root {
   }
 
   .timetable-content {
+    position: relative; /* Für absolute Positionierung des Pools */
     flex-grow: 1;
     display: flex;
     flex-direction: row;
@@ -750,11 +726,10 @@ html, body, #root {
   .timetable-pool-container {
     width: var(--pool-width, 200px);
     min-width: var(--pool-width, 200px);
-    height: var(--pool-height, auto);
     background-color: #ffffff;
     border: 1px solid #e2e8f0;
     border-radius: 1rem;
-    overflow-y: hidden;
+    overflow-y: auto;
     padding: 0.75rem;
     z-index: 10;
     flex-shrink: 0; /* Verhindert Schrumpfen */
@@ -780,10 +755,8 @@ html, body, #root {
     border: 1px solid #334155;
   }
 
-  /* Pool-Inner: Enger für 150px */
-  .timetable-pool-container .flex-col > div {
-    height: 40px; /* Standard-Höhe */
-    padding: 0 0.5rem;
+  /* Pool-Inner: Nur für draggable Items */
+  .timetable-pool-container .pool-item {
     font-size: 0.875rem; /* sm für bessere Lesbarkeit */
   }
 
@@ -811,8 +784,7 @@ html, body, #root {
       width: 100%;
       padding: 1rem;
     }
-    .timetable-pool-container .flex-col > div {
-      height: 40px;
+    .timetable-pool-container .pool-item {
       font-size: 1rem;
     }
   }
@@ -1033,7 +1005,6 @@ html, body, #root {
 
 /* Make sure any overflow-x wrapper respects viewport */
 .overflow-x-auto,
-.yearly-table-container,
 .lesson-detail-wrapper {
   max-width: 100%;
   min-width: 0;
@@ -1107,10 +1078,39 @@ main {
   box-sizing: border-box;
 }
 
-.yearly-table-container {
-  height: 100%;
-  width: 100%;
-  overflow: auto;
+.yearly-table-container::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.yearly-table-container::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.yearly-table-container::-webkit-scrollbar-thumb {
+  background-color: theme('colors.slate.300');
+  border-radius: 4px;
+}
+
+.yearly-table-container::-webkit-scrollbar-thumb:hover {
+  background-color: theme('colors.slate.400');
+}
+
+/* Dark Mode Scrollbars für Jahrestabelle */
+.dark .yearly-table-container {
+  scrollbar-color: theme('colors.slate.600') theme('colors.slate.800');
+}
+
+.dark .yearly-table-container::-webkit-scrollbar-track {
+  background: theme('colors.slate.800');
+}
+
+.dark .yearly-table-container::-webkit-scrollbar-thumb {
+  background-color: theme('colors.slate.600');
+}
+
+.dark .yearly-table-container::-webkit-scrollbar-thumb:hover {
+  background-color: theme('colors.slate.500');
 }
 
 /* Customization Panel Scrollbar */
@@ -1148,4 +1148,73 @@ main {
 
 .dark .customization-scroll::-webkit-scrollbar-thumb:hover {
   background-color: theme('colors.slate.500');
+}
+
+/* ===== GLOBALE DARKMODE SCROLLBAR ===== */
+.dark ::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.dark ::-webkit-scrollbar-track {
+  background: #1e293b; /* slate-800 */
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background: #475569; /* slate-600 */
+  border-radius: 4px;
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: #64748b; /* slate-500 */
+}
+
+/* Firefox Darkmode Scrollbar */
+.dark * {
+  scrollbar-width: thin;
+  scrollbar-color: #475569 #1e293b;
+}
+
+/* ===== GRADES PAGE SCROLLBAR ===== */
+.grades-page-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 transparent; /* slate-300 */
+}
+
+.grades-page-scroll::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.grades-page-scroll::-webkit-scrollbar-track {
+  background: transparent;
+  border-radius: 5px;
+}
+
+.grades-page-scroll::-webkit-scrollbar-thumb {
+  background-color: #cbd5e1; /* slate-300 */
+  border-radius: 5px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+.grades-page-scroll::-webkit-scrollbar-thumb:hover {
+  background-color: #94a3b8; /* slate-400 */
+}
+
+/* Dark Mode for Grades Page Scrollbar */
+.dark .grades-page-scroll {
+  scrollbar-color: #475569 #1e293b; /* slate-600 on slate-800 */
+}
+
+.dark .grades-page-scroll::-webkit-scrollbar-track {
+  background: #1e293b; /* slate-800 */
+}
+
+.dark .grades-page-scroll::-webkit-scrollbar-thumb {
+  background-color: #475569; /* slate-600 */
+}
+
+.dark .grades-page-scroll::-webkit-scrollbar-thumb:hover {
+  background-color: #64748b; /* slate-500 */
 }

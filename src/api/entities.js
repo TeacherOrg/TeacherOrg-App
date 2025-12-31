@@ -273,7 +273,9 @@ class PbEntity {
       filter: finalFilter || '',
       perPage: 500,
       expand: this.expandFields,
-      $cancelKey: cancelKey  // ← DAS HINZUFÜGEN – das ist alles!
+      $cancelKey: cancelKey,  // ← DAS HINZUFÜGEN – das ist alles!
+      // Sortierung nach sort_order für Subjects
+      sort: this.name === 'subject' ? '+sort_order,+created' : ''
     };
 
     try {
@@ -558,6 +560,22 @@ export const Topic = new PbEntity('Topic');
 export const Setting = new PbEntity('Setting');
 export const Class = new PbEntity('Classe');
 export const Subject = new PbEntity('Subject');
+
+// Batch-Update für Subject-Sortierung
+Subject.updateSortOrder = async (updates) => {
+  // updates: Array von { id, sort_order }
+  const results = [];
+  for (const { id, sort_order } of updates) {
+    try {
+      await Subject.update(id, { sort_order });
+      results.push({ id, success: true });
+    } catch (error) {
+      console.error(`Error updating sort_order for subject ${id}:`, error);
+      results.push({ id, success: false, error });
+    }
+  }
+  return results;
+};
 export const Holiday = new PbEntity('Holiday');
 export const Performance = new PbEntity('Performance');
 export const UeberfachlichKompetenz = new PbEntity('Ueberfachliche_kompetenz');
@@ -573,6 +591,9 @@ export const UserPreferences = new PbEntity('User_preference');
 export const CustomizationSettings = new PbEntity('Customization_setting');
 export const AllerleiLesson = new PbEntity('Allerlei_lesson');  // Neu: Entity für neue Collection
 export const LehrplanKompetenz = new PbEntity('lehrplan_kompetenz');
+export const SharedTopic = new PbEntity('shared_topic');
+SharedTopic.collectionName = 'shared_topics';
+SharedTopic.collection = pb.collection('shared_topics');
 
 export const User = {
   current: () => pb.authStore.model || null,
@@ -621,6 +642,8 @@ export const User = {
 
   logout: () => {
     pb.authStore.clear();
+    // Custom Event für App.jsx auslösen, um Cache und Store zu leeren
+    window.dispatchEvent(new CustomEvent('user-logout'));
     import('react-hot-toast').then(({ toast }) => {
       toast.success('Erfolgreich abgemeldet.');
     });

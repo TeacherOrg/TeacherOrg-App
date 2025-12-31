@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { User as UserIcon, Sun, Moon, Monitor, Home, RotateCcw, Mail, Lock, Eye } from 'lucide-react';
 
 export default function ProfileSettings({ onClose }) {

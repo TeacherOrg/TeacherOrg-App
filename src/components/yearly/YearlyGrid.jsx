@@ -1,13 +1,14 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback, useLayoutEffect } from 'react';
 import YearLessonCell from './YearLessonCell';
-import { adjustColor } from '@/utils/colorUtils';
+import { adjustColor, createGradient } from '@/utils/colorUtils';
 import { Checkbox } from '@/components/ui/checkbox';
 import ClassSelectorBar from './ClassSelectorBar';
 import LessonContextMenu from './LessonContextMenu';
 import WeekPickerModal from './WeekPickerModal';
 import SlotPickerModal from './SlotPickerModal';
-import toast from 'react-hot-toast'; 
+import toast from 'react-hot-toast';
 import { YearlyLesson } from '@/api/entities';
+import { LessonBadge } from '@/components/shared/lesson/LessonBadge';
 
 const ACADEMIC_WEEKS = 52;
 
@@ -19,13 +20,13 @@ const getHolidayDisplay = (holiday) => {
         emoji: '☀️',
         color: 'bg-yellow-800/50 dark:bg-yellow-800/50',
         gradient: 'linear-gradient(135deg, #fbbf24 0%, #f59e0b 50%, #fb923c 100%)',
-        pattern: 'radial-gradient(circle at 20% 80%, rgba(251, 191, 36, 0.3) 0%, transparent 50%)'
+        pattern: 'radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0.3) 0%, transparent 20%), repeating-conic-gradient(from 0deg at 50% 50%, rgba(255, 255, 255, 0.15) 0deg 15deg, transparent 15deg 30deg)'
       };
       if (holiday.name.includes('Herbst')) return {
         emoji: '🍂',
         color: 'bg-orange-800/50 dark:bg-orange-800/50',
         gradient: 'linear-gradient(135deg, #f97316 0%, #ea580c 50%, #dc2626 100%)',
-        pattern: 'repeating-linear-gradient(45deg, transparent, transparent 10px, rgba(249, 115, 22, 0.1) 10px, rgba(249, 115, 22, 0.1) 20px)'
+        pattern: 'radial-gradient(ellipse 8px 12px at 15% 20%, rgba(139, 69, 19, 0.25) 0%, transparent 100%), radial-gradient(ellipse 10px 14px at 45% 35%, rgba(139, 69, 19, 0.2) 0%, transparent 100%), radial-gradient(ellipse 7px 11px at 75% 15%, rgba(139, 69, 19, 0.22) 0%, transparent 100%), radial-gradient(ellipse 9px 13px at 25% 65%, rgba(139, 69, 19, 0.18) 0%, transparent 100%), radial-gradient(ellipse 8px 12px at 60% 75%, rgba(139, 69, 19, 0.23) 0%, transparent 100%), radial-gradient(ellipse 6px 10px at 85% 55%, rgba(139, 69, 19, 0.2) 0%, transparent 100%), radial-gradient(ellipse 11px 15px at 35% 85%, rgba(139, 69, 19, 0.15) 0%, transparent 100%), radial-gradient(ellipse 7px 11px at 90% 90%, rgba(139, 69, 19, 0.25) 0%, transparent 100%)'
       };
       if (holiday.name.includes('Weihnacht')) return {
         emoji: '🎄',
@@ -37,13 +38,13 @@ const getHolidayDisplay = (holiday) => {
         emoji: '⛷️',
         color: 'bg-blue-800/50 dark:bg-blue-800/50',
         gradient: 'linear-gradient(135deg, #0ea5e9 0%, #0284c7 50%, #0369a1 100%)',
-        pattern: 'linear-gradient(45deg, rgba(255, 255, 255, 0.1) 25%, transparent 25%)'
+        pattern: 'radial-gradient(circle at 20% 30%, rgba(255, 255, 255, 0.12) 2px, transparent 2px), radial-gradient(circle at 60% 70%, rgba(255, 255, 255, 0.08) 3px, transparent 3px), radial-gradient(circle at 80% 20%, rgba(255, 255, 255, 0.15) 2px, transparent 2px), radial-gradient(circle at 35% 80%, rgba(255, 255, 255, 0.1) 2px, transparent 2px), radial-gradient(circle at 50% 40%, rgba(255, 255, 255, 0.1) 2.5px, transparent 2.5px), radial-gradient(circle at 15% 60%, rgba(255, 255, 255, 0.09) 2px, transparent 2px), radial-gradient(circle at 70% 50%, rgba(255, 255, 255, 0.11) 2px, transparent 2px), linear-gradient(150deg, transparent 65%, rgba(255, 255, 255, 0.08) 65%, rgba(255, 255, 255, 0.08) 75%, transparent 75%), linear-gradient(30deg, transparent 70%, rgba(255, 255, 255, 0.06) 70%, rgba(255, 255, 255, 0.06) 85%, transparent 85%)'
       };
       if (holiday.name.includes('Frühling')) return {
-        emoji: '🌷',
+        emoji: '🌸',
         color: 'bg-pink-800/50 dark:bg-pink-800/50',
-        gradient: 'linear-gradient(135deg, #a78bfa 0%, #8b5cf6 50%, #7c3aed 100%)',
-        pattern: 'radial-gradient(circle at 30% 30%, rgba(167, 139, 250, 0.3) 0%, transparent 50%), radial-gradient(circle at 70% 70%, rgba(139, 92, 246, 0.2) 0%, transparent 50%)'
+        gradient: 'linear-gradient(135deg, #f9a8d4 0%, #f472b6 50%, #ec4899 100%)',
+        pattern: 'radial-gradient(circle at 10% 15%, rgba(255, 255, 255, 0.2) 3px, transparent 3px), radial-gradient(circle at 25% 35%, rgba(255, 255, 255, 0.15) 4px, transparent 4px), radial-gradient(circle at 45% 10%, rgba(255, 255, 255, 0.18) 3px, transparent 3px), radial-gradient(circle at 65% 45%, rgba(255, 255, 255, 0.2) 5px, transparent 5px), radial-gradient(circle at 85% 25%, rgba(255, 255, 255, 0.12) 3px, transparent 3px), radial-gradient(circle at 15% 70%, rgba(255, 255, 255, 0.16) 4px, transparent 4px), radial-gradient(circle at 35% 85%, rgba(255, 255, 255, 0.14) 3px, transparent 3px), radial-gradient(circle at 55% 65%, rgba(255, 255, 255, 0.2) 4px, transparent 4px), radial-gradient(circle at 75% 80%, rgba(255, 255, 255, 0.18) 5px, transparent 5px), radial-gradient(circle at 90% 60%, rgba(255, 255, 255, 0.15) 3px, transparent 3px)'
       };
       return {
         emoji: '🏖️',
@@ -111,7 +112,7 @@ const YearlyGrid = ({
   const hasScrolledToCurrentWeek = useRef(false);
 
   const weekColumnWidth = 120;
-  const horizontalPadding = 48;
+  const horizontalPadding = 0;
 
   const [availableWidth, setAvailableWidth] = useState(0);
   // === NEU ===
@@ -159,9 +160,8 @@ const YearlyGrid = ({
       result[key] = { ...lesson, subjectName: subjectObj.name };
     });
 
-    if (missingSubjects.size > 0) {
-      console.warn('YearlyGrid: Lessons with subjects not in displayedSubjects:', Array.from(missingSubjects));
-    }
+    // Note: missingSubjects can occur when viewing "Alle Klassen" or during async loading
+    // This is expected behavior and doesn't affect functionality
 
     return result;
   }, [lessons, subjects]);
@@ -336,12 +336,12 @@ const YearlyGrid = ({
 
   const BASE_CELL_WIDTHS = { compact: 72, standard: 82, spacious: 92 };
   const minCellWidth = BASE_CELL_WIDTHS[densityMode] || 82;
-  const maxCellWidth = 160;
+  const maxCellWidth = 250; // Erhöht von 160 für bessere Platznutzung
 
   const effectiveAvailableWidth = availableWidth || 800;
 
   const totalSlots = uniqueSubjects.reduce((sum, subjectObj) => sum + (subjectObj.lessons_per_week || subjectObj.weekly_lessons || 4), 0) || 1;
-  const cellWidth = Math.min(maxCellWidth, Math.max(minCellWidth, effectiveAvailableWidth / totalSlots));
+  const cellWidth = minCellWidth;
 
   const subjectBlockWidths = useMemo(() => uniqueSubjects.map(subjectObj => (subjectObj.lessons_per_week || subjectObj.weekly_lessons || 4) * cellWidth), [uniqueSubjects, cellWidth]);
   const totalWidth = weekColumnWidth + subjectBlockWidths.reduce((a, b) => a + b, 0);
@@ -849,8 +849,12 @@ const YearlyGrid = ({
   const getHolidayForWeek = useCallback((weekNumber) => {
     if (!holidays || holidays.length === 0) return null;
     const weekNum = typeof weekNumber === 'object' ? weekNumber.week : weekNumber;
-    // Verwende die gleiche Logik wie getCurrentWeek für mondayOfWeek1
-    const jan4 = new Date(currentYear, 0, 4);
+    // NEU: Jahr aus dem weekNumber-Objekt extrahieren (wichtig für Schuljahr-Modus!)
+    const yearToUse = typeof weekNumber === 'object' && weekNumber.year
+      ? weekNumber.year
+      : currentYear;
+    // Verwende yearToUse statt currentYear für korrekte Wochenberechnung
+    const jan4 = new Date(yearToUse, 0, 4);
     const daysToMonday = (jan4.getDay() + 6) % 7;
     const mondayOfWeek1 = new Date(jan4.getTime() - daysToMonday * 86400000);
     const weekStart = new Date(mondayOfWeek1);
@@ -905,7 +909,9 @@ const YearlyGrid = ({
           school_year: currentYear
         };
 
-        const isSelected = isAssignMode ? selectedSet.has(key) : false;
+        // Use name-based key for selection check - matches handleSelectLesson key format
+        const selectionKey = `${weekNum}-${subjectObj.name}-${lessonNumber}`;
+        const isSelected = isAssignMode ? selectedSet.has(selectionKey) : false;
         const hasTopic = !!lesson?.topic_id;
 
         // ================ LEERE SLOTS ================
@@ -1038,7 +1044,7 @@ const YearlyGrid = ({
                 }}
               >
                 <div
-                  className="h-full w-full cursor-pointer flex items-center justify-center text-center rounded-md"
+                  className="h-full w-full cursor-pointer flex items-center justify-center text-center rounded-md relative"
                   style={{
                     background: `linear-gradient(135deg, ${topic.color} 0%, ${adjustColor(topic.color, -20)} 100%)`,
                     border: `1px solid ${topic.color}`,
@@ -1046,6 +1052,10 @@ const YearlyGrid = ({
                   }}
                   onClick={() => handleCellClick({ ...lesson, topic_id: topic.id, mergedLessons: topicLessons }, null)}
                 >
+                  {/* Prüfungs-Badge wenn Topic Prüfungen enthält */}
+                  {topicLessons.some(l => l.is_exam) && (
+                    <LessonBadge variant="exam" position="top-right" />
+                  )}
                   <div className={`text-xs font-bold px-1 ${densityMode === 'compact' ? 'text-[10px]' : ''}`}>
                     <div className="truncate">{topic.name}</div>
                   </div>
@@ -1243,7 +1253,9 @@ const YearlyGrid = ({
           <div
             className="absolute flex flex-col items-center justify-center text-center text-white pointer-events-none"
             style={{
-              width: `${totalWidth}px`,
+              left: `${weekColumnWidth}px`,
+              top: 0,
+              width: `${totalWidth - weekColumnWidth}px`,
               height: `${rowHeight}px`,
               background: holidayDisplay.pattern ? `${holidayDisplay.gradient}, ${holidayDisplay.pattern}` : holidayDisplay.gradient,
               zIndex: 15,
@@ -1251,21 +1263,20 @@ const YearlyGrid = ({
               borderRight: '1px solid rgba(255, 255, 255, 0.2)',
             }}
           >
-            <div className="text-2xl">{holidayDisplay.emoji}</div>
+            <div className={densityMode === 'compact' ? 'text-base' : 'text-2xl'}>{holidayDisplay.emoji}</div>
             <span className={`text-sm font-bold leading-tight mt-1 ${densityMode === 'compact' ? 'text-xs' : ''}`}>
               {holiday.name.length > 15 ? `${holiday.name.substring(0, 12)}...` : holiday.name}
             </span>
           </div>
         )}
-        <div 
+        <div
           className={`sticky left-0 p-3 text-center font-semibold text-gray-700 dark:text-slate-200 bg-white dark:bg-slate-800 border-r-2 border-b border-gray-400 dark:border-slate-600 z-20 ${isCurrentWeek ? 'bg-blue-50 dark:bg-blue-900/30' : ''}`}
-          style={{ 
-            width: `${weekColumnWidth}px`, 
-            minWidth: `${weekColumnWidth}px`, 
+          style={{
+            width: `${weekColumnWidth}px`,
+            minWidth: `${weekColumnWidth}px`,
             maxWidth: `${weekColumnWidth}px`,
             height: `${rowHeight}px`,
-            left: 0,
-            zIndex: 30
+            zIndex: 30,
           }}
         >
           <div className={`text-sm ${densityMode === 'compact' ? 'text-xs' : ''}`}>
@@ -1296,7 +1307,7 @@ const YearlyGrid = ({
   }, [isAssignMode, selectedLessons]);
 
   return (
-    <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm h-full flex flex-col relative"> {/* ← relative hier */}
+    <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm h-full flex flex-col relative w-full min-h-0 overflow-hidden"> {/* Container passt sich Parent an */}
       {/* 1. KLASSEN-SELECTION sticky */}
       <ClassSelectorBar
         classes={classes || []}
@@ -1307,7 +1318,7 @@ const YearlyGrid = ({
       {/* 2. Scroll-Container */}
       <div
         ref={containerRef}
-        className="flex-1 overflow-auto scrollbar-gutter-stable relative" // ← auch hier relative (für Kinder)
+        className="flex-1 min-h-0 overflow-auto relative w-full yearly-table-container"
         onScroll={handleScroll}
       >
         {/* Fächer-Header – sticky + zentriert */}
@@ -1326,20 +1337,21 @@ const YearlyGrid = ({
             const blockWidth = subjectBlockWidths[i] || 100;
             const subjectColor = sub.color || '#3b82f6';
 
-            // Hex + Alpha → #3b82f620 = ca. 12–15 % Deckkraft (perfekt sichtbar, aber nicht zu stark)
-            const tintColor = subjectColor + '22'; // 22 hex = ~13% opacity
+            // Diagonaler Gradient für modernes Design (wie bei Lektionszellen)
+            const gradientColor = subjectColor + '50'; // 31% Opazität für sichtbaren Gradient
 
             return (
               <div
                 key={sub.id}
-                className={`p-3 font-bold text-center text-slate-800 dark:text-slate-100 border-b-2 border-l border-slate-200 dark:border-slate-600
-                  ${i === 0 ? 'border-l-0' : ''} 
+                className={`p-3 font-bold text-center text-slate-800 dark:text-slate-100 border-l border-slate-200 dark:border-slate-600
+                  ${i === 0 ? 'border-l-0' : ''}
                   ${i === subjects.length - 1 ? 'border-r-2 border-slate-200 dark:border-slate-600' : ''}`}
                 style={{
                   width: `${blockWidth}px`,
                   minWidth: `${blockWidth}px`,
                   maxWidth: `${blockWidth}px`,
-                  backgroundColor: tintColor,   // ← das ist der neue Teil
+                  background: createGradient(gradientColor, -15),
+                  borderBottom: `3px solid ${adjustColor(subjectColor, -10)}`,
                   height: `${rowHeight}px`,
                 }}
               >

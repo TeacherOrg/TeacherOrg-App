@@ -1,5 +1,7 @@
 import React from 'react';
-import { createGradient } from '@/utils/colorUtils';import { normalizeAllerleiData, calculateAllerleiGradient } from '@/components/timetable/allerlei/AllerleiUtils';
+import { createGradient } from '@/utils/colorUtils';
+import { normalizeAllerleiData, calculateAllerleiGradient } from '@/components/timetable/allerlei/AllerleiUtils';
+import { LessonBadge } from '@/components/shared/lesson';
 
 const LessonCard = ({ lesson, isDragging, onMouseEnter, onMouseLeave, onMouseMove, subjects = [], isAltPressed, isSelectingMerge, mergePreview }) => {
   if (!lesson) return null;
@@ -33,7 +35,7 @@ const LessonCard = ({ lesson, isDragging, onMouseEnter, onMouseLeave, onMouseMov
       className={`
         w-full h-full rounded-lg p-2 cursor-pointer transition-all duration-150
         shadow-md hover:shadow-lg text-white text-center flex flex-col justify-center relative
-        ${isDragging ? 'opacity-90 shadow-2xl scale-105 -rotate-2' : ''}
+        ${isDragging ? 'shadow-2xl ring-2 ring-blue-500' : ''}
         ${isAltPressed ? 'ring-4 ring-purple-400/50 shadow-xl transition-all' : ''}
         ${isAltPressed && !isSelectingMerge ? 'ring-4 ring-purple-500/60 scale-105 shadow-2xl' : ''}
       `}
@@ -42,16 +44,8 @@ const LessonCard = ({ lesson, isDragging, onMouseEnter, onMouseLeave, onMouseMov
       onMouseLeave={onMouseLeave}
       onMouseMove={onMouseMove}
     >
-      {is_half_class && (
-        <div className="absolute top-1 left-1 bg-black/30 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full shadow-md">
-          1/2
-        </div>
-      )}
-      {is_exam && (
-        <div className="absolute top-1 right-1 bg-black/30 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full shadow-md">
-          ❗
-        </div>
-      )}
+      {is_half_class && <LessonBadge variant="half-class" position="top-left" />}
+      {is_exam && <LessonBadge variant="exam" position="top-right" />}
       <div className={`font-bold text-sm ${is_allerlei ? 'mb-1' : ''}`}>
         {is_allerlei ? (
           'Allerlei'

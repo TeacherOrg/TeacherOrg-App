@@ -137,9 +137,9 @@ export const AllerleiSubjectSelector = ({
           <div className="space-y-2">
             <Label className="text-sm font-semibold text-slate-900 dark:text-white">Schritte für {subject}</Label>
             <div className="space-y-3 p-4 border rounded-lg bg-white/50 dark:bg-slate-700/50 border-slate-200 dark:border-slate-600">
-              {steps.map(step => (
+              {steps.map((step, stepIndex) => (
                 <AllerleiStepRow
-                  key={step.id}
+                  key={`allerlei-${index}-step-${stepIndex}-${step.id}`}
                   step={step}
                   onUpdate={(field, value) => onUpdateStep(index, step.id, field, value)}
                   onRemove={() => onRemoveStep(index, step.id)}

@@ -1,7 +1,8 @@
-import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import FiltersSection from './FiltersSection';
 import Leistungscharts from './LeistungCharts';
 import KompetenzenCharts from './KompetenzenCharts';
+import KPICards from './KPICards';
 import { Button } from "@/components/ui/button";
 import { Activity, Star } from 'lucide-react';
 
@@ -44,25 +45,40 @@ const DiagramTab = ({ students, performances, ueberfachlich, subjects, allCompet
   }, [diagramView, competencyOptions]);
 
   return (
-    <div className="space-y-6">
-      <div className="flex justify-start gap-3 p-2 bg-white/50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700 max-w-sm">
+    <div className="space-y-4">
+      {/* View Toggle */}
+      <div className="flex justify-start gap-3 p-1.5 bg-white/50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700 max-w-xs">
         <Button
           variant={diagramView === 'leistung' ? 'default' : 'ghost'}
-          className={`w-full ${diagramView === 'leistung' ? 'bg-blue-600' : 'text-slate-300 hover:bg-slate-700'}`}
+          size="sm"
+          className={`flex-1 ${diagramView === 'leistung' ? 'bg-blue-600' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'}`}
           onClick={() => setDiagramView('leistung')}
         >
-          <Activity className="w-4 h-4 mr-2" />
+          <Activity className="w-4 h-4 mr-1.5" />
           Leistung
         </Button>
         <Button
           variant={diagramView === 'kompetenzen' ? 'default' : 'ghost'}
-          className={`w-full ${diagramView === 'kompetenzen' ? 'bg-blue-600' : 'text-slate-300 hover:bg-slate-700'}`}
+          size="sm"
+          className={`flex-1 ${diagramView === 'kompetenzen' ? 'bg-blue-600' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'}`}
           onClick={() => setDiagramView('kompetenzen')}
         >
-          <Star className="w-4 h-4 mr-2" />
+          <Star className="w-4 h-4 mr-1.5" />
           Kompetenzen
         </Button>
       </div>
+
+      {/* KPI Cards - only show for Leistung view */}
+      {diagramView === 'leistung' && (
+        <KPICards
+          performances={performances}
+          students={students}
+          subjects={subjects}
+          selectedSubject={selectedSubject}
+          selectedStudents={selectedStudents}
+        />
+      )}
+
       <FiltersSection
         diagramView={diagramView}
         selectedSubject={selectedSubject}

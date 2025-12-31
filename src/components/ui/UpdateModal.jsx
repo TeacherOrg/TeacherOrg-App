@@ -19,14 +19,18 @@ const UpdateModal = ({ isOpen, onClose, version }) => {
         {
           subcategory: 'Allgemein',
           items: [
-            { text: 'OliOmegaGay', type: 'fixed' },
+            { text: 'OliOmegaGay', type: 'rainbow' },
+            { text: 'MurieLame', type: 'turd' },
             { text: 'Neue Sidebar (Ein/Ausklappbar + Ansichtenanpassung', type: 'fixed' },
+            { text: 'Einstellungsmenü überarbeitet', type: 'fixed' },
+            { text: 'Technische Updates und Upgrades', type: 'mech' },
           ],
         },
         {
           subcategory: 'Leistungsansicht',
           items: [
             { text: 'Achtung: Prüfungsgewichtung muss eingegeben werden', type: 'warning' },
+            { text: 'Neues Layout', type: 'fixed' },
             { text: 'Notenschnittberechnungen korrigiert', type: 'fixed' },
             { text: 'Klassendurchschnittsfarbe angepasst für bessere Lesbarkeit', type: 'fixed' },
             { text: 'Weitere Leistungsansicht-Verbesserungen', type: 'fixed' },
@@ -43,6 +47,7 @@ const UpdateModal = ({ isOpen, onClose, version }) => {
           items: [
             { text: 'Rechtsklick auf Zelle öffnet Menü zum Verschieben + Kopieren', type: 'fixed' },
             { text: 'Shortcuts für Lektionszellen ohne Themen (Verschieben, Kopieren)', type: 'fixed' },
+            { text: 'Mehrere Klassen anzeigen /wählen', type: 'fixed' },
           ],
         },
         {
@@ -60,6 +65,7 @@ const UpdateModal = ({ isOpen, onClose, version }) => {
             { text: 'Themenzuweisung bestehender Lektionen', type: 'fixed' },
             { text: 'Themenspezifische Materialien speichern für Bearbeitungsmenü', type: 'fixed' },
             { text: 'Thema löschen = Löschen aller zugehörigen Lektionen', type: 'fixed' },
+            { text: 'LP21 Kompetenzen zuweisbar', type: 'fixed' },
           ],
         },
         {
@@ -67,8 +73,6 @@ const UpdateModal = ({ isOpen, onClose, version }) => {
           items: [
             { text: 'Materialien aus Thema stehen bei den Schritten zur Verfügung ', type: 'fixed' },
             { text: 'Lektionstemplates können erstellt werden und erlauben hinzufügen neuer Lektionen', type: 'fixed' },
-            { text: 'Fixes', type: 'fixed' },
-            { text: 'Manchmal muss mehrfach auf Lektion in Wochenansicht geklickt werden, damit Modal öffnet', type: 'warning' },
           ],
         },
         {
@@ -88,7 +92,7 @@ const UpdateModal = ({ isOpen, onClose, version }) => {
         {
           subcategory: 'Lehrplankompetenzen',
           items: [
-            { text: 'Testphase', type: 'warning' },
+            { text: 'Testphase - unvollständig', type: 'warning' },
           ],
         },
       ],
@@ -99,9 +103,9 @@ const UpdateModal = ({ isOpen, onClose, version }) => {
         {
           subcategory: 'Geplante Änderungen',
           items: [
-            { text: 'Jahrestabelle optimieren', type: 'not-fixed' },
-            { text: 'Allerleilektionsmerging einfügen', type: 'not-fixed' },
-            { text: 'Sofortige Titelübernahme LessonCard in Jahresansicht', type: 'not-fixed' },
+            { text: 'LP21 vervollständigen', type: 'not-fixed' },
+            { text: 'Speziallektionen in Wochenansicht einfügbar (Zahnputzfee, Wanderung, etc.)', type: 'not-fixed' },
+            { text: 'Jahreswechsel - neue Klasse /Themen reset etc. ', type: 'not-fixed' },
           ],
         },
       ],
@@ -112,13 +116,19 @@ const UpdateModal = ({ isOpen, onClose, version }) => {
   const getIcon = (type) => {
     switch (type) {
       case 'fixed':
-        return '✅ '; // Green checkmark (emoji for simplicity; you can replace with an icon component)
+        return '✅ '; // Erledigt / Fixed
       case 'not-fixed':
-        return '❌ '; // Red cross
+        return '❌ '; // Nicht erledigt
       case 'warning':
-        return '⚠️ '; // Yellow warning
+        return '⚠️ '; // Warnung
+      case 'rainbow':
+        return '🌈 '; // Regenbogen
+      case 'turd':
+        return '💩 '; // Klassischer "Pile of Poo" – passt perfekt zum Witz
+      case 'mech':
+        return '🤖 '; // Roboter / Mech
       default:
-        return ''; // No icon if type not specified
+        return ''; // Kein Icon bei unbekanntem Typ
     }
   };
 
@@ -126,7 +136,7 @@ const UpdateModal = ({ isOpen, onClose, version }) => {
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>TeacherOrg Update: Version Alpha 6.9.0</DialogTitle>
+          <DialogTitle>TeacherOrg Update: Version Alpha 6.9.0 - nice </DialogTitle>
           <DialogDescription>
             Hier sind die neuesten Änderungen:
           </DialogDescription>

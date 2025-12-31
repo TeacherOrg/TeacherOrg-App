@@ -29,11 +29,9 @@ const useDragAndDrop = (lessonsForCurrentWeek, allLessons, allerleiLessons, curr
 
     // Nur hier normalen Drag starten
     setActiveDragId(event.active.id);
-    console.log('Debug: Drag started with ID:', event.active.id);
   }, [setActiveDragId]);
 
   const findAlternativeSlot = useCallback((lessons, targetDay, startPeriod, timeSlots, currentWeek) => {
-    console.log('Debug: findAlternativeSlot called with:', { targetDay, startPeriod, currentWeek });
     for (let p = startPeriod + 2; p <= timeSlots.length; p++) {
       if (!lessons.some(l => l.day_of_week === targetDay && l.period_slot === p && l.week_number === currentWeek)) {
         return { day: targetDay, period: p };
@@ -56,15 +54,12 @@ const useDragAndDrop = (lessonsForCurrentWeek, allLessons, allerleiLessons, curr
   const handleDragEnd = useCallback(async (event) => {
     const { active, over } = event;
     if (!over || active.id === over.id) {
-      console.log('Debug: Drag ended without a valid drop target or same ID:', { activeId: active.id, overId: over?.id });
       setActiveDragId(null);
       return;
     }
 
     const [targetDay, targetPeriodStr] = over.id.split('-');
     const targetPeriod = parseInt(targetPeriodStr, 10);
-
-    console.log('Debug: handleDragEnd called with:', { activeId: active.id, overId: over.id, targetDay, targetPeriod });
 
     if (active.id.startsWith('pool-')) {
       // Handle drag from pool: Create new lesson
@@ -106,15 +101,6 @@ const useDragAndDrop = (lessonsForCurrentWeek, allLessons, allerleiLessons, curr
             !l.is_hidden
           );
 
-          console.log('Debug: Checking YearlyLesson availability:', { 
-            ylId: yl.id, 
-            subjectName: yl.expand?.subject?.name || yl.subject_name,
-            lessonCount,
-            isPlannedInAllerlei,
-            isNotAllerlei,
-            isPlannedAsSlave
-          });
-
           return matchesSubject && 
                  matchesWeek && 
                  lessonCount < (yl.is_half_class ? 2 : 1) && 
@@ -130,14 +116,6 @@ const useDragAndDrop = (lessonsForCurrentWeek, allLessons, allerleiLessons, curr
         setActiveDragId(null);
         return;
       }
-
-      console.log('Debug: Selected YearlyLesson:', {
-        id: availableYearly.id,
-        subject: subject.name,
-        week_number: availableYearly.week_number,
-        lesson_number: availableYearly.lesson_number,
-        is_half_class: availableYearly.is_half_class
-      });
 
       // Korrekte Master/Slave-Zuordnung
       let masterYL = availableYearly;
@@ -170,7 +148,6 @@ const useDragAndDrop = (lessonsForCurrentWeek, allLessons, allerleiLessons, curr
           return;
         }
         finalTarget = alternative;
-        console.log('Debug: Using alternative slot:', finalTarget);
       }
 
       // Handle double lesson if applicable
@@ -218,12 +195,9 @@ const useDragAndDrop = (lessonsForCurrentWeek, allLessons, allerleiLessons, curr
         class_id: activeClassId,
       };
 
-      console.log('Debug: Creating new lesson with data:', newLessonData);
-
       try {
         const newLesson = await Lesson.create(newLessonData);
         optimisticUpdateAllLessons(newLesson, true); // true indicates addition
-        console.log('Debug: Created lesson:', newLesson);
 
         // NEU – Nur Master anlegen, Slave nur verlinken
         if (isDoubleLesson && slaveYL) {
@@ -253,11 +227,8 @@ const useDragAndDrop = (lessonsForCurrentWeek, allLessons, allerleiLessons, curr
 
         // Reassign and update order for the affected subject
         const affectedSubjectName = subject.name;
-        console.log('Debug: Reassigning lessons for subject:', affectedSubjectName);
         let updatedLessons = await reassignYearlyLessonLinks(affectedSubjectName, [...allLessons, newLesson]);
-        console.log('Debug: Updated lessons after reassignment:', updatedLessons);
         const updatedYearly = await updateYearlyLessonOrder(affectedSubjectName, updatedLessons);
-        console.log('Debug: Updated yearly lessons order:', updatedYearly);
         setAllLessons(updatedLessons);
         setYearlyLessons(updatedYearly);
 
@@ -300,7 +271,6 @@ const useDragAndDrop = (lessonsForCurrentWeek, allLessons, allerleiLessons, curr
         return;
       }
       finalTarget = alternative;
-      console.log('Debug: Using alternative slot for moved lesson:', finalTarget);
     }
 
     const isDoubleLesson = !!draggedLesson.second_yearly_lesson_id;
@@ -325,8 +295,6 @@ const useDragAndDrop = (lessonsForCurrentWeek, allLessons, allerleiLessons, curr
       period_span: draggedLesson.is_double_lesson ? 2 : draggedLesson.period_span || 1,
     };
 
-    console.log('Debug: Updating lesson:', { lessonId: draggedLesson.id, updateData });
-
     try {
       optimisticUpdateAllLessons(draggedLesson.id, updateData);
 
@@ -343,7 +311,6 @@ const useDragAndDrop = (lessonsForCurrentWeek, allLessons, allerleiLessons, curr
             period_slot: finalTarget.period + 1,
             period_span: 1,  // explizit
           };
-          console.log('Debug: Updating second lesson for double lesson:', { lessonId: secondLesson.id, secondUpdate });
           optimisticUpdateAllLessons(secondLesson.id, secondUpdate);
           await Lesson.update(secondLesson.id, secondUpdate);
         }
@@ -365,11 +332,8 @@ const useDragAndDrop = (lessonsForCurrentWeek, allLessons, allerleiLessons, curr
 
       const affectedSubject = subjects.find(s => s.id === draggedLesson.subject)?.name;
       if (affectedSubject) {
-        console.log('Debug: Reassigning lessons for subject:', affectedSubject);
         let updatedLessons = await reassignYearlyLessonLinks(affectedSubject, allLessons);
-        console.log('Debug: Updated lessons after reassignment:', updatedLessons);
         const updatedYearly = await updateYearlyLessonOrder(affectedSubject, updatedLessons);
-        console.log('Debug: Updated yearly lessons order:', updatedYearly);
         setAllLessons(updatedLessons);
         setYearlyLessons(updatedYearly);
       }

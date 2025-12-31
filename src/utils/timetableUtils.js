@@ -1,8 +1,15 @@
+import { getISOWeek, getISOWeekYear, getISOWeeksInYear } from 'date-fns';
+
 function getCurrentWeek() {
-  const now = new Date();
-  const start = new Date(now.getFullYear(), 0, 1);
-  const days = Math.floor((now - start) / (24 * 60 * 60 * 1000));
-  return Math.ceil((days + start.getDay() + 1) / 7);
+  return getISOWeek(new Date());
+}
+
+function getCurrentWeekYear() {
+  return getISOWeekYear(new Date());
+}
+
+function getWeeksInYear(year) {
+  return getISOWeeksInYear(new Date(year, 5, 1)); // Use mid-year date to get correct year
 }
 
 function getWeekInfo(week, year) {
@@ -72,4 +79,4 @@ function generateTimeSlots(settings) {
   return slots;
 }
 
-export { getCurrentWeek, getWeekInfo, generateTimeSlots };
+export { getCurrentWeek, getCurrentWeekYear, getWeeksInYear, getWeekInfo, generateTimeSlots };

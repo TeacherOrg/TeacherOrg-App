@@ -443,25 +443,28 @@ const useLessonHandlers = (editingLesson, currentYear, allLessons, yearlyLessons
             const oldSubjectName = subjects.find(s => s.id === oldLesson.subject)?.name;
             subjectsToReassign.add(oldSubjectName);
           }
-          console.log('Updating lesson with data:', updateDataWithoutSteps);
-          await Lesson.update(id, updateDataWithoutSteps);
-          const updatedLesson = { ...oldLesson, ...updateDataWithoutSteps };
-          optimisticUpdateAllLessons(updatedLesson);
-          if (updatedLesson.yearly_lesson_id && !updatedLesson.is_allerlei) {
-            const yearlyLessonToUpdate = yearlyLessons.find(yl => yl.id === updatedLesson.yearly_lesson_id);
-            if (yearlyLessonToUpdate) {
-              const yearlyUpdateData = {
-                steps: steps?.filter(s => !s.id?.startsWith('second-')) || [],
-                topic_id: updatedLesson.topic_id || null,
-                is_double_lesson: updatedLesson.is_double_lesson || false,
-                second_yearly_lesson_id: updatedLesson.second_yearly_lesson_id || null,
-                is_exam: updatedLesson.is_exam || false,
-                is_half_class: updatedLesson.is_half_class || false,
-                name: lessonData.name || yearlyLessonToUpdate.name || `Lektion ${yearlyLessonToUpdate.lesson_number}`
-              };
-              console.log('Syncing updated weekly lesson back to yearly lesson:', yearlyLessonToUpdate.id, yearlyUpdateData);
-              await YearlyLesson.update(yearlyLessonToUpdate.id, yearlyUpdateData);
-              optimisticUpdateYearlyLessons(yearlyLessonToUpdate.id, yearlyUpdateData);
+          // Skip Lesson.update for Allerlei that was already saved directly
+          if (lessonData.collectionName !== 'allerlei_lessons') {
+            console.log('Updating lesson with data:', updateDataWithoutSteps);
+            await Lesson.update(id, updateDataWithoutSteps);
+            const updatedLesson = { ...oldLesson, ...updateDataWithoutSteps };
+            optimisticUpdateAllLessons(updatedLesson);
+            if (updatedLesson.yearly_lesson_id && !updatedLesson.is_allerlei) {
+              const yearlyLessonToUpdate = yearlyLessons.find(yl => yl.id === updatedLesson.yearly_lesson_id);
+              if (yearlyLessonToUpdate) {
+                const yearlyUpdateData = {
+                  steps: steps?.filter(s => !s.id?.startsWith('second-')) || [],
+                  topic_id: updatedLesson.topic_id || null,
+                  is_double_lesson: updatedLesson.is_double_lesson || false,
+                  second_yearly_lesson_id: updatedLesson.second_yearly_lesson_id || null,
+                  is_exam: updatedLesson.is_exam || false,
+                  is_half_class: updatedLesson.is_half_class || false,
+                  name: lessonData.name || yearlyLessonToUpdate.name || `Lektion ${yearlyLessonToUpdate.lesson_number}`
+                };
+                console.log('Syncing updated weekly lesson back to yearly lesson:', yearlyLessonToUpdate.id, yearlyUpdateData);
+                await YearlyLesson.update(yearlyLessonToUpdate.id, yearlyUpdateData);
+                optimisticUpdateYearlyLessons(yearlyLessonToUpdate.id, yearlyUpdateData);
+              }
             }
           }
         }

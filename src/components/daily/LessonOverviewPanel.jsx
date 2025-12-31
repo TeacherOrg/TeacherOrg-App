@@ -2,6 +2,7 @@ import React from "react";
 import { motion } from "framer-motion";
 import { Clock, BookOpen } from "lucide-react";
 import { createMixedSubjectGradient, createGradient } from "@/utils/colorUtils";
+import HolidayDecorations from "@/components/timetable/HolidayDecorations";
 
 export default function LessonOverviewPanel({
   items,
@@ -11,35 +12,46 @@ export default function LessonOverviewPanel({
   customization,
   currentItem,
 }) {
-  const getHolidayEmoji = (holiday) => {
-    if (!holiday) return '📅';
+  const getHolidayDisplay = (holiday) => {
+    if (!holiday) return { emoji: '📅', gradient: 'linear-gradient(135deg, #64748b 0%, #475569 100%)' };
     switch (holiday.type) {
       case 'vacation':
-        if (holiday.name.includes('Sommer')) return '☀️';
-        if (holiday.name.includes('Herbst')) return '🍂';
-        if (holiday.name.includes('Weihnacht')) return '🎄';
-        if (holiday.name.includes('Sport')) return '⛷️';
-        if (holiday.name.includes('Frühling')) return '🌸';
-        return '🏖️';
-      case 'holiday': return '🎉';
-      case 'training': return '📚';
-      default: return '📅';
-    }
-  };
-
-  const getHolidayHexColor = (holiday) => {
-    if (!holiday) return '#64748b';
-    switch (holiday.type) {
-      case 'vacation':
-        if (holiday.name.includes('Sommer')) return '#f59e0b';
-        if (holiday.name.includes('Herbst')) return '#f97316';
-        if (holiday.name.includes('Weihnacht')) return '#22c55e';
-        if (holiday.name.includes('Sport')) return '#3b82f6';
-        if (holiday.name.includes('Frühling')) return '#ec4899';
-        return '#06b6d4';
-      case 'holiday': return '#8b5cf6';
-      case 'training': return '#6366f1';
-      default: return '#64748b';
+        if (holiday.name.includes('Sommer')) return {
+          emoji: '☀️',
+          gradient: 'linear-gradient(135deg, #fbbf24 0%, #f59e0b 50%, #fb923c 100%)'
+        };
+        if (holiday.name.includes('Herbst')) return {
+          emoji: '🍂',
+          gradient: 'linear-gradient(135deg, #f97316 0%, #ea580c 50%, #dc2626 100%)'
+        };
+        if (holiday.name.includes('Weihnacht')) return {
+          emoji: '🎄',
+          gradient: 'linear-gradient(135deg, #059669 0%, #047857 50%, #065f46 100%)'
+        };
+        if (holiday.name.includes('Sport')) return {
+          emoji: '⛷️',
+          gradient: 'linear-gradient(135deg, #0ea5e9 0%, #0284c7 50%, #0369a1 100%)'
+        };
+        if (holiday.name.includes('Frühling')) return {
+          emoji: '🌸',
+          gradient: 'linear-gradient(135deg, #f9a8d4 0%, #f472b6 50%, #ec4899 100%)'
+        };
+        return {
+          emoji: '🏖️',
+          gradient: 'linear-gradient(135deg, #06b6d4 0%, #0891b2 50%, #0e7490 100%)'
+        };
+      case 'holiday': return {
+        emoji: '🎉',
+        gradient: 'linear-gradient(135deg, #a855f7 0%, #9333ea 50%, #7e22ce 100%)'
+      };
+      case 'training': return {
+        emoji: '📚',
+        gradient: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 50%, #4338ca 100%)'
+      };
+      default: return {
+        emoji: '📅',
+        gradient: 'linear-gradient(135deg, #64748b 0%, #475569 100%)'
+      };
     }
   };
 
@@ -96,13 +108,19 @@ export default function LessonOverviewPanel({
       <div className="flex-1 overflow-y-auto p-3">
         {currentHoliday ? (
           <motion.div
-            className="text-white p-6 rounded-xl text-center"
-            style={{ background: getCardGradient(getHolidayHexColor(currentHoliday)) }}
+            className="text-white p-6 rounded-xl text-center relative overflow-hidden"
+            style={{ background: getHolidayDisplay(currentHoliday).gradient }}
           >
-            <div className="text-6xl mb-4">{getHolidayEmoji(currentHoliday)}</div>
-            <h3 className={`${customization.fontSize.title} font-bold mb-2 font-[Inter]`}>
-              {currentHoliday.name}
-            </h3>
+            {/* Animierte Dekorationen */}
+            <HolidayDecorations type={currentHoliday.type} holidayName={currentHoliday.name} />
+
+            {/* Inhalt */}
+            <div className="relative z-10">
+              <div className="text-6xl mb-4 drop-shadow-lg">{getHolidayDisplay(currentHoliday).emoji}</div>
+              <h3 className={`${customization.fontSize.title} font-bold mb-2 font-[Inter] drop-shadow-md`}>
+                {currentHoliday.name}
+              </h3>
+            </div>
           </motion.div>
         ) : items.length > 0 ? (
           <div className="grid grid-cols-1 gap-3" style={{ gridAutoRows: '1fr' }}>

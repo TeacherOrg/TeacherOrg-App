@@ -17,6 +17,7 @@ export default function Login({ onLogin }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [username, setUsername] = useState('');
+  const [name, setName] = useState(''); // Vollständiger Name für Anzeige
   const [role, setRole] = useState('teacher');
   const [isRegister, setIsRegister] = useState(false);
   const [error, setError] = useState(null);
@@ -40,6 +41,7 @@ export default function Login({ onLogin }) {
       if (isRegister) {
         await pb.collection('users').create({
           username,
+          name, // Vollständiger Name für Anzeige
           email,
           password,
           passwordConfirm: password,
@@ -85,14 +87,24 @@ export default function Login({ onLogin }) {
 
         <form onSubmit={handleSubmit} className="space-y-4">
           {isRegister && (
-            <Input
-              type="text"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              placeholder="Benutzername (erforderlich)"
-              className="bg-slate-700 border-slate-600 text-white"
-              required
-            />
+            <>
+              <Input
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Vollstaendiger Name (z.B. Max Mustermann)"
+                className="bg-slate-700 border-slate-600 text-white"
+                required
+              />
+              <Input
+                type="text"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                placeholder="Benutzername (erforderlich)"
+                className="bg-slate-700 border-slate-600 text-white"
+                required
+              />
+            </>
           )}
 
           {isRegister && (

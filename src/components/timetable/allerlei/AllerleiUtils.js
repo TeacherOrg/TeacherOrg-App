@@ -57,6 +57,9 @@ export const normalizeAllerleiData = (item, subjects) => {
       description: `Allerlei: ${item.allerlei_subjects.join(' + ')}`,
       allerlei_subjects: item.allerlei_subjects,
       period_span: item.period_span || (Array.isArray(item.added_yearly_lesson_ids) ? item.added_yearly_lesson_ids.length + 1 : 1),
+      // Computed: is_exam wenn mindestens eine enthaltene Lektion eine Prüfung ist
+      is_exam: Array.isArray(item.exam_yearly_lesson_ids) && item.exam_yearly_lesson_ids.length > 0,
+      is_half_class: Array.isArray(item.half_class_yearly_lesson_ids) && item.half_class_yearly_lesson_ids.length > 0,
     };
   }
 
@@ -71,6 +74,8 @@ export const normalizeAllerleiData = (item, subjects) => {
     description: 'Allerlei (alte Version)',
     allerlei_subjects: [],
     period_span: 1,
+    is_exam: Array.isArray(item.exam_yearly_lesson_ids) && item.exam_yearly_lesson_ids.length > 0,
+    is_half_class: Array.isArray(item.half_class_yearly_lesson_ids) && item.half_class_yearly_lesson_ids.length > 0,
   };
 };
 

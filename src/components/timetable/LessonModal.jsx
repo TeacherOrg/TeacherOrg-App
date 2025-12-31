@@ -1,17 +1,15 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Save, X, Trash2, PlusCircle, BookOpen, Copy } from "lucide-react";
+import { PlusCircle } from "lucide-react";
 import { Lesson, YearlyLesson, AllerleiLesson } from '@/api/entities';
 import { debounce } from 'lodash';
 import { useAllerleiLogic } from '@/components/timetable/allerlei/useAllerleiLogic';
 import { AllerleiSubjectSelector, AllerleiToggleSection } from '@/components/timetable/allerlei/AllerleiComponents';
-import { calculateAllerleiGradient, prepareAllerleiForPersist } from '@/components/timetable/allerlei/AllerleiUtils';
-import { findFreeSlot } from '@/utils/slotUtils';
+import { prepareAllerleiForPersist } from '@/components/timetable/allerlei/AllerleiUtils';
 import { createGradient, createMixedSubjectGradient } from '@/utils/colorUtils';
 import pb from '@/api/pb';
 import { allerleiService } from '@/components/timetable/hooks/allerleiService';
@@ -20,6 +18,16 @@ import LessonTemplatePopover from '@/components/lesson-planning/LessonTemplatePo
 import { useQueryClient } from '@tanstack/react-query';
 import StepRow from '@/components/lesson-planning/StepRow';
 import { generateId } from '@/components/lesson-planning/utils';
+import { useStepManagement, useTemplateSaveModal } from '@/components/lesson-planning/hooks';
+import TemplateSaveModal from '@/components/lesson-planning/TemplateSaveModal';
+
+// Shared components
+import {
+  LessonModalHeader,
+  LessonTogglesRow,
+  TopicSelector,
+  LessonModalFooter
+} from '@/components/shared/lesson-modal';
 
 const dayTranslations = {
   'monday': 'Montag',
@@ -42,22 +50,42 @@ export default function LessonModal({
   lesson, copiedLesson, slotInfo, currentWeek, allLessons, allYearlyLessons, timeSlots,
   subjectColor, initialSubject, subjects, topics, activeClassId, setEditingLesson,
   setIsModalOpen, currentYear,
-  formData: propFormData = {} // Rename prop to propFormData
+  formData: propFormData = {},
+  settings = null
 }) {
-  const { setAllLessons } = useLessonStore();  // Korrigiert: Hook an Top-Level
+  const { setAllLessons } = useLessonStore();
   const queryClient = useQueryClient();
 
-  // Direkt nach den Props
   const [formData, setFormData] = useState(() => {
-    // Wenn formData von außen kommt (z.B. beim Allerlei-Drag), dann verwenden
     if (propFormData && Object.keys(propFormData).length > 0) {
       return propFormData;
     }
-    // Sonst normal initialisieren
     return {};
   });
-  const [primarySteps, setPrimarySteps] = useState([]);
-  const [secondSteps, setSecondSteps] = useState([]);
+
+  // Use extracted hooks for step management and template save
+  const {
+    primarySteps,
+    secondSteps,
+    setPrimarySteps,
+    setSecondSteps,
+    handleAddPrimaryStep,
+    handleRemovePrimaryStep,
+    handleUpdatePrimaryStep,
+    handleAddSecondStep,
+    handleRemoveSecondStep,
+    handleUpdateSecondStep
+  } = useStepManagement();
+
+  const {
+    showTemplateSave,
+    templateName,
+    setTemplateName,
+    handleSaveAsTemplate: saveTemplate,
+    openTemplateSave,
+    closeTemplateSave
+  } = useTemplateSaveModal();
+
   const [addSecondLesson, setAddSecondLesson] = useState(false);
   const [selectedSecondLesson, setSelectedSecondLesson] = useState("");
   const [selectedSubject, setSelectedSubject] = useState("");
@@ -66,10 +94,8 @@ export default function LessonModal({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [validationError, setValidationError] = useState(null);
   const [integratedOriginalData, setIntegratedOriginalData] = useState({});
-  const [wasAllerlei, setWasAllerlei] = useState(!!lesson?.collectionName === 'allerlei_lessons');
-  const [showTemplateSave, setShowTemplateSave] = useState(false);
-  const [templateName, setTemplateName] = useState("");
-  const [isUnifiedDouble, setIsUnifiedDouble] = useState(false); // neu!
+  const [wasAllerlei, setWasAllerlei] = useState(lesson?.collectionName === 'allerlei_lessons');
+  const [isUnifiedDouble, setIsUnifiedDouble] = useState(false);
   const [dissolvingPrimaryId, setDissolvingPrimaryId] = useState(null);
   const [topicMaterials, setTopicMaterials] = useState([]);
 
@@ -78,7 +104,7 @@ export default function LessonModal({
 
   const originalLessonRef = useRef(null);
 
-  const scheduledLessonIds = useMemo(() => 
+  const scheduledLessonIds = useMemo(() =>
     new Set([
       ...allLessons.filter(l => l.yearly_lesson_id).map(l => l.yearly_lesson_id),
       ...allLessons.filter(l => l.second_yearly_lesson_id).map(l => l.second_yearly_lesson_id)
@@ -89,9 +115,9 @@ export default function LessonModal({
   const scheduledLessonsForSubject = useMemo(() => {
     if (!selectedSubject) return [];
     return allLessons
-      .filter(l => 
-        l.subject === selectedSubject && 
-        l.week_number === currentWeek && 
+      .filter(l =>
+        l.subject === selectedSubject &&
+        l.week_number === currentWeek &&
         !l.is_hidden
       )
       .map(l => ({
@@ -104,7 +130,7 @@ export default function LessonModal({
 
   const subjectOptions = useMemo(() => {
     if (!subjects || !activeClassId) return [];
-    
+
     return subjects
       .filter(s => s.class_id === activeClassId)
       .reduce((unique, subject) => {
@@ -118,13 +144,10 @@ export default function LessonModal({
 
   const subjectTopics = useMemo(() => {
     if (!selectedSubject) return [];
-    // selectedSubject ist die Subject-ID; Topic.subject kann aber entweder die ID oder der Subject-Name sein.
     const selectedSubjectObj = subjectOptions.find(s => s.id === selectedSubject);
     const selectedSubjectName = selectedSubjectObj?.name;
     return topics?.filter(topic =>
-      // Akzeptiere Topics, deren topic.subject mit der ID übereinstimmt
       topic.subject === selectedSubject ||
-      // ...oder mit dem Subject-Namen übereinstimmt (Fallback)
       (selectedSubjectName && topic.subject === selectedSubjectName)
     ) || [];
   }, [topics, subjectOptions, selectedSubject]);
@@ -134,15 +157,7 @@ export default function LessonModal({
     return subjectTopics.find(t => t.id === formData.topic_id);
   }, [formData.topic_id, subjectTopics]);
 
-  // Debug: topicMaterials changed
-  useEffect(() => {
-    console.log('topicMaterials changed:', topicMaterials.length > 0 ? topicMaterials : 'keine');
-  }, [topicMaterials]);
-
-  // displayModalColor zuerst initialisieren (mit useState)
   const [displayModalColor, setDisplayModalColor] = useState(subjectColor || '#3b82f6');
-
-  // Dann topicColor berechnen – jetzt kennt JS displayModalColor schon
   const topicColor = currentTopic?.color || displayModalColor || subjectColor || '#3b82f6';
 
   const getCurrentLessonPosition = useCallback(() => {
@@ -159,7 +174,7 @@ export default function LessonModal({
     };
   }, [slotInfo, isEditing, lesson]);
 
-  // Memoisiere Callbacks
+  // Allerlei callbacks
   const onToggleChange = useCallback((checked) => {
     setFormData(prev => ({ ...prev, is_allerlei: checked }));
   }, []);
@@ -212,46 +227,46 @@ export default function LessonModal({
     onLessonsChange,
     onStepsChange,
     onIntegratedDataChange,
-    currentYear, 
+    currentYear,
     activeClassId,
-    selectedSubject  // ← NEU: hinzufügen
+    selectedSubject
   });
 
-  // Der useEffect, der displayModalColor aktualisiert
+  // Update modal color based on allerlei state
   useEffect(() => {
     if (isAllerlei) {
-    const allSubjectNames = [
-      subjects.find(s => s.id === selectedSubject)?.name,
-      ...Object.values(selectedLessons).map(id => {
-        const yl = allYearlyLessons.find(y => y.id === id);
-        return yl?.expand?.subject?.name || yl?.subject_name || subjects.find(s => s.id === yl?.subject)?.name;
-      }),
-      ...allerleiSubjects
-    ].filter(Boolean);
+      const allSubjectNames = [
+        subjects.find(s => s.id === selectedSubject)?.name,
+        ...Object.values(selectedLessons).map(id => {
+          const yl = allYearlyLessons.find(y => y.id === id);
+          return yl?.expand?.subject?.name || yl?.subject_name || subjects.find(s => s.id === yl?.subject)?.name;
+        }),
+        ...allerleiSubjects
+      ].filter(Boolean);
 
-    const uniqueNames = [...new Set(allSubjectNames)];
-    const colors = uniqueNames
-      .map(name => subjects.find(s => s.name === name)?.color)
-      .filter(Boolean);
+      const uniqueNames = [...new Set(allSubjectNames)];
+      const colors = uniqueNames
+        .map(name => subjects.find(s => s.name === name)?.color)
+        .filter(Boolean);
 
-    setDisplayModalColor(
-      colors.length > 1 
-        ? createMixedSubjectGradient(colors)
-        : createGradient(colors[0] || '#3b82f6')
-    );
-  } else {
-    const singleColor = subjects.find(s => s.id === selectedSubject)?.color || subjectColor || '#3b82f6';
-    setDisplayModalColor(createGradient(singleColor));
-  }
+      setDisplayModalColor(
+        colors.length > 1
+          ? createMixedSubjectGradient(colors)
+          : createGradient(colors[0] || '#3b82f6')
+      );
+    } else {
+      const singleColor = subjects.find(s => s.id === selectedSubject)?.color || subjectColor || '#3b82f6';
+      setDisplayModalColor(createGradient(singleColor));
+    }
   }, [isAllerlei, selectedSubject, selectedLessons, allerleiSubjects, allYearlyLessons, subjects, subjectColor]);
 
-  // Jetzt erst dürfen wir isAllerlei benutzen!
+  // Available second lessons for double lesson
   const availableSecondLessons = useMemo(() => {
     if (isAllerlei || !formData.is_double_lesson || !selectedSubject) return [];
-  
+
     const subjectYearlyLessons = allYearlyLessons
-      .filter(yl => 
-        yl.subject === selectedSubject && 
+      .filter(yl =>
+        yl.subject === selectedSubject &&
         yl.week_number === currentWeek &&
         (!yl.is_double_lesson || (yl.is_double_lesson && yl.second_yearly_lesson_id !== null)) &&
         !scheduledLessonIds.has(yl.id)
@@ -267,23 +282,22 @@ export default function LessonModal({
       currentLessonNumber = firstAvailableYearlyLesson?.lesson_number || 1;
     }
 
-    const nextLesson = subjectYearlyLessons.find(yl => 
-      yl.lesson_number === currentLessonNumber + 1 && 
+    const nextLesson = subjectYearlyLessons.find(yl =>
+      yl.lesson_number === currentLessonNumber + 1 &&
       !scheduledLessonIds.has(yl.id)
     );
-  
+
     return nextLesson ? [nextLesson] : [];
   }, [isAllerlei, formData.is_double_lesson, selectedSubject, allYearlyLessons, currentWeek, lesson, slotInfo, scheduledLessonIds]);
 
+  // Handle Allerlei toggle
   const handleAllerleiToggle = async (checked) => {
     setValidationError(null);
     handleAllerleiToggleHook(checked);
 
     if (checked) {
-      // ─────── Primary YL bestimmen (bestehende Lektion) oder neu anlegen (neuer Slot) ───────
       let primaryYlId = lesson?.yearly_lesson_id || null;
 
-      // Nur bei neuem Slot (keine lesson) → neue Primary YL anlegen
       if (!primaryYlId && selectedSubject) {
         const nextNumber = allYearlyLessons.filter(yl => yl.subject === selectedSubject && yl.week_number === currentWeek).length + 1;
         const newYl = await YearlyLesson.create({
@@ -301,10 +315,8 @@ export default function LessonModal({
           class_id: activeClassId
         });
         primaryYlId = newYl.id;
-        console.log('Debug: Created new primary YL for empty slot:', primaryYlId);
       }
 
-      // ─────── formData sofort auf "bestehende Allerlei" setzen → Hook erstellt KEINE neue YL ───────
       setFormData(prev => ({
         ...prev,
         is_allerlei: true,
@@ -314,9 +326,7 @@ export default function LessonModal({
 
       setSelectedLessons({ 0: primaryYlId });
       setAllerleiSubjects([]);
-      // Removed: setAddSecondLesson(true); // No longer mixes with double lessons
     } else {
-      // Primary-ID holen, BEVOR wir den Modus wechseln
       const currentPrimaryId = getAllerleiYearlyLessonIds()[0];
 
       if (!currentPrimaryId) {
@@ -324,7 +334,6 @@ export default function LessonModal({
         return;
       }
 
-      // ID für den Submit-Zweig merken
       setDissolvingPrimaryId(currentPrimaryId);
 
       const primaryYL = allYearlyLessons.find(yl => yl.id === currentPrimaryId);
@@ -335,76 +344,65 @@ export default function LessonModal({
         return;
       }
 
-      // Jetzt erst den Modus wechseln
       handleAllerleiToggleHook(false);
 
       setSelectedSubject(primaryYL.subject);
-      setFormData(prev => ({ 
-        ...prev, 
+      // Prüfen ob die Primary-YL eine Prüfung/Halbklasse war (aus Allerlei oder YL selbst)
+      const wasExam = lesson?.exam_yearly_lesson_ids?.includes(currentPrimaryId) || primaryYL.is_exam || false;
+      const wasHalfClass = lesson?.half_class_yearly_lesson_ids?.includes(currentPrimaryId) || primaryYL.is_half_class || false;
+      setFormData(prev => ({
+        ...prev,
         name: primaryOrig.original_name || primaryYL.name || 'Primäre Lektion',
         topic_id: primaryOrig.original_topic_id || primaryYL.topic_id || "no_topic",
         is_allerlei: false,
         primary_yearly_lesson_id: null,
         added_yearly_lesson_ids: [],
+        is_exam: wasExam,
+        is_half_class: wasHalfClass,
+        is_double_lesson: primaryYL.is_double_lesson || false,
       }));
 
       setPrimarySteps((primaryOrig.steps || primaryYL.steps || []).map(s => ({ ...s, id: generateId() })));
-      setSecondSteps([]);  
-      setAllerleiSteps({});  
+      setSecondSteps([]);
+      setAllerleiSteps({});
       setAllerleiSubjects([]);
       setSelectedLessons({});
       setAddSecondLesson(false);
     }
   };
 
+  // Initialize form data when modal opens
   useEffect(() => {
-    console.log('🔄 LessonModal useEffect läuft – isOpen:', isOpen);
-    console.log('   lesson:', lesson ? `ID ${lesson.id || lesson.yearly_lesson_id}` : 'keine');
-    console.log('   copiedLesson:', !!copiedLesson);
-    console.log('   allYearlyLessons.length:', allYearlyLessons.length);
-    console.log('   topics.length:', topics.length);
-
-    if (!isOpen) {
-      console.log('   Modal geschlossen → nichts tun');
-      return;
-    }
+    if (!isOpen) return;
 
     const lessonToLoad = copiedLesson || lesson || {};
-    console.log('   lessonToLoad:', lessonToLoad);
     originalLessonRef.current = lesson;
-    // Normalize topic id: topic may be stored as ID, as title/name, or be 'no_topic'
+
     const rawTopicRef = lessonToLoad.topic_id || "no_topic";
     let resolvedTopicId = "no_topic";
     if (rawTopicRef && rawTopicRef !== 'no_topic') {
-      // Try direct ID match in topics prop
       const foundById = topics?.find(t => t.id === rawTopicRef);
       if (foundById) {
         resolvedTopicId = foundById.id;
       } else {
-        // Try matching by title/name (case-insensitive)
         const foundByTitle = topics?.find(t => (t.title || '').toString().toLowerCase() === String(rawTopicRef).toLowerCase());
         resolvedTopicId = foundByTitle ? foundByTitle.id : rawTopicRef;
       }
     }
+
     let loadedTopicId = resolvedTopicId;
     let loadedName = '';
     let loadedSecondName = '';
     let loadedPrimarySteps = [];
-    let loadedAllerleiSubjects = [];
-    let loadedAllerleiYearlyLessonIds = [];
     let loadedPrimaryYlId = null;
     let loadedAddedYlIds = [];
 
     if (lessonToLoad.collectionName === 'allerlei_lessons') {
-      console.log('   → Allerlei-Lektion');
       loadedName = lessonToLoad.description || 'Allerlei';
       loadedPrimaryYlId = lessonToLoad.primary_yearly_lesson_id;
       loadedAddedYlIds = lessonToLoad.added_yearly_lesson_ids || [];
-      loadedAllerleiSubjects = []; // Extrahiere aus YLs
-      loadedAllerleiYearlyLessonIds = [loadedPrimaryYlId, ...loadedAddedYlIds];
       if (loadedPrimaryYlId) {
         const primaryYL = allYearlyLessons.find(yl => yl.id === loadedPrimaryYlId);
-        console.log('   Gefundene primaryYL:', primaryYL ? `ID ${primaryYL.id}, steps: ${primaryYL.steps?.length || 0}` : 'NICHT gefunden');
         if (primaryYL) {
           loadedName = primaryYL.name || `Lektion ${primaryYL.lesson_number}`;
           loadedTopicId = primaryYL.topic_id || "no_topic";
@@ -413,19 +411,17 @@ export default function LessonModal({
         }
       }
     } else if (lessonToLoad.yearly_lesson_id) {
-      console.log('   → Normale Lektion mit yearly_lesson_id:', lessonToLoad.yearly_lesson_id);
       const primaryYL = allYearlyLessons.find(yl => yl.id === lessonToLoad.yearly_lesson_id);
-      console.log('   Gefundene primaryYL:', primaryYL ? `ID ${primaryYL.id}, steps: ${primaryYL.steps?.length || 0}` : 'NICHT gefunden');
       if (primaryYL) {
-        loadedTopicId = primaryYL.topic_id || "no_topic";
+        // Nur YearlyLesson-Topic verwenden wenn Lesson selbst kein Topic hat
+        if (!lessonToLoad.topic_id || lessonToLoad.topic_id === 'no_topic') {
+          loadedTopicId = primaryYL.topic_id || "no_topic";
+        }
         loadedName = primaryYL.name || `Lektion ${primaryYL.lesson_number}`;
         loadedPrimarySteps = primaryYL.steps?.map(s => ({ ...s, id: s.id || generateId() })) || [];
       }
-    } else {
-      console.log('   → Neue Lektion (keine yearly_lesson_id)');
     }
 
-    console.log('   → Setze primarySteps auf:', loadedPrimarySteps.length, 'Steps');
     setPrimarySteps(loadedPrimarySteps);
 
     if (lessonToLoad.is_double_lesson && lessonToLoad.second_yearly_lesson_id) {
@@ -435,33 +431,23 @@ export default function LessonModal({
       }
     }
 
-    // ─── NEU: Robuste loadedSubject-Bestimmung ─────────────────────────────────────
     let loadedSubject = initialSubject || "";
-
-    // 1. Priorität: Direkt aus lesson.subject (falls vorhanden)
     if (lessonToLoad.subject) {
       loadedSubject = lessonToLoad.subject;
-    }
-    // 2. Bei Allerlei: aus primary YearlyLesson
-    else if (lessonToLoad.collectionName === 'allerlei_lessons' && loadedPrimaryYlId) {
+    } else if (lessonToLoad.collectionName === 'allerlei_lessons' && loadedPrimaryYlId) {
       const primaryYL = allYearlyLessons.find(yl => yl.id === loadedPrimaryYlId);
       if (primaryYL?.subject) {
         loadedSubject = primaryYL.subject;
       }
-    }
-    // 3. Bei normaler Lektion: aus yearly_lesson_id → YearlyLesson.subject
-    else if (lessonToLoad.yearly_lesson_id) {
+    } else if (lessonToLoad.yearly_lesson_id) {
       const yl = allYearlyLessons.find(yl => yl.id === lessonToLoad.yearly_lesson_id);
       if (yl?.subject) {
         loadedSubject = yl.subject;
       }
-    }
-    // 4. Fallback: initialSubject (z. B. beim Drag & Drop)
-    else {
+    } else {
       loadedSubject = initialSubject || "";
     }
 
-    // WICHTIG: ZUERST alle abhängigen Werte lokal berechnen
     const selectedSubjectObj = subjectOptions.find(s => s.id === loadedSubject);
     const selectedSubjectName = selectedSubjectObj?.name;
 
@@ -470,13 +456,12 @@ export default function LessonModal({
       (selectedSubjectName && topic.subject === selectedSubjectName)
     ) || [];
 
-    const resolvedTopic = loadedTopicId !== "no_topic" 
-      ? currentSubjectTopics.find(t => t.id === loadedTopicId) 
+    const resolvedTopic = loadedTopicId !== "no_topic"
+      ? currentSubjectTopics.find(t => t.id === loadedTopicId)
       : null;
 
     const resolvedMaterials = resolvedTopic?.materials || [];
 
-    // Jetzt alles setzen – inkl. topicMaterials werden indirekt über formData korrekt
     setAvailableTopics(currentSubjectTopics);
     setSelectedTopicId(loadedTopicId);
     setTopicMaterials(resolvedMaterials);
@@ -491,30 +476,44 @@ export default function LessonModal({
       primary_yearly_lesson_id: loadedPrimaryYlId,
       added_yearly_lesson_ids: loadedAddedYlIds,
       is_allerlei: lessonToLoad.collectionName === 'allerlei_lessons',
-      subject: loadedSubject                     // ← NEU: subject in formData speichern
+      subject: loadedSubject
     });
     setSelectedSubject(loadedSubject);
     setAddSecondLesson(lessonToLoad.is_double_lesson && !!lessonToLoad.second_yearly_lesson_id);
     setSelectedSecondLesson(lessonToLoad.second_yearly_lesson_id || "");
 
+    // In fixed schedule mode, double lessons are treated as unified 90-minute blocks
+    if (settings?.scheduleType === 'fixed' && lessonToLoad.is_double_lesson) {
+      setIsUnifiedDouble(true);
+      setAddSecondLesson(false);
+    } else {
+      setIsUnifiedDouble(false);
+    }
+
     if (lessonToLoad.is_double_lesson && lessonToLoad.second_yearly_lesson_id) {
       const secondYL = allYearlyLessons.find(yl => yl.id === lessonToLoad.second_yearly_lesson_id);
-      setSecondSteps(secondYL?.steps?.map(s => ({ ...s, id: `second-${s.id || generateId()}` })) || []);
+      setSecondSteps(secondYL?.steps?.map(s => ({
+        ...s,
+        id: s.id?.startsWith('second-') ? s.id : `second-${s.id || generateId()}`
+      })) || []);
     } else {
       setSecondSteps(lessonToLoad.steps?.filter(step => step.id?.startsWith('second-'))
-        .map(s => ({ ...s, id: `second-${s.id || generateId()}` })) || []);
+        .map(s => ({
+          ...s,
+          id: s.id?.startsWith('second-') ? s.id : `second-${s.id || generateId()}`
+        })) || []);
     }
     setWasAllerlei(lessonToLoad.collectionName === 'allerlei_lessons');
-  }, [isOpen, lesson, copiedLesson, initialSubject, allYearlyLessons, topics, subjectOptions]);
+  }, [isOpen, lesson, copiedLesson, initialSubject, allYearlyLessons, topics, subjectOptions, settings]);
 
-  // ─── Sync selectedSubject → formData.subject (für neue Lektionen wichtig) ─────
+  // Sync selectedSubject to formData
   useEffect(() => {
     if (selectedSubject && !isAllerlei && (!formData.subject || formData.subject !== selectedSubject)) {
       setFormData(prev => ({ ...prev, subject: selectedSubject }));
     }
   }, [selectedSubject, isAllerlei, formData.subject]);
 
-  // ─── Cleanup beim Schließen ─────
+  // Cleanup on close
   useEffect(() => {
     if (!isOpen) {
       setSelectedTopicId("no_topic");
@@ -522,13 +521,14 @@ export default function LessonModal({
     }
   }, [isOpen]);
 
-  // Immer sicherstellen, dass formData.topic_id aktuell ist
+  // Sync topic_id
   useEffect(() => {
     if (selectedTopicId !== formData.topic_id) {
       setFormData(prev => ({ ...prev, topic_id: selectedTopicId }));
     }
   }, [selectedTopicId, formData.topic_id]);
 
+  // Auto-fill for new lessons
   const handleAutoFill = useCallback(() => {
     if (!selectedSubject) return;
 
@@ -558,7 +558,7 @@ export default function LessonModal({
       setAddSecondLesson(false);
       setSelectedSecondLesson("");
     }
-  }, [selectedSubject, allYearlyLessons, currentWeek]);
+  }, [selectedSubject, allYearlyLessons, currentWeek, setPrimarySteps, setSecondSteps]);
 
   useEffect(() => {
     if (isOpen && !isEditing && !copiedLesson) {
@@ -566,13 +566,20 @@ export default function LessonModal({
     }
   }, [isOpen, isEditing, copiedLesson, handleAutoFill]);
 
+  // Handle double lesson toggle
   const handleDoubleToggle = (checked) => {
     setFormData(prev => ({ ...prev, is_double_lesson: checked }));
-    
+
     if (checked) {
-      setAddSecondLesson(true);
-      
-      if (!selectedSecondLesson) {
+      // In fixed schedule mode, double lessons are unified 90-minute blocks
+      if (settings?.scheduleType === 'fixed') {
+        setIsUnifiedDouble(true);
+        setAddSecondLesson(false);
+      } else {
+        setAddSecondLesson(true);
+      }
+
+      if (!selectedSecondLesson && settings?.scheduleType !== 'fixed') {
         const subjectYearlyLessons = allYearlyLessons
           .filter(yl => yl.subject === selectedSubject && yl.week_number === currentWeek)
           .sort((a, b) => a.lesson_number - b.lesson_number);
@@ -588,15 +595,13 @@ export default function LessonModal({
           }
         }
 
-        const nextLesson = subjectYearlyLessons.find(yl => 
-          yl.lesson_number === currentLessonNumber + 1
-        );
-        
+        const nextLesson = subjectYearlyLessons.find(yl => yl.lesson_number === currentLessonNumber + 1);
+
         if (nextLesson) {
           setSelectedSecondLesson(nextLesson.id);
           const newSecondSteps = nextLesson.steps?.map(step => ({
             ...step,
-            id: `second-${generateId()}-${step.id || generateId()}`
+            id: step.id?.startsWith('second-') ? step.id : `second-${generateId()}-${step.id || generateId()}`
           })) || [];
           setSecondSteps(newSecondSteps);
         }
@@ -605,13 +610,12 @@ export default function LessonModal({
       setAddSecondLesson(false);
       setSecondSteps([]);
       setSelectedSecondLesson("");
-      setIsUnifiedDouble(false); // neu: reset unified mode
+      setIsUnifiedDouble(false);
     }
   };
 
   const handleAddSecondLessonToggle = (checked) => {
     setAddSecondLesson(checked);
-    
     if (!checked) {
       setSecondSteps([]);
       setSelectedSecondLesson("");
@@ -620,7 +624,7 @@ export default function LessonModal({
 
   const handleSecondLessonSelection = (yearlyLessonId) => {
     setSelectedSecondLesson(yearlyLessonId);
-    
+
     if (!yearlyLessonId) {
       setSecondSteps([]);
       return;
@@ -630,29 +634,20 @@ export default function LessonModal({
     if (selectedYearlyLesson && selectedYearlyLesson.steps) {
       const newSecondLessonSteps = selectedYearlyLesson.steps.map(step => ({
         ...step,
-        id: `second-${generateId()}-${step.id || generateId()}`
+        id: step.id?.startsWith('second-') ? step.id : `second-${generateId()}-${step.id || generateId()}`
       }));
       setSecondSteps(newSecondLessonSteps);
     }
   };
 
-  // Handlers for Primary Steps
-  const handleUpdatePrimaryStep = (id, field, value) => setPrimarySteps(primarySteps.map(step => step.id === id ? { ...step, [field]: value } : step));
-  const handleRemovePrimaryStep = (id) => setPrimarySteps(primarySteps.filter(step => step.id !== id));
-  const handleAddPrimaryStep = () => setPrimarySteps([...primarySteps, { id: generateId(), time: null, workForm: '', activity: '', material: '' }]);
-
-  // Handlers for Second Steps
-  const handleUpdateSecondStep = (id, field, value) => setSecondSteps(secondSteps.map((step) => step.id === id ? { ...step, [field]: value } : step));
-  const handleRemoveSecondStep = (id) => setSecondSteps(secondSteps.filter(step => step.id !== id));
-  const handleAddSecondStep = () => setSecondSteps([...secondSteps, { id: `second-${generateId()}`, time: null, workForm: '', activity: '', material: '' }]);
-
   const isFormValid = useMemo(() => {
     if (!isAllerlei) return !!selectedSubject || isEditing;
-    return allerleiSubjects.filter(Boolean).length >= 1 && 
+    return allerleiSubjects.filter(Boolean).length >= 1 &&
            getAllerleiYearlyLessonIds().every(id => id) &&
            (selectedSubject || isEditing);
   }, [isAllerlei, allerleiSubjects, selectedSubject, isEditing, getAllerleiYearlyLessonIds]);
 
+  // Submit handler (kept as-is due to complexity)
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (isSubmitting || !isFormValid) return;
@@ -660,18 +655,16 @@ export default function LessonModal({
     setValidationError(null);
 
     try {
-      // Validate Allerlei
       if (isAllerlei) {
         validateAllerleiSelection();
       }
 
-      // Optional: Prüfung, ob Folgeslots frei sind
       if (isAllerlei && (formData.period_span || 1) > 1) {
         const span = formData.period_span || 1;
         const startPeriod = slotInfo?.period || lesson.period_slot;
         const endPeriod = startPeriod + span - 1;
 
-        const conflicting = allLessons.some(l => 
+        const conflicting = allLessons.some(l =>
           l.week_number === currentWeek &&
           l.day_of_week === (slotInfo?.day || lesson.day_of_week) &&
           l.period_slot > startPeriod &&
@@ -697,40 +690,32 @@ export default function LessonModal({
       if (isEditing && wasAllerlei && !isAllerlei) {
         try {
           const primaryId = dissolvingPrimaryId || getAllerleiYearlyLessonIds()[0];
-          
+
           if (!primaryId) {
             setValidationError('Primäre Lektion konnte nicht ermittelt werden.');
             return;
           }
 
-          // IDs zum Wiederherstellen
-          const ylIdsToRestore = dissolvingPrimaryId 
+          const ylIdsToRestore = dissolvingPrimaryId
             ? [dissolvingPrimaryId, ...getAllerleiYearlyLessonIds().slice(1)]
             : getAllerleiYearlyLessonIds();
 
-          // Normale Lessons aus YearlyLessons erstellen
           const restoredLessons = await allerleiService.restoreYearlyLessons(
             ylIdsToRestore,
             allLessons,
             timeSlots,
             currentWeek,
             lesson.day_of_week,
-            lesson.period_slot
+            lesson.period_slot,
+            lesson  // Pass Allerlei lesson for exam/half_class info
           );
 
-          // WICHTIG: Die Allerlei-Lektion nur löschen, wenn sie noch existiert
           try {
             await AllerleiLesson.delete(lesson.id);
-            console.log('Allerlei-Lektion erfolgreich gelöscht:', lesson.id);
           } catch (err) {
-            if (err.status === 404) {
-              console.log('Allerlei-Lektion war bereits gelöscht – das ist ok.');
-            } else {
-              throw err; // Nur bei echtem Fehler weiterwerfen
-            }
+            if (err.status !== 404) throw err;
           }
 
-          // Refetch + invalidate
           const updatedLessons = await Lesson.find({ week_number: currentWeek, user_id: pb.authStore.model.id });
           setAllLessons(updatedLessons);
 
@@ -762,15 +747,11 @@ export default function LessonModal({
         if (lessonOnGridToDelete) {
           toDeleteIds.push(lessonOnGridToDelete.id);
         }
-        // Bereinige die zweite YearlyLesson – sie darf KEIN is_double_lesson haben
         await YearlyLesson.update(selectedSecondLesson, {
           is_double_lesson: false,
           second_yearly_lesson_id: null
         });
       } else if (isEditing && !formData.is_double_lesson && lesson?.is_double_lesson) {
-        // Doppellektion wird aufgelöst → Slave-Lesson freigeben
-
-        // 1. Master auf normal setzen
         if (lesson.yearly_lesson_id) {
           await YearlyLesson.update(lesson.yearly_lesson_id, {
             is_double_lesson: false,
@@ -778,8 +759,7 @@ export default function LessonModal({
           });
         }
 
-        // 2. Slave-Lesson suchen und freigeben
-        const slaveLesson = allLessons.find(l => 
+        const slaveLesson = allLessons.find(l =>
           l.double_master_id === lesson.id &&
           l.week_number === currentWeek
         );
@@ -791,7 +771,6 @@ export default function LessonModal({
             second_yearly_lesson_id: null
           });
 
-          // Optional: Auch deren YearlyLesson bereinigen
           if (slaveLesson.yearly_lesson_id) {
             await YearlyLesson.update(slaveLesson.yearly_lesson_id, {
               is_double_lesson: false
@@ -819,20 +798,24 @@ export default function LessonModal({
         );
       }
 
-      console.log('Submitting with steps (primary):', primarySteps);
-      console.log('Submitting with steps (second):', secondSteps);
-      console.log('Submitting with steps (allerlei):', allerleiSteps);
-      console.log('Is Allerlei:', isAllerlei);
-      console.log('Allerlei subjects:', allerleiSubjects);
-      console.log('Selected lessons:', selectedLessons);
-      console.log('Lessons to delete:', toDeleteIds);
-
       const preparedFormData = prepareAllerleiForPersist(formData);
 
-      if (isEditing && lesson.collectionName === 'allerlei_lessons' && isAllerlei) {  
+      if (isEditing && lesson.collectionName === 'allerlei_lessons' && isAllerlei) {
+        // Sammle exam/half_class IDs NEU von den ausgewählten YearlyLessons
+        const editYearlyIds = getAllerleiYearlyLessonIds();
+        const editExamYlIds = [];
+        const editHalfClassYlIds = [];
+        editYearlyIds.forEach(ylId => {
+          const yl = allYearlyLessons.find(y => y.id === ylId);
+          if (yl?.is_exam) editExamYlIds.push(ylId);
+          if (yl?.is_half_class) editHalfClassYlIds.push(ylId);
+        });
+
         lessonData = {
           id: lesson.id,
           ...preparedFormData,
+          is_allerlei: true,
+          collectionName: 'allerlei_lessons',
           description: "Allerlei: " + (allerleiSubjects || []).filter(Boolean).join(', '),
           steps: [
             ...primarySteps,
@@ -840,13 +823,25 @@ export default function LessonModal({
             ...(!isAllerlei && addSecondLesson ? secondSteps : [])
           ],
           subject: null,
-          primary_yearly_lesson_id: getAllerleiYearlyLessonIds()[0],
-          added_yearly_lesson_ids: getAllerleiYearlyLessonIds().slice(1),
+          primary_yearly_lesson_id: editYearlyIds[0],
+          added_yearly_lesson_ids: editYearlyIds.slice(1),
           allerlei_subjects: allerleiSubjects,
-          period_span: formData.period_span || 1, // ← NEU
+          period_span: formData.period_span || 1,
+          exam_yearly_lesson_ids: editExamYlIds,
+          half_class_yearly_lesson_ids: editHalfClassYlIds,
         };
         await AllerleiLesson.update(lesson.id, lessonData);
-      } else if (isEditing && lesson.collectionName !== 'allerlei_lessons' && isAllerlei) {  
+      } else if (isEditing && lesson.collectionName !== 'allerlei_lessons' && isAllerlei) {
+        // Sammle exam/half_class IDs von den ausgewählten YearlyLessons
+        const convertYearlyIds = getAllerleiYearlyLessonIds();
+        const convertExamYlIds = [];
+        const convertHalfClassYlIds = [];
+        convertYearlyIds.forEach(ylId => {
+          const yl = allYearlyLessons.find(y => y.id === ylId);
+          if (yl?.is_exam) convertExamYlIds.push(ylId);
+          if (yl?.is_half_class) convertHalfClassYlIds.push(ylId);
+        });
+
         lessonData = {
           ...preparedFormData,
           description: "Allerlei: " + (allerleiSubjects || []).filter(Boolean).join(', '),
@@ -855,8 +850,8 @@ export default function LessonModal({
             ...Object.values(allerleiSteps).flat(),
             ...(!isAllerlei && addSecondLesson ? secondSteps : [])
           ],
-          primary_yearly_lesson_id: getAllerleiYearlyLessonIds()[0],
-          added_yearly_lesson_ids: getAllerleiYearlyLessonIds().slice(1),
+          primary_yearly_lesson_id: convertYearlyIds[0],
+          added_yearly_lesson_ids: convertYearlyIds.slice(1),
           user_id: pb.authStore.model.id,
           week_number: currentWeek,
           day_of_week: lesson.day_of_week,
@@ -864,16 +859,28 @@ export default function LessonModal({
           isNew: true,
           collectionName: 'allerlei_lessons',
           allerlei_subjects: allerleiSubjects,
-          period_span: formData.period_span || 1, // ← NEU
+          period_span: formData.period_span || 1,
+          exam_yearly_lesson_ids: convertExamYlIds,
+          half_class_yearly_lesson_ids: convertHalfClassYlIds,
         };
         const newAllerlei = await allerleiService.convertToAllerlei(lesson.id, lessonData);
         lessonData.id = newAllerlei.id;
         toDeleteIds.push(lesson.id);
-      } else if (isNew && isAllerlei) {  
+      } else if (isNew && isAllerlei) {
         const yearlyIds = getAllerleiYearlyLessonIds();
         if (yearlyIds.length === 0 || !yearlyIds[0]) {
           throw new Error('No primary yearly lesson selected for Allerlei creation.');
         }
+
+        // Sammle exam/half_class IDs von den ausgewählten YearlyLessons
+        const newExamYlIds = [];
+        const newHalfClassYlIds = [];
+        yearlyIds.forEach(ylId => {
+          const yl = allYearlyLessons.find(y => y.id === ylId);
+          if (yl?.is_exam) newExamYlIds.push(ylId);
+          if (yl?.is_half_class) newHalfClassYlIds.push(ylId);
+        });
+
         lessonData = {
           ...preparedFormData,
           description: "Allerlei: " + (allerleiSubjects || []).filter(Boolean).join(', '),
@@ -890,16 +897,17 @@ export default function LessonModal({
           day_of_week: slotInfo.day,
           period_slot: slotInfo.period,
           allerlei_subjects: allerleiSubjects,
-          period_span: formData.period_span || 1, // ← NEU
+          period_span: formData.period_span || 1,
+          exam_yearly_lesson_ids: newExamYlIds,
+          half_class_yearly_lesson_ids: newHalfClassYlIds,
         };
         const newAllerlei = await AllerleiLesson.create(lessonData);
-        // Neu: Verify creation
         const verified = await AllerleiLesson.findById(newAllerlei.id);
         if (!verified) {
           throw new Error('Allerlei creation failed, record not found.');
         }
         lessonData.id = newAllerlei.id;
-      } else {  
+      } else {
         if (isEditing) {
           lessonData = {
             id: lesson.id,
@@ -910,7 +918,7 @@ export default function LessonModal({
             ],
             subject: finalSubject,
             yearly_lesson_id: lesson.yearly_lesson_id,
-            second_yearly_lesson_id: (preparedFormData.is_double_lesson && addSecondLesson && selectedSecondLesson && !isUnifiedDouble) ? selectedSecondLesson : null, // angepasst
+            second_yearly_lesson_id: (preparedFormData.is_double_lesson && addSecondLesson && selectedSecondLesson && !isUnifiedDouble) ? selectedSecondLesson : null,
             topic_id: preparedFormData.topic_id === 'no_topic' ? undefined : preparedFormData.topic_id,
           };
           await Lesson.update(lesson.id, lessonData);
@@ -932,7 +940,7 @@ export default function LessonModal({
             await YearlyLesson.update(lessonData.second_yearly_lesson_id, {
               name: preparedFormData.second_name || `Lektion ${Number(allYearlyLessons.find(yl => yl.id === lessonData.yearly_lesson_id)?.lesson_number || 1) + 1}`,
               steps: preparedFormData.steps?.filter(s => s.id?.startsWith('second-')).map(s => ({ ...s, id: s.id.replace('second-', '') })) || [],
-              is_double_lesson: false,  // Bereinigen: Zweite Lektion darf kein Doppelflag haben
+              is_double_lesson: false,
               second_yearly_lesson_id: null
             });
           }
@@ -952,7 +960,7 @@ export default function LessonModal({
             end_time: timeSlotForNewLesson?.end,
             topic_id: preparedFormData.topic_id === 'no_topic' ? undefined : preparedFormData.topic_id,
             yearly_lesson_id: copiedLesson?.yearly_lesson_id || null,
-            second_yearly_lesson_id: (preparedFormData.is_double_lesson && addSecondLesson && selectedSecondLesson && !isUnifiedDouble) ? selectedSecondLesson : null, // angepasst
+            second_yearly_lesson_id: (preparedFormData.is_double_lesson && addSecondLesson && selectedSecondLesson && !isUnifiedDouble) ? selectedSecondLesson : null,
             user_id: pb.authStore.model.id,
             is_hidden: false
           };
@@ -982,18 +990,16 @@ export default function LessonModal({
           }
           const newLesson = await Lesson.create(lessonData);
           lessonData.id = newLesson.id;
-          // Statt zwei Lessons anzulegen → nur eine Master-Lesson + Slave verlinken
+
           if (formData.is_double_lesson && addSecondLesson && selectedSecondLesson) {
-            // Wir haben bereits eine Master-Lesson (die gerade erstellt wird)
-            // Jetzt nur die zweite Lesson als Slave markieren
-            const existingSecondLesson = allLessons.find(l => 
+            const existingSecondLesson = allLessons.find(l =>
               l.yearly_lesson_id === selectedSecondLesson &&
               l.week_number === currentWeek
             );
 
             if (existingSecondLesson) {
               await Lesson.update(existingSecondLesson.id, {
-                double_master_id: newLesson.id,  // ← Verlinkung!
+                double_master_id: newLesson.id,
                 period_slot: slotInfo.period + 1
               });
             }
@@ -1016,7 +1022,6 @@ export default function LessonModal({
   const handleDeleteClick = async () => {
     if (!isEditing || !window.confirm("Lektion wirklich löschen?")) return;
 
-    // Slave-Lesson suchen und mitlöschen
     const slave = allLessons.find(l => l.double_master_id === lesson.id);
     if (slave) {
       await Lesson.delete(slave.id);
@@ -1026,23 +1031,29 @@ export default function LessonModal({
     onClose();
   };
 
-  const handleSaveAsTemplate = async () => {
-    if (!templateName.trim()) return;
+  const handleSaveAsTemplate = useCallback(() => {
+    saveTemplate(primarySteps, selectedSubject);
+  }, [saveTemplate, primarySteps, selectedSubject]);
 
-    try {
-      await pb.collection('lesson_templates').create({
-        name: templateName.trim(),
-        steps: primarySteps,
-        subject: selectedSubject || null,
-        user_id: pb.authStore.model.id,
-        is_global: false,
-      });
-      import('react-hot-toast').then(({ toast }) => toast.success("Vorlage gespeichert!"));
-      setShowTemplateSave(false);
-      setTemplateName("");
-    } catch (err) {
-      import('react-hot-toast').then(({ toast }) => toast.error("Fehler beim Speichern"));
+  // Build modal title
+  const buildModalTitle = () => {
+    if (isAllerlei) {
+      return `Allerlei: ${formData.name || 'Allerlei'} ${allerleiSubjects.length > 0 ? `(${allerleiSubjects.join(', ')})` : ''}`;
     }
+
+    if (isEditing) {
+      const subjectName = lesson.expand?.subject?.name || subjects?.find(s => s.id === lesson.subject)?.name || lesson.subject;
+      const timeInfo = timeSlots && timeSlots[lesson.period_slot - 1]
+        ? `${timeSlots[lesson.period_slot - 1].start}${formData.is_double_lesson ? '-' + (timeSlots[lesson.period_slot] ? timeSlots[lesson.period_slot].end : timeSlots[lesson.period_slot - 1].end) : '-' + timeSlots[lesson.period_slot - 1].end}`
+        : `Period ${lesson.period_slot}`;
+      return `${subjectName} – ${translateDay(lesson.day_of_week)}, ${timeInfo}`;
+    }
+
+    const subjectName = subjects?.find(s => s.id === selectedSubject)?.name || 'Fach';
+    const timeInfo = timeSlots && slotInfo?.period && timeSlots[slotInfo.period - 1]
+      ? `${timeSlots[slotInfo.period - 1].start}-${timeSlots[slotInfo.period - 1].end}`
+      : `Period ${slotInfo?.period || ''}`;
+    return `${subjectName} – ${translateDay(slotInfo?.day)}, ${timeInfo}`;
   };
 
   return (
@@ -1053,86 +1064,58 @@ export default function LessonModal({
         className="max-w-4xl border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 max-h-[80vh] overflow-y-auto"
         style={{ borderColor: (subjectColor || '#3b82f6') + '40' }}
       >
-        <DialogHeader 
-          className="pb-4 border-b"
-          style={{ borderColor: (subjectColor || '#3b82f6') + '20', background: `linear-gradient(135deg, ${(subjectColor || '#3b82f6')}15, transparent)` }}
-        >
-          <DialogTitle className="flex items-center gap-3 text-xl text-slate-900 dark:text-white">
-            <div 
-              className="w-10 h-10 rounded-xl flex items-center justify-center shadow-md" 
-              style={{ 
-                background: displayModalColor
-              }}
-            >
-              <BookOpen className="w-5 h-5 text-white" />
-            </div>
-            {isAllerlei ? (
-              `Allerlei: ${formData.name || 'Allerlei'} ${allerleiSubjects.length > 0 ? `(${allerleiSubjects.join(', ')})` : ''}`
-            ) : (
-              isEditing 
-                ? `${lesson.expand?.subject?.name || subjects?.find(s => s.id === lesson.subject)?.name || lesson.subject} – ${translateDay(lesson.day_of_week)}, ${timeSlots && timeSlots[lesson.period_slot - 1] ? `${timeSlots[lesson.period_slot - 1].start}${formData.is_double_lesson ? '-' + (timeSlots[lesson.period_slot] ? timeSlots[lesson.period_slot].end : timeSlots[lesson.period_slot - 1].end) : '-' + timeSlots[lesson.period_slot - 1].end}` : `Period ${lesson.period_slot}`}`
-                : `${subjects?.find(s => s.id === selectedSubject)?.name || 'Fach'} – ${translateDay(slotInfo?.day)}, ${timeSlots && slotInfo?.period && timeSlots[slotInfo.period - 1] ? `${timeSlots[slotInfo.period - 1].start}-${timeSlots[slotInfo.period - 1].end}` : `Period ${slotInfo?.period || ''}`}`
-            )}
-          </DialogTitle>
-          <DialogDescription className="text-slate-500 dark:text-slate-400">
-            {isEditing ? "Lektion bearbeiten" : (copiedLesson ? "Kopierte Lektion einfügen" : "Neue Lektion planen")}
-          </DialogDescription>
-        </DialogHeader>
-        
+        <LessonModalHeader
+          title={buildModalTitle()}
+          subtitle={isEditing ? "Lektion bearbeiten" : (copiedLesson ? "Kopierte Lektion einfügen" : "Neue Lektion planen")}
+          color={subjectColor || '#3b82f6'}
+          gradient={displayModalColor}
+        />
+
         <form id="lesson-form" onSubmit={handleSubmit} className="space-y-6 pt-4">
           {validationError && (
             <div className="p-3 bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 rounded-lg">
               {validationError}
             </div>
           )}
-          <div className="flex flex-wrap items-center justify-around gap-x-6 gap-y-4 p-3 rounded-lg bg-slate-100/50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700">
-            <div className="flex items-center gap-2">
-              <Switch id="half-class" checked={formData.is_half_class || false} onCheckedChange={(checked) => setFormData(prev => ({ ...prev, is_half_class: checked }))} />
-              <Label htmlFor="half-class" className="text-sm font-semibold text-slate-900 dark:text-white cursor-pointer">Halbklasse</Label>
-            </div>
-            <div className="flex items-center gap-2">
-              <Switch id="double-lesson" checked={formData.is_double_lesson || false} onCheckedChange={handleDoubleToggle} />
-              <Label htmlFor="double-lesson" className="text-sm font-semibold text-slate-900 dark:text-white cursor-pointer">Doppellektion</Label>
-            </div>
-            <AllerleiToggleSection isAllerlei={isAllerlei} onToggle={handleAllerleiToggle} />
-            <div className="flex items-center gap-2">
-              <Switch id="exam" checked={formData.is_exam || false} onCheckedChange={(checked) => setFormData(prev => ({ ...prev, is_exam: checked }))} />
-              <Label htmlFor="exam" className="text-sm font-semibold text-slate-900 dark:text-white cursor-pointer">Prüfung</Label>
-            </div>
-          </div>
-          
+
+          <LessonTogglesRow
+            isHalfClass={formData.is_half_class}
+            isDoubleLesson={formData.is_double_lesson}
+            isExam={formData.is_exam}
+            onHalfClassChange={(checked) => setFormData(prev => ({ ...prev, is_half_class: checked }))}
+            onDoubleLessonChange={handleDoubleToggle}
+            onExamChange={(checked) => setFormData(prev => ({ ...prev, is_exam: checked }))}
+            extraToggles={<AllerleiToggleSection isAllerlei={isAllerlei} onToggle={handleAllerleiToggle} />}
+          />
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label className="text-sm font-semibold text-slate-900 dark:text-white">Fach</Label>
-              <Select 
-                value={selectedSubject} 
+              <Select
+                value={selectedSubject}
                 onValueChange={setSelectedSubject}
                 disabled={isEditing}
               >
-                <SelectTrigger className="bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white"><SelectValue placeholder="Fach auswählen" /></SelectTrigger>
+                <SelectTrigger className="bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white">
+                  <SelectValue placeholder="Fach auswählen" />
+                </SelectTrigger>
                 <SelectContent>
                   {subjectOptions.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-2">
-              <Label className="text-sm font-semibold text-slate-900 dark:text-white">Thema</Label>
-              <Select 
-                key={`${selectedSubject}-${selectedTopicId}-${availableTopics.length}`}
-                value={selectedTopicId} 
-                onValueChange={(value) => {
-                  setSelectedTopicId(value);
-                  setFormData(prev => ({ ...prev, topic_id: value }));
-                }} 
-                disabled={!selectedSubject || isAllerlei}
-              >
-                <SelectTrigger className="bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white"><SelectValue placeholder="Thema auswählen (optional)" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="no_topic">Kein Thema</SelectItem>
-                  {availableTopics.map((topic) => (<SelectItem key={topic.id} value={topic.id}>{topic.title}</SelectItem>))}
-                </SelectContent>
-              </Select>
-            </div>
+
+            <TopicSelector
+              value={selectedTopicId}
+              onChange={(value) => {
+                // Leere Werte von Radix Select ignorieren (Bug-Workaround)
+                if (!value) return;
+                setSelectedTopicId(value);
+                setFormData(prev => ({ ...prev, topic_id: value }));
+              }}
+              topics={availableTopics}
+              disabled={!selectedSubject || isAllerlei}
+            />
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1161,26 +1144,29 @@ export default function LessonModal({
                 maxLength={30}
               />
             </div>
-          )}      
+          )}
 
-          {(formData.is_double_lesson && !isAllerlei) && (
+          {/* Double lesson section for non-Allerlei - only in flexible mode */}
+          {formData.is_double_lesson && !isAllerlei && settings?.scheduleType !== 'fixed' && (
             <div className="space-y-4 p-4 rounded-lg bg-slate-100/50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700">
               <div className="flex items-center gap-2 mb-3">
-                <Switch 
-                  id="add-second-lesson" 
-                  checked={addSecondLesson} 
-                  onCheckedChange={handleAddSecondLessonToggle} 
+                <input
+                  type="checkbox"
+                  id="add-second-lesson"
+                  checked={addSecondLesson}
+                  onChange={(e) => handleAddSecondLessonToggle(e.target.checked)}
+                  className="rounded"
                 />
                 <Label htmlFor="add-second-lesson" className="text-sm font-semibold text-slate-900 dark:text-white cursor-pointer">
                   Zusätzliche Lektion hinzufügen
                 </Label>
               </div>
-              
+
               {addSecondLesson && (
                 <div className="space-y-2">
                   <Label className="text-sm font-semibold text-slate-900 dark:text-white">Zweite Lektion auswählen</Label>
-                  <Select 
-                    value={selectedSecondLesson} 
+                  <Select
+                    value={selectedSecondLesson}
                     onValueChange={handleSecondLessonSelection}
                   >
                     <SelectTrigger className="bg-slate-200 dark:bg-slate-700 border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white">
@@ -1210,7 +1196,7 @@ export default function LessonModal({
                   )}
                 </div>
               )}
-              
+
               {!addSecondLesson && (
                 <p className="text-sm text-slate-500 dark:text-slate-400">
                   Die aktuelle Lektion wird einfach als Doppellektion (90 Min) geführt, ohne zusätzliche Inhalte.
@@ -1219,7 +1205,7 @@ export default function LessonModal({
             </div>
           )}
 
-          {/* ==================== ALLERLEI SEKUNDÄRFÄCHER (nur wenn Allerlei aktiv) ==================== */}
+          {/* Allerlei secondary subjects section */}
           {isAllerlei && (
             <div className="space-y-6 mt-6 p-5 rounded-lg bg-gradient-to-br from-purple-50 to-blue-50 dark:from-purple-900/20 dark:to-blue-900/20 border border-purple-200 dark:border-purple-700">
               <div className="flex items-center justify-between">
@@ -1234,7 +1220,7 @@ export default function LessonModal({
 
               {allerleiSubjects.length === 0 ? (
                 <p className="text-sm text-slate-600 dark:text-slate-400 italic">
-                  Noch keine sekundären Fächer ausgewählt – klicke oben auf „Fach hinzufügen“.
+                  Noch keine sekundären Fächer ausgewählt – klicke oben auf „Fach hinzufügen".
                 </p>
               ) : (
                 <div className="space-y-4">
@@ -1269,14 +1255,14 @@ export default function LessonModal({
             </div>
           )}
 
-          {/* ==================== DAUER DER ALLERLEI-BLOCKSTUNDE ==================== */}
+          {/* Allerlei duration selector */}
           {isAllerlei && (
             <div className="space-y-2 mt-6">
               <Label className="text-sm font-semibold text-slate-900 dark:text-white">
                 Dauer dieser Allerlei-Lektion
               </Label>
-              <Select 
-                value={formData.period_span || 1} 
+              <Select
+                value={formData.period_span || 1}
                 onValueChange={(val) => setFormData(prev => ({ ...prev, period_span: Number(val) }))}
               >
                 <SelectTrigger className="bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white">
@@ -1297,6 +1283,7 @@ export default function LessonModal({
             </div>
           )}
 
+          {/* Primary steps section */}
           <div className="space-y-4">
             <div className="flex items-center gap-2">
               <Label className="font-semibold text-slate-900 dark:text-white">Primäre Lektion Schritte</Label>
@@ -1305,7 +1292,6 @@ export default function LessonModal({
                 onInsert={(steps, templateName) => {
                   const withNewIds = steps.map(s => ({ ...s, id: generateId() }));
                   setPrimarySteps(prev => [...prev, ...withNewIds]);
-
                   if (templateName) {
                     setFormData(prev => ({ ...prev, name: templateName }));
                   }
@@ -1324,11 +1310,12 @@ export default function LessonModal({
                   topicColor={topicColor}
                   isLast={true}
                   isUnifiedDouble={isUnifiedDouble}
+                  lessonDuration={settings?.lessonDuration || 45}
                 />
               ) : (
                 primarySteps.map((step, index) => (
                   <StepRow
-                    key={`${step.id}-materials-${topicMaterials.length}`}
+                    key={`primary-${index}-${step.id}`}
                     step={step}
                     onUpdate={(field, value) => handleUpdatePrimaryStep(step.id, field, value)}
                     onRemove={() => handleRemovePrimaryStep(step.id)}
@@ -1336,6 +1323,7 @@ export default function LessonModal({
                     topicColor={topicColor}
                     isLast={index === primarySteps.length - 1}
                     isUnifiedDouble={isUnifiedDouble}
+                    lessonDuration={settings?.lessonDuration || 45}
                   />
                 ))
               )}
@@ -1346,11 +1334,9 @@ export default function LessonModal({
                 </Button>
                 <LessonTemplatePopover
                   subjectId={selectedSubject}
-                  onInsert={(steps, templateName) => {  // ← templateName als zweiter Parameter
+                  onInsert={(steps, templateName) => {
                     const withNewIds = steps.map(s => ({ ...s, id: generateId() }));
                     setPrimarySteps(prev => [...prev, ...withNewIds]);
-
-                    // Titel der Vorlage übernehmen (falls vorhanden)
                     if (templateName) {
                       setFormData(prev => ({ ...prev, name: templateName }));
                     }
@@ -1361,6 +1347,7 @@ export default function LessonModal({
             </div>
           </div>
 
+          {/* Second lesson steps section */}
           {addSecondLesson && !isUnifiedDouble && (
             <div className="space-y-4">
               <div className="flex items-center gap-2">
@@ -1385,11 +1372,12 @@ export default function LessonModal({
                     topicColor={topicColor}
                     isLast={true}
                     isUnifiedDouble={isUnifiedDouble}
+                    lessonDuration={settings?.lessonDuration || 45}
                   />
                 ) : (
                   secondSteps.map((step, index) => (
                     <StepRow
-                      key={`${step.id}-materials-${topicMaterials.length}`}
+                      key={`second-${index}-${step.id}`}
                       step={step}
                       onUpdate={(field, value) => handleUpdateSecondStep(step.id, field, value)}
                       onRemove={() => handleRemoveSecondStep(step.id)}
@@ -1397,6 +1385,7 @@ export default function LessonModal({
                       topicColor={topicColor}
                       isLast={index === secondSteps.length - 1}
                       isUnifiedDouble={isUnifiedDouble}
+                      lessonDuration={settings?.lessonDuration || 45}
                     />
                   ))
                 )}
@@ -1407,81 +1396,25 @@ export default function LessonModal({
               </div>
             </div>
           )}
-          
-          <div className="flex justify-between items-center gap-3 pt-6 border-t border-slate-200/50 dark:border-slate-700/50">
-            <div className="flex gap-2">
-              {isEditing && (
-                <Button type="button" variant="destructive" onClick={handleDeleteClick}>
-                  <Trash2 className="w-4 h-4 mr-2" />Löschen
-                </Button>
-              )}
-            </div>
-            <div className="flex gap-3">
-              <Button type="button" variant="outline" onClick={onClose} className="border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white bg-white dark:bg-slate-700 hover:bg-slate-100 dark:hover:bg-slate-600">
-                <X className="w-4 h-4 mr-2" />
-                <span className="text-slate-900 dark:text-white">Abbrechen</span>
-              </Button>
-              <Button 
-                type="submit" 
-                className="text-white hover:opacity-90" 
-                style={{ background: displayModalColor }} 
-                disabled={isSubmitting || !isFormValid}
-                title={!isFormValid ? 'Bitte wählen Sie mindestens ein Fach und eine Lektion aus.' : ''}
-              >
-                <Save className="w-4 h-4 mr-2" />
-                Speichern
-              </Button>
-            </div>
-          </div>
+
+          <LessonModalFooter
+            isEditing={isEditing}
+            isSubmitting={isSubmitting}
+            isFormValid={isFormValid}
+            onDelete={handleDeleteClick}
+            onClose={onClose}
+            saveButtonColor={displayModalColor}
+            saveButtonTextColor="white"
+          />
         </form>
 
-        {/* Template-Popup Modal */}
-        {showTemplateSave && (
-          <div className="fixed inset-0 z-[9999] flex items-center justify-center">
-            {/* Backdrop */}
-            <div 
-              className="absolute inset-0 bg-black/50"
-              onClick={() => {
-                setShowTemplateSave(false);
-                setTemplateName("");
-              }}
-            />
-
-            {/* Dialog */}
-            <div className="relative bg-white dark:bg-slate-800 rounded-lg shadow-2xl p-6 w-96 max-w-[90vw]">
-              <h3 className="text-lg font-semibold mb-4">Name der Vorlage</h3>
-              
-              <Input
-                autoFocus
-                value={templateName}
-                onChange={(e) => setTemplateName(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleSaveAsTemplate()}
-                placeholder="z. B. Einstieg Photosynthese"
-                className="mb-4"
-              />
-
-              <div className="flex justify-end gap-3">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    setShowTemplateSave(false);
-                    setTemplateName("");
-                  }}
-                >
-                  Abbrechen
-                </Button>
-                <Button
-                  size="sm"
-                  onClick={handleSaveAsTemplate}
-                  disabled={!templateName.trim()}
-                >
-                  Speichern
-                </Button>
-              </div>
-            </div>
-          </div>
-        )}
+        <TemplateSaveModal
+          isOpen={showTemplateSave}
+          onClose={closeTemplateSave}
+          templateName={templateName}
+          setTemplateName={setTemplateName}
+          onSave={handleSaveAsTemplate}
+        />
       </DialogContent>
     </Dialog>
   );

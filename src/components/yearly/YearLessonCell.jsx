@@ -1,11 +1,12 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 import { Plus } from 'lucide-react';
-import { 
-  getTextColor, 
-  createGradient, 
-  adjustColor 
+import {
+  getTextColor,
+  createGradient,
+  adjustColor
 } from '@/utils/colorUtils';
+import { LessonBadge } from '@/components/shared/lesson';
 
 /**
  * YearLessonCell - Einzelne Lektionszelle im Jahresplan
@@ -253,21 +254,9 @@ function YearLessonCell({
         style={{ background: createGradient(bgColor, -30) }}
       />
       
-      {lesson.is_half_class && (
-        <div className="absolute top-1 right-1 bg-black/30 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full shadow-md">
-          1/2
-        </div>
-      )}
-      {lesson.is_exam && (
-        <div className="absolute top-1 right-1 bg-black/30 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full shadow-md">
-          ❗
-        </div>
-      )}
-      {isTopicBlock && hasExam && (
-        <div className="absolute top-1 right-1 bg-black/30 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full shadow-md">
-          ❗
-        </div>
-      )}
+      {lesson.is_half_class && <LessonBadge variant="half-class" position="top-right" />}
+      {lesson.is_exam && <LessonBadge variant="exam" position="top-right" />}
+      {isTopicBlock && hasExam && <LessonBadge variant="exam" position="top-right" />}
       
       <div className="relative z-10 text-center flex items-center justify-center h-full">
         {getDisplayText()}

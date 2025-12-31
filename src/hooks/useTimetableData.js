@@ -27,10 +27,11 @@ const useTimetableData = (currentYear, currentWeek) => {
   const [activeClassId, setActiveClassId] = useState(null);
   const queryClientLocal = useQueryClient();
 
+  const userId = pb.authStore.model?.id;
+
   const { data, isLoading: queryLoading, error: queryError, refetch } = useQuery({
-    queryKey: ['timetableData', currentYear, currentWeek],
+    queryKey: ['timetableData', userId, currentYear, currentWeek],
     queryFn: async () => {
-      const userId = pb.authStore.model?.id;
       if (!userId) {
         console.error('No user ID available for query');
         return {
@@ -194,6 +195,7 @@ const useTimetableData = (currentYear, currentWeek) => {
       } else {
         const defaultSettings = {
           user_id: currentUserId,
+          scheduleType: 'flexible',
           startTime: '08:00',
           lessonsPerDay: 8,
           lessonDuration: 45,

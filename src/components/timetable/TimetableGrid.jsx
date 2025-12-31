@@ -9,35 +9,36 @@ import LessonCard from "./LessonCard";
 import { useDraggable } from "@dnd-kit/core";
 import { motion } from "framer-motion";
 import { createMixedSubjectGradient } from '@/utils/colorUtils';
+import HolidayDecorations from './HolidayDecorations';
 
 const getHolidayDisplay = (holiday) => {
   if (!holiday) return { emoji: '', gradient: '', pattern: '' };
   switch (holiday.type) {
       case 'vacation': 
-          if (holiday.name.includes('Sommer')) return { 
-            emoji: '☀️', 
+          if (holiday.name.includes('Sommer')) return {
+            emoji: '☀️',
             gradient: 'linear-gradient(135deg, #fbbf24 0%, #f59e0b 50%, #fb923c 100%)',
-            pattern: 'radial-gradient(circle at 20% 80%, rgba(251, 191, 36, 0.3) 0%, transparent 50%), radial-gradient(circle at 80% 20%, rgba(245, 158, 11, 0.3) 0%, transparent 50%)'
+            pattern: 'radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0.3) 0%, transparent 20%), repeating-conic-gradient(from 0deg at 50% 50%, rgba(255, 255, 255, 0.15) 0deg 15deg, transparent 15deg 30deg)'
           };
-          if (holiday.name.includes('Herbst')) return { 
-            emoji: '🍂', 
+          if (holiday.name.includes('Herbst')) return {
+            emoji: '🍂',
             gradient: 'linear-gradient(135deg, #f97316 0%, #ea580c 50%, #dc2626 100%)',
-            pattern: 'repeating-linear-gradient(45deg, transparent, transparent 10px, rgba(249, 115, 22, 0.1) 10px, rgba(249, 115, 22, 0.1) 20px)'
+            pattern: 'radial-gradient(ellipse 8px 12px at 15% 20%, rgba(139, 69, 19, 0.25) 0%, transparent 100%), radial-gradient(ellipse 10px 14px at 45% 35%, rgba(139, 69, 19, 0.2) 0%, transparent 100%), radial-gradient(ellipse 7px 11px at 75% 15%, rgba(139, 69, 19, 0.22) 0%, transparent 100%), radial-gradient(ellipse 9px 13px at 25% 65%, rgba(139, 69, 19, 0.18) 0%, transparent 100%), radial-gradient(ellipse 8px 12px at 60% 75%, rgba(139, 69, 19, 0.23) 0%, transparent 100%), radial-gradient(ellipse 6px 10px at 85% 55%, rgba(139, 69, 19, 0.2) 0%, transparent 100%), radial-gradient(ellipse 11px 15px at 35% 85%, rgba(139, 69, 19, 0.15) 0%, transparent 100%), radial-gradient(ellipse 7px 11px at 90% 90%, rgba(139, 69, 19, 0.25) 0%, transparent 100%)'
           };
           if (holiday.name.includes('Weihnacht')) return { 
             emoji: '🎄', 
             gradient: 'linear-gradient(135deg, #059669 0%, #047857 50%, #065f46 100%)',
             pattern: 'radial-gradient(circle at 20% 30%, rgba(255, 255, 255, 0.12) 2px, transparent 2px), radial-gradient(circle at 60% 70%, rgba(255, 255, 255, 0.08) 3px, transparent 3px), radial-gradient(circle at 80% 20%, rgba(255, 255, 255, 0.15) 2px, transparent 2px), radial-gradient(circle at 35% 80%, rgba(255, 255, 255, 0.1) 2px, transparent 2px), radial-gradient(circle at 50% 40%, rgba(255, 255, 255, 0.1) 2.5px, transparent 2.5px), radial-gradient(circle at 15% 60%, rgba(255, 255, 255, 0.09) 2px, transparent 2px), radial-gradient(circle at 70% 50%, rgba(255, 255, 255, 0.11) 2px, transparent 2px), radial-gradient(circle at 40% 15%, rgba(255, 255, 255, 0.13) 2.5px, transparent 2.5px), radial-gradient(circle at 85% 65%, rgba(255, 255, 255, 0.1) 2px, transparent 2px), radial-gradient(circle at 25% 90%, rgba(255, 255, 255, 0.08) 3px, transparent 3px), radial-gradient(circle at 90% 85%, rgba(255, 255, 255, 0.12) 2px, transparent 2px), radial-gradient(circle at 45% 55%, rgba(255, 255, 255, 0.09) 2.5px, transparent 2.5px)'
           };
-          if (holiday.name.includes('Sport')) return { 
-            emoji: '⛷️', 
+          if (holiday.name.includes('Sport')) return {
+            emoji: '⛷️',
             gradient: 'linear-gradient(135deg, #0ea5e9 0%, #0284c7 50%, #0369a1 100%)',
-            pattern: 'linear-gradient(45deg, rgba(255, 255, 255, 0.1) 25%, transparent 25%, transparent 75%, rgba(255, 255, 255, 0.1) 75%)'
+            pattern: 'radial-gradient(circle at 20% 30%, rgba(255, 255, 255, 0.12) 2px, transparent 2px), radial-gradient(circle at 60% 70%, rgba(255, 255, 255, 0.08) 3px, transparent 3px), radial-gradient(circle at 80% 20%, rgba(255, 255, 255, 0.15) 2px, transparent 2px), radial-gradient(circle at 35% 80%, rgba(255, 255, 255, 0.1) 2px, transparent 2px), radial-gradient(circle at 50% 40%, rgba(255, 255, 255, 0.1) 2.5px, transparent 2.5px), radial-gradient(circle at 15% 60%, rgba(255, 255, 255, 0.09) 2px, transparent 2px), radial-gradient(circle at 70% 50%, rgba(255, 255, 255, 0.11) 2px, transparent 2px), linear-gradient(150deg, transparent 65%, rgba(255, 255, 255, 0.08) 65%, rgba(255, 255, 255, 0.08) 75%, transparent 75%), linear-gradient(30deg, transparent 70%, rgba(255, 255, 255, 0.06) 70%, rgba(255, 255, 255, 0.06) 85%, transparent 85%)'
           };
-          if (holiday.name.includes('Frühling')) return { 
-            emoji: '🌷', 
-            gradient: 'linear-gradient(135deg, #a78bfa 0%, #8b5cf6 50%, #7c3aed 100%)',
-            pattern: 'radial-gradient(circle at 30% 30%, rgba(167, 139, 250, 0.3) 0%, transparent 50%), radial-gradient(circle at 70% 70%, rgba(139, 92, 246, 0.2) 0%, transparent 50%)'
+          if (holiday.name.includes('Frühling')) return {
+            emoji: '🌸',
+            gradient: 'linear-gradient(135deg, #f9a8d4 0%, #f472b6 50%, #ec4899 100%)',
+            pattern: 'radial-gradient(circle at 10% 15%, rgba(255, 255, 255, 0.2) 3px, transparent 3px), radial-gradient(circle at 25% 35%, rgba(255, 255, 255, 0.15) 4px, transparent 4px), radial-gradient(circle at 45% 10%, rgba(255, 255, 255, 0.18) 3px, transparent 3px), radial-gradient(circle at 65% 45%, rgba(255, 255, 255, 0.2) 5px, transparent 5px), radial-gradient(circle at 85% 25%, rgba(255, 255, 255, 0.12) 3px, transparent 3px), radial-gradient(circle at 15% 70%, rgba(255, 255, 255, 0.16) 4px, transparent 4px), radial-gradient(circle at 35% 85%, rgba(255, 255, 255, 0.14) 3px, transparent 3px), radial-gradient(circle at 55% 65%, rgba(255, 255, 255, 0.2) 4px, transparent 4px), radial-gradient(circle at 75% 80%, rgba(255, 255, 255, 0.18) 5px, transparent 5px), radial-gradient(circle at 90% 60%, rgba(255, 255, 255, 0.15) 3px, transparent 3px)'
           };
           return { 
             emoji: '🏖️', 
@@ -63,10 +64,11 @@ const getHolidayDisplay = (holiday) => {
 };
 
 const DraggableItem = ({ id, data, children, onClick }) => {
-  const { attributes, listeners, setNodeRef, transform, transition } = useDraggable({ id, data });
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useDraggable({ id, data });
   const style = {
     transform: transform ? `translate3d(${transform.x}px, ${transform.y}px, 0)` : undefined,
     transition,
+    opacity: isDragging ? 0 : 1, // Hide original during drag - DragOverlay shows the preview
   };
   return <div ref={setNodeRef} style={style} {...listeners} {...attributes} className="h-full w-full select-none lesson-card" onClick={onClick}>{children}</div>;
 };
@@ -184,7 +186,6 @@ const TimetableGrid = React.forwardRef(
             const droppableId = `${day.key}-${slot.period}`;
             const dateForCell = getDateForDay(day.key);
             const holiday = getHolidayForDate(dateForCell);
-            const holidayDisplay = holiday ? getHolidayDisplay(holiday) : null;
 
             // NEU: Prüfen, ob dieser Slot von einer höheren Lektion überdeckt wird
             const coveringLesson = lessons.find(l =>
@@ -205,7 +206,6 @@ const TimetableGrid = React.forwardRef(
                 dayIndex={dayIndex}
                 rowNum={rowNum}
                 holiday={holiday}
-                holidayDisplay={holidayDisplay}
                 isOccupied={false} // Da wir überdeckte Zellen nicht rendern, ist isOccupied hier immer false
                 lesson={lesson}
                 droppableId={droppableId}
@@ -225,7 +225,7 @@ const TimetableGrid = React.forwardRef(
       );
     };
 
-    const SlotCell = ({ dayIndex, rowNum, holiday, holidayDisplay, isOccupied, lesson, droppableId, onCreateLesson, day, slot, onEditLesson, onShowHover, onHideHover, isLastRow, subjects, isAltPressed }) => {
+    const SlotCell = ({ dayIndex, rowNum, holiday, isOccupied, lesson, droppableId, onCreateLesson, day, slot, onEditLesson, onShowHover, onHideHover, isLastRow, subjects, isAltPressed }) => {
       const validDays = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
       if (!validDays.includes(day.key)) {
         console.error(`Invalid day.key in SlotCell: ${day.key} for slot ${slot.period}`);
@@ -261,17 +261,8 @@ const TimetableGrid = React.forwardRef(
             gridColumn: dayIndex + 2,
             minHeight: 'var(--cell-height, 80px)',
             ...(lesson ? (() => {
-              const span = lesson?.period_span ?? (lesson?.is_double_lesson ? 2 : 1);
-              if (lesson?.is_double_lesson) {
-                console.log('TimetableGrid: Double lesson rendering', {
-                  lessonId: lesson.id,
-                  is_double_lesson: lesson.is_double_lesson,
-                  period_span: lesson.period_span,
-                  calculated_span: span,
-                  day: day.key,
-                  period: slot.period
-                });
-              }
+              // Use || instead of ?? to treat 0 as falsy (fallback to calculated default)
+              const span = lesson?.period_span || (lesson?.is_double_lesson ? 2 : 1);
               return span > 1 ? {
                 gridRow: `${rowNum} / span ${span}`,
                 minHeight: `calc(var(--cell-height, 80px) * ${span} - 1px)`, // -1px wegen Border
@@ -279,10 +270,6 @@ const TimetableGrid = React.forwardRef(
                 overflow: 'hidden',
               } : {};
             })() : {}),
-            ...(holiday ? {
-              background: holidayDisplay.gradient,
-              backgroundImage: holidayDisplay.pattern,
-            } : {})
           }}
           data-day={day.key}
           data-period={slot.period}
@@ -341,12 +328,7 @@ const TimetableGrid = React.forwardRef(
                   )}
                 </div>
               );
-            })() : holiday ? (
-              <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-1 text-white pointer-events-none">
-                <div className="text-xl">{holidayDisplay.emoji}</div>
-                <span className="text-xs font-bold leading-tight mt-1">{holiday.name}</span>
-              </div>
-            ) : (
+            })() : (
               <div className="absolute inset-0">
                 <div className="absolute inset-1 rounded-lg border-2 border-transparent border-dashed opacity-0 group-hover:opacity-100 group-hover:border-blue-400 group-hover:bg-blue-900/20 transition-all duration-200" />
                 <Button
@@ -365,20 +347,28 @@ const TimetableGrid = React.forwardRef(
 
     return (
       <div className="relative bg-transparent rounded-2xl">
-        {/* New: Full-week holiday overlay */}
+        {/* Full-week holiday overlay - covers entire grid */}
         {hasHolidayInWeek && (
           <div
-            className="absolute flex flex-col items-center justify-center text-center text-white pointer-events-none z-10"
+            className="absolute flex flex-col items-center justify-center text-center text-white pointer-events-none"
             style={{
-              background: holidayDisplay.pattern ? `${holidayDisplay.gradient}, ${holidayDisplay.pattern}` : holidayDisplay.gradient,
-              top: 'var(--cell-height)',
-              left: '120px',
-              width: 'calc(100% - 120px)',
-              height: 'calc(100% - var(--cell-height))',
+              background: holidayDisplay.gradient,
+              top: 0,
+              left: 0,
+              width: '100%',
+              height: '100%',
+              zIndex: 50,
+              borderRadius: '1rem',
             }}
           >
-            <div className="text-9xl">{holidayDisplay.emoji}</div>
-            <span className="text-sm font-bold leading-tight mt-1">{hasHolidayInWeek.name}</span>
+            {/* Animierte Dekorationen basierend auf Ferientyp */}
+            <HolidayDecorations type={hasHolidayInWeek.type} holidayName={hasHolidayInWeek.name} />
+
+            {/* Emoji und Text */}
+            <div className="relative z-10">
+              <div className="text-9xl opacity-90 drop-shadow-lg">{holidayDisplay.emoji}</div>
+              <span className="text-2xl font-bold leading-tight mt-4 drop-shadow-md">{hasHolidayInWeek.name}</span>
+            </div>
           </div>
         )}
         <div ref={ref} className="timetable-grid-container grid gap-0 bg-transparent rounded-2xl" style={gridStyle} key={lessons.length}>
@@ -403,56 +393,46 @@ const TimetableGrid = React.forwardRef(
           {(timeSlots || []).map((slot, slotIndex) => renderTimeSlotRow(slot, slotIndex))}
           
           {/* NEU: Direkter Merge-Preview als echtes Grid-Element */}
-          {mergePreview && mergePreview.lessons.length >= 2 && (
-            <motion.div
-              layout
-              layoutId="merge-preview"
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ duration: 0.3, ease: "easeOut" }}
-              className="rounded-2xl shadow-2xl overflow-hidden col-span-1 pointer-events-none"
-              style={{
-                gridColumn: DAYS.findIndex(d => d.key === mergePreview.day) + 2,
-                gridRow: `${mergePreview.startPeriod + 1} / span ${mergePreview.lessons.length}`,
-                background: createMixedSubjectGradient(
-                  mergePreview.lessons
-                    .map(l => subjects.find(s => s.name === l.subject_name)?.color)
-                    .filter(Boolean)
-                    .concat(['#94a3b8'])
-                ),
-                zIndex: 50,
-              }}
-            >
-              <div className="h-full w-full flex flex-col items-center justify-center text-white p-3">
-                <div className="text-3xl font-bold drop-shadow-2xl tracking-tight">
-                  Allerlei
+          {mergePreview && mergePreview.lessons.length >= 2 && (() => {
+            // Berechne totalSpan basierend auf period_span der einzelnen Lektionen (Doppellektionen zählen als 2)
+            const totalSpan = mergePreview.lessons.reduce((sum, l) =>
+              sum + (l.period_span || (l.is_double_lesson ? 2 : 1)), 0);
+
+            return (
+              <motion.div
+                layout
+                layoutId="merge-preview"
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ duration: 0.3, ease: "easeOut" }}
+                className="rounded-2xl shadow-2xl overflow-hidden col-span-1 pointer-events-none"
+                style={{
+                  gridColumn: DAYS.findIndex(d => d.key === mergePreview.day) + 2,
+                  gridRow: `${mergePreview.startPeriod + 1} / span ${totalSpan}`,
+                  background: createMixedSubjectGradient(
+                    mergePreview.lessons
+                      .map(l => subjects.find(s => s.name === l.subject_name)?.color)
+                      .filter(Boolean)
+                      .concat(['#94a3b8'])
+                  ),
+                  zIndex: 50,
+                }}
+              >
+                <div className="h-full w-full flex flex-col items-center justify-center text-white p-3">
+                  <div className="text-3xl font-bold drop-shadow-2xl tracking-tight">
+                    Allerlei
+                  </div>
+                  <div className="text-lg mt-1 opacity-90 drop-shadow-lg">
+                    {totalSpan} Stunden
+                  </div>
+                  <div className="text-sm mt-2 px-4 text-center leading-relaxed opacity-80 truncate max-w-full drop-shadow-md">
+                    {[...new Set(mergePreview.lessons.map(l => l.subject_name))].filter(Boolean).join(' + ')}
+                  </div>
                 </div>
-                <div className="text-lg mt-1 opacity-90 drop-shadow-lg">
-                  {mergePreview.lessons.length} Stunden
-                </div>
-                <div className="text-sm mt-2 px-4 text-center leading-relaxed opacity-80 truncate max-w-full drop-shadow-md">
-                  {[...new Set(mergePreview.lessons.map(l => l.subject_name))].filter(Boolean).join(' + ')}
-                </div>
-              </div>
-            </motion.div>
-          )}
+              </motion.div>
+            );
+          })()}
         </div>
-        {/* Optional: Full-week holiday overlay bleibt hier draußen */}
-        {hasHolidayInWeek && (
-          <div
-            className="absolute flex flex-col items-center justify-center text-center text-white pointer-events-none z-10"
-            style={{
-              background: holidayDisplay.pattern ? `${holidayDisplay.gradient}, ${holidayDisplay.pattern}` : holidayDisplay.gradient,
-              top: 'var(--cell-height)',
-              left: '120px',
-              width: 'calc(100% - 120px)',
-              height: 'calc(100% - var(--cell-height))',
-            }}
-          >
-            <div className="text-9xl">{holidayDisplay.emoji}</div>
-            <span className="text-sm font-bold leading-tight mt-1">{hasHolidayInWeek.name}</span>
-          </div>
-        )}
       </div>
     );
   }

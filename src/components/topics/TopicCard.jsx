@@ -8,8 +8,8 @@ const TopicCard = ({ topic, onClick }) => {
 
   return (
     <div
-      className="rounded-xl overflow-hidden shadow-md cursor-pointer flex-shrink-0"
-      style={{ width: '300px', aspectRatio: '16/9', background: gradient }}
+      className="rounded-xl overflow-hidden shadow-md cursor-pointer flex-shrink-0 w-full sm:w-[280px] md:w-[300px] lg:w-[320px]"
+      style={{ aspectRatio: '16/9', background: gradient }}
       onClick={onClick}
     >
       <div className="p-4" style={{ color: textColor }}>

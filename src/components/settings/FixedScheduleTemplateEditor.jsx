@@ -176,7 +176,10 @@ export default function FixedScheduleTemplateEditor({ initialTemplate, onSave, c
                                                             <span className="text-xs opacity-50">Fach hier ablegen</span>
                                                         </div>
                                                     )}
-                                                    {/* Placeholder removed for clean grid appearance */}
+                                                    {/* Placeholder - hidden but required for proper drop detection */}
+                                                    <div style={{ display: 'none' }}>
+                                                        {provided.placeholder}
+                                                    </div>
                                                 </div>
                                             )}
                                         </Droppable>

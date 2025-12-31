@@ -44,6 +44,16 @@ const ScrollbarStyles = `
   }
 `;
 
+// Liest den gespeicherten Sidebar-Zustand aus dem Cookie
+const getSidebarDefaultState = () => {
+  const cookies = document.cookie.split(';');
+  const sidebarCookie = cookies.find(c => c.trim().startsWith('sidebar_state='));
+  if (sidebarCookie) {
+    return sidebarCookie.split('=')[1].trim() === 'true';
+  }
+  return true; // Default: offen
+};
+
 export default function Layout({ children }) {
   const location = useLocation();
   const navigate = useNavigate();
@@ -118,7 +128,7 @@ export default function Layout({ children }) {
   return (
     <>
       <style>{ScrollbarStyles}</style>
-      <SidebarProvider defaultOpen={true}>
+      <SidebarProvider defaultOpen={getSidebarDefaultState()}>
         <div className="min-h-screen flex w-full bg-gradient-to-br from-slate-50 via-slate-100 to-slate-200 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 transition-colors duration-300">
           {!isFullscreen || location.pathname !== createPageUrl("Timetable") ? (
             <Sidebar collapsible="icon">

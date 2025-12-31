@@ -218,7 +218,7 @@ const PerformanceModal = ({ isOpen, onClose, onSave, students = [], subjects = [
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-4xl border-slate-700 bg-slate-900 text-white">
+      <DialogContent className="max-w-4xl border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-3 text-xl">
             <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center shadow-md">
@@ -231,7 +231,7 @@ const PerformanceModal = ({ isOpen, onClose, onSave, students = [], subjects = [
           </DialogDescription>
         </DialogHeader>
         {!editingPerformance && (
-          <div className="flex gap-2 mb-4 border-b border-slate-700 pb-4">
+          <div className="flex gap-2 mb-4 border-b border-slate-200 dark:border-slate-700 pb-4">
             <Button variant={mode === 'manual' ? 'default' : 'ghost'} onClick={() => setMode('manual')} className={`w-full ${mode === 'manual' ? 'bg-blue-600' : ''}`}>Manuelle Eingabe</Button>
             <Button variant={mode === 'import' ? 'default' : 'ghost'} onClick={() => setMode('import')} className={`w-full ${mode === 'import' ? 'bg-blue-600' : ''}`}>Noten importieren</Button>
           </div>
@@ -241,7 +241,7 @@ const PerformanceModal = ({ isOpen, onClose, onSave, students = [], subjects = [
             <div>
               <Label htmlFor="subject">Fach</Label>
               <Select value={selectedSubject} onValueChange={setSelectedSubject}>
-                <SelectTrigger id="subject" className="bg-slate-800 border-slate-600">
+                <SelectTrigger id="subject" className="bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600">
                   <SelectValue placeholder="Fach auswählen" />
                 </SelectTrigger>
                 <SelectContent>
@@ -253,18 +253,18 @@ const PerformanceModal = ({ isOpen, onClose, onSave, students = [], subjects = [
             </div>
             <div>
               <Label htmlFor="assessmentName">Prüfungsname</Label>
-              <Input id="assessmentName" value={assessmentName} onChange={e => setAssessmentName(e.target.value)} required className="bg-slate-800 border-slate-600" />
+              <Input id="assessmentName" value={assessmentName} onChange={e => setAssessmentName(e.target.value)} required className="bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600" />
             </div>
             <div>
               <Label htmlFor="date">Datum</Label>
-              <Input id="date" type="date" value={date} onChange={e => setDate(e.target.value)} required className="bg-slate-800 border-slate-600" />
+              <Input id="date" type="date" value={date} onChange={e => setDate(e.target.value)} required className="bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600" />
             </div>
           </div>
           <div>
             <Label>Fachbereiche (Optional)</Label>
             <div className="flex gap-2 items-center mt-1">
               <Select onValueChange={(value) => !selectedFachbereiche.includes(value) && setSelectedFachbereiche([...selectedFachbereiche, value])}>
-                <SelectTrigger className="flex-1 bg-slate-800 border-slate-600">
+                <SelectTrigger className="flex-1 bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600">
                   <SelectValue placeholder="Bestehenden Fachbereich auswählen..." />
                 </SelectTrigger>
                 <SelectContent>
@@ -277,7 +277,7 @@ const PerformanceModal = ({ isOpen, onClose, onSave, students = [], subjects = [
                 value={newFachbereichName}
                 onChange={e => setNewFachbereichName(e.target.value)}
                 placeholder="Oder neuen Fachbereich erstellen"
-                className="flex-1 bg-slate-800 border-slate-600"
+                className="flex-1 bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600"
                 onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), handleAddFachbereich())}
               />
               <Button type="button" size="icon" onClick={handleAddFachbereich} className="bg-blue-600 hover:bg-blue-700">
@@ -286,9 +286,9 @@ const PerformanceModal = ({ isOpen, onClose, onSave, students = [], subjects = [
             </div>
             <div className="flex flex-wrap gap-2 mt-3">
               {selectedFachbereiche.map((fbName) => (
-                <Badge key={fbName} variant="secondary" className="bg-slate-700 text-white flex items-center gap-1.5 py-1 px-2">
+                <Badge key={fbName} variant="secondary" className="bg-slate-200 dark:bg-slate-700 text-slate-900 dark:text-white flex items-center gap-1.5 py-1 px-2">
                   {fbName}
-                  <button type="button" onClick={() => setSelectedFachbereiche(selectedFachbereiche.filter(name => name !== fbName))} className="text-slate-400 hover:text-white rounded-full hover:bg-slate-600 p-0.5">
+                  <button type="button" onClick={() => setSelectedFachbereiche(selectedFachbereiche.filter(name => name !== fbName))} className="text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white rounded-full hover:bg-slate-300 dark:hover:bg-slate-600 p-0.5">
                     <X className="w-3 h-3" />
                   </button>
                 </Badge>
@@ -299,7 +299,7 @@ const PerformanceModal = ({ isOpen, onClose, onSave, students = [], subjects = [
             <Label>Gewichtung</Label>
             <Input
               type="number"
-              step="0.1"
+              step="0.01"
               min="0"
               max="10"
               placeholder="1"
@@ -316,7 +316,7 @@ const PerformanceModal = ({ isOpen, onClose, onSave, students = [], subjects = [
                   // sonst ignorieren
                 }
               }}
-              className="bg-slate-800 border-slate-600"
+              className="bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600"
             />
             <p className="text-xs text-muted-foreground">
               Standard = 1 | Klausur = 3 | Stegreif = 0.5 | mündlich = 1
@@ -324,9 +324,9 @@ const PerformanceModal = ({ isOpen, onClose, onSave, students = [], subjects = [
           </div>
           <div>
             <Label>Noten</Label>
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 mt-1 max-h-[30vh] overflow-y-auto p-2 bg-slate-800/50 rounded-lg">
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 mt-1 max-h-[30vh] overflow-y-auto p-2 bg-slate-100 dark:bg-slate-800/50 rounded-lg">
               {studentGrades.map((sg, index) => (
-                <div key={sg.student_id} className="flex items-center justify-between p-2 bg-slate-800 rounded">
+                <div key={sg.student_id} className="flex items-center justify-between p-2 bg-white dark:bg-slate-800 rounded border border-slate-200 dark:border-transparent">
                   <Label htmlFor={`grade-${sg.student_id}`} className="flex-1 truncate text-sm" title={sg.name}>{sg.name}</Label>
                   <Input
                     id={`grade-${sg.student_id}`}
@@ -340,7 +340,7 @@ const PerformanceModal = ({ isOpen, onClose, onSave, students = [], subjects = [
                       newGrades[index].grade = e.target.value;
                       setStudentGrades(newGrades);
                     }}
-                    className="w-20 bg-slate-700 border-slate-600"
+                    className="w-20 bg-slate-50 dark:bg-slate-700 border-slate-300 dark:border-slate-600"
                   />
                 </div>
               ))}
@@ -362,14 +362,14 @@ const PerformanceModal = ({ isOpen, onClose, onSave, students = [], subjects = [
                 value={pasteData}
                 onChange={e => setPasteData(e.target.value)}
                 placeholder={importMode === 'nameAndGrade' ? "Max Mustermann 5.5\nErika Musterfrau 4.0" : "5.5\n4.0\n..."}
-                className="h-32 bg-slate-800 border-slate-600"
+                className="h-32 bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600"
               />
               <Button type="button" onClick={handleParsePasteData} className="mt-2 bg-green-600 hover:bg-green-700">Daten verarbeiten & Vorschau</Button>
               {error && <p className="text-red-500 mt-2">{error}</p>}
             </div>
           )}
-          <div className="flex justify-end gap-3 pt-4 border-t border-slate-700">
-            <Button type="button" variant="outline" onClick={onClose} className="bg-slate-700 hover:bg-slate-600">Abbrechen</Button>
+          <div className="flex justify-end gap-3 pt-4 border-t border-slate-200 dark:border-slate-700">
+            <Button type="button" variant="outline" onClick={onClose} className="bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 border-slate-300 dark:border-slate-600">Abbrechen</Button>
             <Button type="submit" className="bg-blue-600 hover:bg-blue-700">Speichern</Button>
           </div>
         </form>

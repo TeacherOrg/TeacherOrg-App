@@ -6,13 +6,14 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { X, User as UserIcon, Sun, Moon, Monitor, Home, RotateCcw, Mail, Lock, LogOut } from 'lucide-react';
+import { X, User as UserIcon, Sun, Moon, Monitor, Home, RotateCcw, Lock, LogOut, HelpCircle, CheckCircle } from 'lucide-react';
 import pb from '@/api/pb';
 import CalendarLoader from '../ui/CalendarLoader';
 import { generateLessonsFromFixedTemplate } from '@/utils/fixedScheduleGenerator';
 import { syncYearlyLessonToWeekly } from '@/hooks/useYearlyLessonSync';
 import { isEqual } from 'lodash';
 import toast from 'react-hot-toast';
+import { useTutorial, TUTORIAL_IDS } from '@/hooks/useTutorial';
 
 import ClassesSettings from './ClassesSettings';
 import SubjectSettings from './SubjectSettings';
@@ -23,8 +24,11 @@ import HelpSettings from './HelpSettings';
 
 const ProfileSettings = ({
   pendingEmail, setPendingEmail,
-  pendingUserSettings, setPendingUserSettings
+  pendingName, setPendingName,
+  pendingUserSettings, setPendingUserSettings,
+  onClose
 }) => {
+  const { resetAllTutorials, showTutorial, isCompleted, progress, setShowSetupWizard } = useTutorial();
   const [user, setUser] = useState(null);
   const [showPasswordForm, setShowPasswordForm] = useState(false);
   const [oldPassword, setOldPassword] = useState('');
@@ -58,14 +62,35 @@ const ProfileSettings = ({
     setPendingUserSettings(prev => ({ ...prev, default_start_page: value }));
   };
 
-  const handleRestartOnboarding = () => {
-    if (window.confirm('Möchten Sie das Einführungstutorial wirklich neu starten?')) {
-      setPendingUserSettings(prev => ({ ...prev, has_completed_onboarding: false }));
+  const handleRestartOnboarding = async () => {
+    if (window.confirm('Möchten Sie alle Tutorials zurücksetzen und den Setup-Wizard erneut starten?')) {
+      await resetAllTutorials();
+      toast.success('Tutorials zurückgesetzt! Setup-Wizard wird beim nächsten Seitenaufruf angezeigt.');
+    }
+  };
+
+  // Tutorial Namen für Anzeige
+  const TUTORIAL_NAMES = {
+    [TUTORIAL_IDS.SETUP]: 'Einrichtungs-Wizard',
+    [TUTORIAL_IDS.TIMETABLE]: 'Stundenplan',
+    [TUTORIAL_IDS.YEARLY]: 'Jahresansicht',
+    [TUTORIAL_IDS.GROUPS]: 'Gruppen',
+    [TUTORIAL_IDS.TOPICS]: 'Themen',
+    [TUTORIAL_IDS.GRADES]: 'Leistung',
+  };
+
+  // Handler für Tutorial-Start mit Bestätigung
+  const handleTutorialClick = (tutorialId, tutorialName) => {
+    if (window.confirm(`${tutorialName} Tutorial starten?`)) {
+      onClose(); // Settings-Modal schliessen
+      setTimeout(() => showTutorial(tutorialId), 150); // Tutorial starten nach Modal-Animation
     }
   };
 
   const handleLogout = () => {
     pb.authStore.clear();
+    // Custom Event für App.jsx auslösen, um Cache und Store zu leeren
+    window.dispatchEvent(new CustomEvent('user-logout'));
     window.location.href = '/login';
   };
 
@@ -111,31 +136,57 @@ const ProfileSettings = ({
 
   const pageOptions = [
     { value: 'Timetable', label: 'Stundenplan' },
-    { value: 'Grades', label: 'Noten' },
+    { value: 'Grades', label: 'Leistungen' },
     { value: 'Groups', label: 'Gruppen' },
     { value: 'Chores', label: 'Ämtchen' }
   ];
 
   return (
     <div className="space-y-6">
-      <Card>
+      <Card className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
         <CardHeader>
-          <CardTitle className="flex items-center gap-3">
-            <Mail className="w-5 h-5 text-blue-600" />
-            Account-Daten
+          <CardTitle className="flex items-center gap-3 text-slate-900 dark:text-white">
+            <UserIcon className="w-5 h-5 text-blue-600" />
+            Konto
           </CardTitle>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <Label htmlFor="email">E-Mail-Adresse</Label>
-          <Input id="email" type="email" value={pendingEmail} onChange={(e) => setPendingEmail(e.target.value)} />
-          <p className="text-sm text-slate-600 dark:text-slate-400">Änderung erfordert E-Mail-Bestätigung.</p>
-          {emailMessage && <p className="text-sm text-green-600 dark:text-green-400">{emailMessage}</p>}
+        <CardContent>
+          <div className="flex items-start gap-4">
+            <Avatar className="h-14 w-14">
+              <AvatarFallback className="bg-blue-600 text-white text-lg">{getInitials(pendingName || pendingEmail)}</AvatarFallback>
+            </Avatar>
+            <div className="flex-1 space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="username" className="text-slate-700 dark:text-slate-300">Benutzername</Label>
+                <Input
+                  id="username"
+                  type="text"
+                  value={pendingName}
+                  onChange={(e) => setPendingName(e.target.value)}
+                  placeholder="Ihr Benutzername"
+                  className="bg-white dark:bg-slate-700 border-slate-300 dark:border-slate-600"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="email" className="text-slate-700 dark:text-slate-300">E-Mail-Adresse</Label>
+                <Input
+                  id="email"
+                  type="email"
+                  value={pendingEmail}
+                  onChange={(e) => setPendingEmail(e.target.value)}
+                  className="bg-white dark:bg-slate-700 border-slate-300 dark:border-slate-600"
+                />
+                <p className="text-xs text-slate-500 dark:text-slate-400">Änderung erfordert E-Mail-Bestätigung</p>
+              </div>
+              {emailMessage && <p className="text-sm text-green-600 dark:text-green-400">{emailMessage}</p>}
+            </div>
+          </div>
         </CardContent>
       </Card>
 
-      <Card>
+      <Card className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
         <CardHeader>
-          <CardTitle className="flex items-center gap-3">
+          <CardTitle className="flex items-center gap-3 text-slate-900 dark:text-white">
             <Lock className="w-5 h-5 text-red-600" />
             Passwort ändern
           </CardTitle>
@@ -145,14 +196,14 @@ const ProfileSettings = ({
             <Button onClick={() => setShowPasswordForm(true)}>Passwort ändern</Button>
           ) : (
             <div className="space-y-2">
-              <Label htmlFor="old-password">Altes Passwort</Label>
-              <Input id="old-password" type="password" value={oldPassword} onChange={(e) => setOldPassword(e.target.value)} />
-              <Label htmlFor="new-password">Neues Passwort</Label>
-              <Input id="new-password" type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} />
-              <Label htmlFor="confirm-password">Bestätigen</Label>
-              <Input id="confirm-password" type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} />
+              <Label htmlFor="old-password" className="text-slate-700 dark:text-slate-300">Altes Passwort</Label>
+              <Input id="old-password" type="password" value={oldPassword} onChange={(e) => setOldPassword(e.target.value)} className="bg-white dark:bg-slate-700 border-slate-300 dark:border-slate-600" />
+              <Label htmlFor="new-password" className="text-slate-700 dark:text-slate-300">Neues Passwort</Label>
+              <Input id="new-password" type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} className="bg-white dark:bg-slate-700 border-slate-300 dark:border-slate-600" />
+              <Label htmlFor="confirm-password" className="text-slate-700 dark:text-slate-300">Bestätigen</Label>
+              <Input id="confirm-password" type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} className="bg-white dark:bg-slate-700 border-slate-300 dark:border-slate-600" />
               <Button onClick={handlePasswordChange} className="bg-green-600 text-white hover:bg-green-700">Bestätigen</Button>
-              <Button onClick={() => setShowPasswordForm(false)} variant="outline" className="ml-2">Abbrechen</Button>
+              <Button onClick={() => setShowPasswordForm(false)} variant="outline" className="ml-2 border-slate-300 dark:border-slate-600">Abbrechen</Button>
               {passwordMessage && <p className="text-sm text-green-600 dark:text-green-400">{passwordMessage}</p>}
             </div>
           )}
@@ -160,42 +211,26 @@ const ProfileSettings = ({
         </CardContent>
       </Card>
 
-      <Card>
+      <Card className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
         <CardHeader>
-          <CardTitle className="flex items-center gap-3 text-slate-800 dark:text-white">
-            <UserIcon className="w-5 h-5" />
-            Benutzerinformationen
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex items-center gap-4">
-            <Avatar>
-              <AvatarFallback>{getInitials(user?.email)}</AvatarFallback>
-            </Avatar>
-            <div>
-              <p className="font-semibold">{user?.email || 'Unbekannt'}</p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-3">
+          <CardTitle className="flex items-center gap-3 text-slate-900 dark:text-white">
             <Sun className="w-5 h-5 text-yellow-500" />
             Darstellung
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <Label>Design</Label>
+          <Label className="text-slate-700 dark:text-slate-300">Design</Label>
           <Select value={pendingUserSettings.preferred_theme} onValueChange={handleThemeChange}>
-            <SelectTrigger>
+            <SelectTrigger className="bg-white dark:bg-slate-700 border-slate-300 dark:border-slate-600">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
               {themeOptions.map(opt => (
                 <SelectItem key={opt.value} value={opt.value}>
-                  <opt.icon className="w-4 h-4 mr-2" /> {opt.label}
+                  <div className="flex items-center gap-2">
+                    <opt.icon className="w-4 h-4" />
+                    <span>{opt.label}</span>
+                  </div>
                 </SelectItem>
               ))}
             </SelectContent>
@@ -203,17 +238,17 @@ const ProfileSettings = ({
         </CardContent>
       </Card>
 
-      <Card>
+      <Card className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
         <CardHeader>
-          <CardTitle className="flex items-center gap-3">
+          <CardTitle className="flex items-center gap-3 text-slate-900 dark:text-white">
             <Home className="w-5 h-5 text-blue-500" />
             Navigation
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <Label>Startseite</Label>
+          <Label className="text-slate-700 dark:text-slate-300">Startseite</Label>
           <Select value={pendingUserSettings.default_start_page} onValueChange={handleStartPageChange}>
-            <SelectTrigger>
+            <SelectTrigger className="bg-white dark:bg-slate-700 border-slate-300 dark:border-slate-600">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -225,23 +260,43 @@ const ProfileSettings = ({
         </CardContent>
       </Card>
 
-      <Card>
+      <Card className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
         <CardHeader>
-          <CardTitle className="flex items-center gap-3">
-            <RotateCcw className="w-5 h-5 text-green-500" />
-            Tutorial
+          <CardTitle className="flex items-center gap-3 text-slate-900 dark:text-white">
+            <HelpCircle className="w-5 h-5 text-green-500" />
+            Tutorials ({progress.completed}/{progress.total} abgeschlossen)
           </CardTitle>
         </CardHeader>
-        <CardContent>
-          <Button onClick={handleRestartOnboarding} variant="outline">
-            <RotateCcw className="mr-2" /> Neu starten
-          </Button>
+        <CardContent className="space-y-3">
+          <div className="grid grid-cols-2 gap-2">
+            {Object.entries(TUTORIAL_NAMES).map(([id, name]) => (
+              <Button
+                key={id}
+                onClick={() => handleTutorialClick(id, name)}
+                variant="outline"
+                size="sm"
+                className="justify-start border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300"
+              >
+                {isCompleted(id) ? (
+                  <CheckCircle className="w-4 h-4 mr-2 text-green-500" />
+                ) : (
+                  <HelpCircle className="w-4 h-4 mr-2 text-slate-400" />
+                )}
+                {name}
+              </Button>
+            ))}
+          </div>
+          <div className="pt-2 border-t border-slate-200 dark:border-slate-700">
+            <Button onClick={handleRestartOnboarding} variant="outline" size="sm" className="w-full border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300">
+              <RotateCcw className="w-4 h-4 mr-2" /> Alle Tutorials zurücksetzen
+            </Button>
+          </div>
         </CardContent>
       </Card>
 
-      <Card>
+      <Card className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
         <CardHeader>
-          <CardTitle className="flex items-center gap-3">
+          <CardTitle className="flex items-center gap-3 text-slate-900 dark:text-white">
             <LogOut className="w-5 h-5 text-red-500" />
             Account-Aktionen
           </CardTitle>
@@ -279,6 +334,7 @@ const SettingsModal = ({ isOpen, onClose }) => {
   const [activeClassId, setActiveClassId] = useState(null);
   const [user, setUser] = useState(null);
   const [pendingEmail, setPendingEmail] = useState('');
+  const [pendingName, setPendingName] = useState('');
   const [pendingUserSettings, setPendingUserSettings] = useState({ preferred_theme: 'dark', default_start_page: 'Timetable' });
   const initialSettingsRef = useRef(null);
 
@@ -321,6 +377,7 @@ const SettingsModal = ({ isOpen, onClose }) => {
             afternoonBreakDuration: 15,
             cellWidth: 120,
             cellHeight: 80,
+            yearlyDensity: 'standard',
             fixedScheduleTemplate: {}
         };
         try {
@@ -354,6 +411,7 @@ const SettingsModal = ({ isOpen, onClose }) => {
         if (fetchedUser) {
         setUser(fetchedUser);
         setPendingEmail(fetchedUser.email || '');
+        setPendingName(fetchedUser.name || '');
         setPendingUserSettings({
             preferred_theme: fetchedUser.preferred_theme || 'dark',
             default_start_page: fetchedUser.default_start_page || 'Timetable'
@@ -395,6 +453,7 @@ const SettingsModal = ({ isOpen, onClose }) => {
         const dataToSave = {
           ...settings,
           autoFit: settings.autoFit ?? true,
+          yearlyDensity: settings.yearlyDensity ?? 'standard',
         };
 
         console.log('=== BEFORE SAVE ===');
@@ -489,12 +548,14 @@ const SettingsModal = ({ isOpen, onClose }) => {
         }
       }
 
-      if (activeCategory === 'Profil') {
-        if (pendingEmail && pendingEmail !== user?.email) {
-          await pb.collection('users').requestEmailChange(pendingEmail);
-        }
-        await pb.collection('users').update(user.id, pendingUserSettings);
+      // User-Einstellungen immer speichern (nicht nur im Profil-Tab)
+      if (pendingEmail && pendingEmail !== user?.email) {
+        await pb.collection('users').requestEmailChange(pendingEmail);
       }
+      await pb.collection('users').update(user.id, {
+        ...pendingUserSettings,
+        name: pendingName
+      });
 
       console.log("Settings saved!");
 
@@ -525,8 +586,9 @@ const SettingsModal = ({ isOpen, onClose }) => {
       case 'Ferien': return { holidays, refreshData: loadAllData };
       case 'Größe': return { settings, setSettings };
       case 'Hilfe': return {};
-      case 'Profil': return { 
+      case 'Profil': return {
         pendingEmail, setPendingEmail,
+        pendingName, setPendingName,
         pendingUserSettings, setPendingUserSettings,
         onClose
       };
@@ -535,7 +597,10 @@ const SettingsModal = ({ isOpen, onClose }) => {
   };
 
   const hasPendingChanges = () => {
-    return pendingEmail !== user?.email || JSON.stringify(pendingUserSettings) !== JSON.stringify({ preferred_theme: user?.preferred_theme, default_start_page: user?.default_start_page }) || JSON.stringify(settings) !== JSON.stringify(initialSettingsRef.current);
+    return pendingEmail !== user?.email ||
+           pendingName !== (user?.name || '') ||
+           JSON.stringify(pendingUserSettings) !== JSON.stringify({ preferred_theme: user?.preferred_theme, default_start_page: user?.default_start_page }) ||
+           JSON.stringify(settings) !== JSON.stringify(initialSettingsRef.current);
   };
 
   return (

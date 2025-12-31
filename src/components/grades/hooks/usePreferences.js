@@ -8,13 +8,34 @@ export const usePreferences = (activeClassId) => {
   const [expandedLeistungenRows, setExpandedLeistungenRows] = useState(new Set());
   const [expandedUeberfachlichHistories, setExpandedUeberfachlichHistories] = useState(new Set());
   const [expandedUeberfachlichCompetencies, setExpandedUeberfachlichCompetencies] = useState(new Set());
-  const [tab, setTab] = useState('diagramme'); // Standardwert ist immer 'diagramme'
+  const [tab, setTab] = useState('diagramme');
   const [isLoading, setIsLoading] = useState(true);
-  const requestCounter = useRef(0); // Zähler für aktuelle Requests
 
+  // Refs für aktuelle State-Werte (Bug 6 Fix: Debounce mit aktuellen Werten)
+  const expandedLeistungenRowsRef = useRef(expandedLeistungenRows);
+  const expandedUeberfachlichHistoriesRef = useRef(expandedUeberfachlichHistories);
+  const expandedUeberfachlichCompetenciesRef = useRef(expandedUeberfachlichCompetencies);
+  const tabRef = useRef(tab);
+  const activeClassIdRef = useRef(activeClassId);
+
+  // Bug 7 Fix: Symbol-basierte Request-IDs für robustere Überprüfung
+  const activeRequestRef = useRef(null);
+
+  // Bug 5 Fix: Spezifische Subscription-Referenz statt global unsubscribe
+  const subscriptionUnsubscribeRef = useRef(null);
+
+  // Refs aktuell halten
+  useEffect(() => { expandedLeistungenRowsRef.current = expandedLeistungenRows; }, [expandedLeistungenRows]);
+  useEffect(() => { expandedUeberfachlichHistoriesRef.current = expandedUeberfachlichHistories; }, [expandedUeberfachlichHistories]);
+  useEffect(() => { expandedUeberfachlichCompetenciesRef.current = expandedUeberfachlichCompetencies; }, [expandedUeberfachlichCompetencies]);
+  useEffect(() => { tabRef.current = tab; }, [tab]);
+  useEffect(() => { activeClassIdRef.current = activeClassId; }, [activeClassId]);
+
+  // Bug 6 Fix: Debounce mit Refs statt Closures
   const savePreferences = useCallback(
     debounce(async (customData = null) => {
-      if (!activeClassId) {
+      const currentActiveClassId = activeClassIdRef.current;
+      if (!currentActiveClassId) {
         console.warn('No activeClassId provided, skipping savePreferences');
         return;
       }
@@ -25,16 +46,18 @@ export const usePreferences = (activeClassId) => {
         return;
       }
 
-      const requestId = `save-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-      requestCounter.current = requestCounter.current + 1;
-      const currentRequest = requestCounter.current;
+      // Bug 7 Fix: Symbol-basierte Request-ID
+      const requestId = Symbol('save-request');
+      activeRequestRef.current = requestId;
+      const cancelKey = `save-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
       try {
+        // Bug 6 Fix: Aktuelle Werte aus Refs lesen
         const currentPreferences = {
-          expandedLeistungenRows: Array.from(expandedLeistungenRows),
-          expandedUeberfachlichHistories: Array.from(expandedUeberfachlichHistories),
-          expandedUeberfachlichCompetencies: Array.from(expandedUeberfachlichCompetencies),
-          performanceTab: tab
+          expandedLeistungenRows: Array.from(expandedLeistungenRowsRef.current),
+          expandedUeberfachlichHistories: Array.from(expandedUeberfachlichHistoriesRef.current),
+          expandedUeberfachlichCompetencies: Array.from(expandedUeberfachlichCompetenciesRef.current),
+          performanceTab: tabRef.current
         };
 
         const preferencesToSave = customData || currentPreferences;
@@ -45,25 +68,26 @@ export const usePreferences = (activeClassId) => {
 
         const preference = await UserPreferences.findOne({
           user_id: user.id,
-          class_id: activeClassId,
-          $cancelKey: requestId
+          class_id: currentActiveClassId,
+          $cancelKey: cancelKey
         });
 
-        if (requestCounter.current !== currentRequest) {
-          console.log('savePreferences - Request outdated, skipping');
+        // Bug 7 Fix: Request-Überprüfung mit Symbol
+        if (activeRequestRef.current !== requestId) {
+          console.log('savePreferences - Request superseded, skipping');
           return;
         }
 
         if (preference) {
           await UserPreferences.update(preference.id, {
             preferences: preferencesToSave
-          }, { $cancelKey: requestId });
+          }, { $cancelKey: cancelKey });
         } else {
           await UserPreferences.create({
             user_id: user.id,
-            class_id: activeClassId,
+            class_id: currentActiveClassId,
             preferences: preferencesToSave
-          }, { $cancelKey: requestId });
+          }, { $cancelKey: cancelKey });
         }
 
         if (process.env.NODE_ENV === 'development') {
@@ -75,7 +99,7 @@ export const usePreferences = (activeClassId) => {
         }
       }
     }, 500),
-    [activeClassId, expandedLeistungenRows, expandedUeberfachlichHistories, expandedUeberfachlichCompetencies, tab]
+    [] // Bug 6 Fix: Keine Dependencies nötig, da Refs verwendet werden
   );
 
   const loadPreferences = useCallback(async () => {
@@ -86,11 +110,14 @@ export const usePreferences = (activeClassId) => {
     }
 
     setIsLoading(true);
-    requestCounter.current = requestCounter.current + 1;
-    const currentRequest = requestCounter.current;
+
+    // Bug 7 Fix: Symbol-basierte Request-ID
+    const requestId = Symbol('load-request');
+    activeRequestRef.current = requestId;
+    const cancelKey = `load-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
     console.log('=== LOAD PREFERENCES START ===');
-    console.log('Current tab before loading:', tab, 'isLoading:', isLoading, 'activeClassId:', activeClassId);
+    console.log('activeClassId:', activeClassId);
 
     try {
       const user = User.current();
@@ -106,19 +133,15 @@ export const usePreferences = (activeClassId) => {
       const preference = await UserPreferences.findOne({
         user_id: user.id,
         class_id: activeClassId,
-        $cancelKey: `load-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+        $cancelKey: cancelKey
       });
 
-      if (requestCounter.current !== currentRequest) {
-        console.log('loadPreferences - Request outdated, skipping');
+      // Bug 7 Fix: Request-Überprüfung mit Symbol
+      if (activeRequestRef.current !== requestId) {
+        console.log('loadPreferences - Request superseded, skipping');
         setIsLoading(false);
         return;
       }
-
-      // Always force initial tab to 'diagramme'
-      const initialTab = 'diagramme';
-      console.log('Forcing initial tab to:', initialTab);
-      setTab(initialTab);
 
       if (preference?.preferences) {
         console.log('Found preference:', preference.id, 'Data:', preference.preferences);
@@ -139,19 +162,14 @@ export const usePreferences = (activeClassId) => {
             : []
         ));
 
-        // Correct saved tab if not 'diagramme'
+        // Bug 2 Fix: Gespeicherten Tab respektieren statt 'diagramme' zu erzwingen
         const savedTab = preference.preferences.performanceTab;
-        if (savedTab !== initialTab) {
-          await UserPreferences.update(preference.id, {
-            preferences: {
-              expandedLeistungenRows: preference.preferences.expandedLeistungenRows || [],
-              expandedUeberfachlichHistories: preference.preferences.expandedUeberfachlichHistories || [],
-              expandedUeberfachlichCompetencies: preference.preferences.expandedUeberfachlichCompetencies || [],
-              performanceTab: initialTab
-            }
-          }, { $cancelKey: `force-tab-${Date.now()}-${Math.random().toString(36).substr(2, 9)}` });
-          console.log('Preferences saved with corrected tab:', initialTab);
-        }
+        const validTabs = ['diagramme', 'leistungen', 'ueberfachlich'];
+        const initialTab = validTabs.includes(savedTab) ? savedTab : 'diagramme';
+        console.log('Loading saved tab:', initialTab);
+        setTab(initialTab);
+
+        // Bug 2 Fix: ENTFERNT - Keine Tab-Korrektur mehr auf 'diagramme'
       } else {
         console.log('No preferences found, creating with defaults');
         const defaultPreferences = {
@@ -182,7 +200,8 @@ export const usePreferences = (activeClassId) => {
       }
     } finally {
       setIsLoading(false);
-      console.log('=== LOAD PREFERENCES END === - tab now:', tab);
+      // Bug 10 Fix: Stale tab-Wert aus Log entfernt
+      console.log('=== LOAD PREFERENCES END ===');
     }
   }, [activeClassId]);
 
@@ -192,34 +211,44 @@ export const usePreferences = (activeClassId) => {
     }
   }, [loadPreferences]);
 
+  // Subscription Effect
   useEffect(() => {
     if (!activeClassId) return;
     const user = User.current();
     if (!user || !user.id) return;
 
+    // Bug 8 Fix: Refs für Werte die in der Callback verwendet werden
+    const userIdRef = user.id;
+
     const filter = `user_id = '${user.id}' && class_id = '${activeClassId}'`;
     let lastProcessedRecordId = null;
 
-    const subscription = pb.collection('user_preferences').subscribe('*', async (e) => {
-      if (e.record.user_id !== user.id || e.record.class_id !== activeClassId || e.record.id === lastProcessedRecordId) {
+    // Bug 5 Fix: Subscription mit Promise für spezifischen unsubscribe
+    const subscriptionPromise = pb.collection('user_preferences').subscribe('*', async (e) => {
+      // Bug 8 Fix: Aktuelle Werte aus Refs lesen statt Closure
+      const currentActiveClassId = activeClassIdRef.current;
+
+      if (e.record.user_id !== userIdRef || e.record.class_id !== currentActiveClassId || e.record.id === lastProcessedRecordId) {
         return;
       }
 
       lastProcessedRecordId = e.record.id;
 
-      const requestId = `realtime-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-      requestCounter.current = requestCounter.current + 1;
-      const currentRequest = requestCounter.current;
+      // Bug 7 Fix: Symbol-basierte Request-ID
+      const requestId = Symbol('realtime-request');
+      activeRequestRef.current = requestId;
+      const cancelKey = `realtime-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
       try {
         const updated = await UserPreferences.findOne({
-          user_id: user.id,
-          class_id: activeClassId,
-          $cancelKey: requestId
+          user_id: userIdRef,
+          class_id: currentActiveClassId,
+          $cancelKey: cancelKey
         });
 
-        if (requestCounter.current !== currentRequest) {
-          console.log('Realtime load - Request outdated, skipping');
+        // Bug 7 Fix: Request-Überprüfung mit Symbol
+        if (activeRequestRef.current !== requestId) {
+          console.log('Realtime load - Request superseded, skipping');
           return;
         }
 
@@ -247,19 +276,14 @@ export const usePreferences = (activeClassId) => {
           setExpandedUeberfachlichHistories(new Set(preferences.expandedUeberfachlichHistories));
           setExpandedUeberfachlichCompetencies(new Set(preferences.expandedUeberfachlichCompetencies));
 
-          // Nur Tab aktualisieren, wenn sich der Wert geändert hat
-          if (preferences.performanceTab !== tab) {
+          // Tab nur aktualisieren wenn sich der Wert geändert hat
+          const currentTab = tabRef.current;
+          if (preferences.performanceTab !== currentTab) {
             setTab(preferences.performanceTab);
             console.log('Realtime Subscription - Updated tab to:', preferences.performanceTab);
           }
 
-          // Korrigiere Tab, wenn ungültig
-          if (updated.preferences.performanceTab !== preferences.performanceTab) {
-            await UserPreferences.update(updated.id, {
-              preferences: preferences
-            }, { $cancelKey: `realtime-fix-${Date.now()}-${Math.random().toString(36).substr(2, 9)}` });
-            console.log('Realtime: Corrected invalid tab to:', preferences.performanceTab);
-          }
+          // Bug 2 Fix: ENTFERNT - Keine automatische Tab-Korrektur mehr
         } else {
           console.log('Realtime: Invalid preferences, setting defaults');
           setExpandedLeistungenRows(new Set());
@@ -274,33 +298,44 @@ export const usePreferences = (activeClassId) => {
       }
     }, { filter });
 
+    // Bug 5 Fix: Spezifischen unsubscribe speichern
+    subscriptionPromise.then(unsubscribe => {
+      subscriptionUnsubscribeRef.current = unsubscribe;
+    }).catch(err => {
+      console.error('Subscription error:', err);
+    });
+
+    // Bug 5 Fix: Spezifischen unsubscribe aufrufen statt global
     return () => {
-      pb.collection('user_preferences').unsubscribe('*');
-      console.log('Unsubscribed from user_preferences');
+      if (subscriptionUnsubscribeRef.current) {
+        subscriptionUnsubscribeRef.current();
+        subscriptionUnsubscribeRef.current = null;
+        console.log('Unsubscribed specific subscription');
+      }
     };
-  }, [activeClassId, tab]);
+  }, [activeClassId]); // Bug 1 Fix: 'tab' aus Dependencies entfernt
 
   const setValidTab = useCallback((newTab) => {
     const validTabs = ['diagramme', 'leistungen', 'ueberfachlich'];
     if (validTabs.includes(newTab)) {
       setTab(newTab);
       savePreferences({
-        expandedLeistungenRows: Array.from(expandedLeistungenRows),
-        expandedUeberfachlichHistories: Array.from(expandedUeberfachlichHistories),
-        expandedUeberfachlichCompetencies: Array.from(expandedUeberfachlichCompetencies),
+        expandedLeistungenRows: Array.from(expandedLeistungenRowsRef.current),
+        expandedUeberfachlichHistories: Array.from(expandedUeberfachlichHistoriesRef.current),
+        expandedUeberfachlichCompetencies: Array.from(expandedUeberfachlichCompetenciesRef.current),
         performanceTab: newTab
       });
     } else {
       console.warn('Invalid tab attempted:', newTab);
       setTab('diagramme');
       savePreferences({
-        expandedLeistungenRows: Array.from(expandedLeistungenRows),
-        expandedUeberfachlichHistories: Array.from(expandedUeberfachlichHistories),
-        expandedUeberfachlichCompetencies: Array.from(expandedUeberfachlichCompetencies),
+        expandedLeistungenRows: Array.from(expandedLeistungenRowsRef.current),
+        expandedUeberfachlichHistories: Array.from(expandedUeberfachlichHistoriesRef.current),
+        expandedUeberfachlichCompetencies: Array.from(expandedUeberfachlichCompetenciesRef.current),
         performanceTab: 'diagramme'
       });
     }
-  }, [savePreferences, expandedLeistungenRows, expandedUeberfachlichHistories, expandedUeberfachlichCompetencies]);
+  }, [savePreferences]);
 
   const resetAllExpansions = useCallback(() => {
     setExpandedLeistungenRows(new Set());
@@ -310,9 +345,9 @@ export const usePreferences = (activeClassId) => {
       expandedLeistungenRows: [],
       expandedUeberfachlichHistories: [],
       expandedUeberfachlichCompetencies: [],
-      performanceTab: tab
+      performanceTab: tabRef.current
     });
-  }, [savePreferences, tab]);
+  }, [savePreferences]);
 
   return {
     tab,

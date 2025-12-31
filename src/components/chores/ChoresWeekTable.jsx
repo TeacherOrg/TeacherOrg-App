@@ -1,13 +1,13 @@
-import React, { useMemo } from 'react';
+import { useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { Droppable, Draggable } from '@hello-pangea/dnd';
 import { Button } from '@/components/ui/button';
 import { Edit, Users, Calendar } from 'lucide-react';
 
-const StudentChip = ({ student, choreId, dayKey, onExtendAssignment }) => (
-  <div 
+const StudentChip = ({ student, choreId, onExtendAssignment }) => (
+  <div
     className="inline-block m-1 px-2 py-1 bg-gray-200 dark:bg-slate-600 text-gray-800 dark:text-white text-sm rounded-full cursor-pointer hover:bg-gray-300 dark:hover:bg-slate-500 transition-colors text-center"
-    onClick={() => onExtendAssignment && onExtendAssignment(student, choreId, dayKey)}
+    onClick={() => onExtendAssignment && onExtendAssignment(student, choreId)}
     title="Klicken für mehrwöchige Zuweisung"
   >
     {student.student_name || student.name || 'Unknown Student'}
@@ -21,12 +21,11 @@ const WeeklyStudentChip = ({ student }) => (
   </div>
 );
 
-const TableCell = ({ 
-  chore, 
-  dayInfo, 
-  assignments, 
-  students, 
-  onEditChore, 
+const TableCell = ({
+  chore,
+  dayInfo,
+  assignments,
+  students,
   onExtendAssignment,
   isFirstCell
 }) => {
@@ -70,30 +69,29 @@ const TableCell = ({
                     <div
                         ref={provided.innerRef}
                         {...provided.droppableProps}
-                        className={`h-[120px] p-2 rounded transition-colors flex flex-wrap justify-center content-start ${snapshot.isDraggingOver ? 'bg-green-100/30 dark:bg-green-900/30' : ''} ${assignedStudents.length >= chore.required_students ? 'bg-green-100/20 dark:bg-green-900/20' : ''}`}
+                        className={`h-[120px] p-2 rounded transition-colors flex flex-wrap justify-center content-start overflow-hidden ${snapshot.isDraggingOver ? 'bg-green-100/30 dark:bg-green-900/30 ring-2 ring-green-300/50' : ''} ${assignedStudents.length >= (chore.required_students || 1) ? 'bg-green-100/20 dark:bg-green-900/20' : ''}`}
                     >
                         {assignedStudents.map((student, index) => (
                             <Draggable key={`${student.id}-${chore.id}-${dayInfo.dayKey}`} draggableId={student.id} index={index}>
                                 {(dragProvided) => (
                                     <div ref={dragProvided.innerRef} {...dragProvided.draggableProps} {...dragProvided.dragHandleProps}>
-                                        <StudentChip 
-                                            student={student} 
-                                            choreId={chore.id} 
-                                            dayKey={dayInfo.dayKey}
+                                        <StudentChip
+                                            student={student}
+                                            choreId={chore.id}
                                             onExtendAssignment={onExtendAssignment}
                                         />
                                     </div>
                                 )}
                             </Draggable>
                         ))}
-                        
-                        {assignedStudents.length < chore.required_students && (
+
+                        {assignedStudents.length < (chore.required_students || 1) && (
                             <div className="text-gray-500 dark:text-slate-400 text-xs mt-1 w-full text-center">
-                                {assignedStudents.length}/{chore.required_students}
+                                {assignedStudents.length}/{chore.required_students || 1}
                             </div>
                         )}
-                        
-                        {provided.placeholder}
+
+                        <div style={{ display: 'none' }}>{provided.placeholder}</div>
                     </div>
                 )}
             </Droppable>
@@ -124,22 +122,13 @@ const ChoreNameCell = ({
   }, [assignments, chore.id, students, weekDates]);
 
   const droppableId = `chore-week-${chore.id}`;
-  const isFull = weeklyAssignedStudents.length >= chore.required_students;
+  const requiredStudents = chore.required_students || 1;
+  const isFull = weeklyAssignedStudents.length >= requiredStudents;
   
   const displayName = useMemo(() => {
     if (chore.name && chore.name.trim()) return chore.name.trim();
     return 'Neues Ämtchen';
   }, [chore.name]);
-
-  // Debug: Log für Chore-Daten (nur in Development)
-  if (process.env.NODE_ENV === 'development') {
-    console.log('ChoreNameCell Debug:', {
-      id: chore.id,
-      name: chore.name,
-      icon: chore.icon,
-      displayName
-    });
-  }
 
   return (
     <td className="p-3 bg-gradient-to-b from-gray-50/90 to-white dark:from-slate-800/90 dark:to-slate-900 min-w-[420px] max-w-[420px] relative group">
@@ -202,7 +191,7 @@ const ChoreNameCell = ({
             </div>
 
             {/* Wochenzuweisungen mit Animation */}
-            <div className="flex-1 min-h-[80px] flex flex-col justify-center">
+            <div className="flex-1 min-h-[80px] max-h-[120px] flex flex-col justify-center overflow-hidden">
               {weeklyAssignedStudents.length > 0 ? (
                 <div className="space-y-1 max-h-24 overflow-y-auto">
                   {weeklyAssignedStudents.map((student, index) => (
@@ -213,14 +202,14 @@ const ChoreNameCell = ({
                       exit={{ opacity: 0, x: 20, scale: 0.9 }}
                       transition={{ duration: 0.2, delay: index * 0.05 }}
                     >
-                      <Draggable 
-                        draggableId={`${student.id}-weekly-${chore.id}`} 
+                      <Draggable
+                        draggableId={`${student.id}-weekly-${chore.id}`}
                         index={index}
                       >
                         {(dragProvided) => (
-                          <div 
-                            ref={dragProvided.innerRef} 
-                            {...dragProvided.draggableProps} 
+                          <div
+                            ref={dragProvided.innerRef}
+                            {...dragProvided.draggableProps}
                             {...dragProvided.dragHandleProps}
                             className="flex items-center justify-between"
                           >
@@ -236,7 +225,7 @@ const ChoreNameCell = ({
                   <Calendar className="w-6 h-6 mb-1 opacity-50" />
                   <span className="text-xs font-medium">Keine Wochenzuweisung</span>
                   {snapshot.isDraggingOver && (
-                    <motion.div 
+                    <motion.div
                       initial={{ opacity: 0, y: 10 }}
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0, y: -10 }}
@@ -250,7 +239,7 @@ const ChoreNameCell = ({
                 </div>
               )}
 
-              {provided.placeholder}
+              <div style={{ display: 'none' }}>{provided.placeholder}</div>
             </div>
 
             {/* Footer mit korrigierter Schülerzählung */}
@@ -258,7 +247,7 @@ const ChoreNameCell = ({
               <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-slate-400">
                 <Users className="w-4 h-4" />
                 <span className="font-medium">
-                  {weeklyAssignedStudents.length}/{chore.required_students} Schüler
+                  {weeklyAssignedStudents.length}/{requiredStudents}
                 </span>
               </div>
               
@@ -276,7 +265,6 @@ const ChoreNameCell = ({
 };
 
 export default function ChoresWeekTable({ chores, weekDates, assignments, students, onEditChore, onExtendAssignment }) {
-    console.log('ChoresWeekTable assignments:', JSON.stringify(assignments, null, 2));
     return (
         <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-lg border border-gray-200 dark:border-slate-700 overflow-hidden">
             <table className="w-full table-fixed border-collapse border-spacing-0">
@@ -320,13 +308,12 @@ export default function ChoresWeekTable({ chores, weekDates, assignments, studen
                                     onEditChore={onEditChore}
                                 />
                                 {weekDates.map((dayInfo, index) => (
-                                    <TableCell 
+                                    <TableCell
                                         key={`${chore.id}-${dayInfo.dayKey}`}
                                         chore={chore}
                                         dayInfo={dayInfo}
                                         assignments={assignments}
                                         students={students}
-                                        onEditChore={onEditChore}
                                         onExtendAssignment={onExtendAssignment}
                                         isFirstCell={index === 0}
                                     />

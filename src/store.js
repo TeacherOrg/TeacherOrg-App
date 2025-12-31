@@ -11,6 +11,18 @@ export const useLessonStore = create((set) => ({
   classes: [], // Add classes state
   holidays: [], // Add holidays state
   settings: {}, // Add settings state
+  // Reset-Funktion für Logout - leert alle Benutzerdaten
+  clearAll: () => set({
+    yearlyLessons: [],
+    allYearlyLessons: [],
+    allLessons: [],
+    allerleiLessons: [],
+    topics: [],
+    subjects: [],
+    classes: [],
+    holidays: [],
+    settings: {},
+  }),
   setYearlyLessons: (lessons) => set({ yearlyLessons: lessons.map(l => ({ ...l, lesson_number: Number(l.lesson_number) })) }),
   setAllYearlyLessons: (lessons) => set({ allYearlyLessons: lessons.map(l => ({ ...l, lesson_number: Number(l.lesson_number) })) }),
   setAllLessons: (lessons) => set({ allLessons: lessons }),

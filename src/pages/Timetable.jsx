@@ -17,7 +17,7 @@ import { createPageUrl } from '@/utils/index.js';
 import { useNavigate } from "react-router-dom";
 import debounce from 'lodash/debounce';
 import OverlayView from "../components/timetable/OverlayView";
-import { adjustColor } from '@/utils/colorUtils';
+import { adjustColor, createGradient } from '@/utils/colorUtils';
 import { useLessonStore } from '@/store';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import pb from '@/api/pb';
@@ -30,13 +30,12 @@ import useTimetableData from '../hooks/useTimetableData';
 import useTimetableStates from '../hooks/useTimetableStates';
 import useDragAndDrop from '../hooks/useDragAndDrop';
 import useLessonHandlers from '../hooks/useLessonHandlers';
-import { getCurrentWeek, getWeekInfo, generateTimeSlots } from '../utils/timetableUtils';
+import { getCurrentWeek, getCurrentWeekYear, getWeeksInYear, getWeekInfo, generateTimeSlots } from '../utils/timetableUtils';
 import { isEqual } from 'lodash';
 import { createMixedSubjectGradient } from '@/utils/colorUtils';
 import useAllYearlyLessons from '@/hooks/useAllYearlyLessons';
 
 
-const ACADEMIC_WEEKS = 52;
 
 export default function TimetablePage() {
   return <InnerTimetablePage />;
@@ -73,20 +72,15 @@ function InnerTimetablePage() {
   const [poolRefreshKey, setPoolRefreshKey] = useState(0);
 
 
-  // Initialize currentYear and currentWeek
+  // Initialize currentYear and currentWeek (using ISO week year for correct year at year boundaries)
   const [currentWeek, setCurrentWeek] = useState(getCurrentWeek());
-  const [currentYear, setCurrentYear] = useState(new Date().getFullYear());
+  const [currentYear, setCurrentYear] = useState(getCurrentWeekYear());
 
   // Call useTimetableData with currentYear and currentWeek
   const { data, isLoading: queryLoading, classes, subjects, settings, holidays, topics, refetch, activeClassId, setActiveClassId } = useTimetableData(currentYear, currentWeek);
 
   const { allYearlyLessons } = useAllYearlyLessons(currentYear);
 
-  // Debug: Check if allYearlyLessons is loaded
-  useEffect(() => {
-    console.log('allYearlyLessons loaded:', allYearlyLessons?.length || 0);
-  }, [allYearlyLessons]);
-  
   const memoizedSubjects = useMemo(() => subjects || [], [subjects]);
   const memoizedTopics = useMemo(() => topics || [], [topics]);
 
@@ -101,22 +95,8 @@ function InnerTimetablePage() {
   );
 
   const lessonsForCurrentWeek = useMemo(() => {
-    console.log('Debug: Computing lessonsForCurrentWeek', {
-      allLessonsLength: stableAllLessons.length,
-      allerleiLessonsLength: allerleiLessons.length,
-      currentWeek,
-    });
     return [...stableAllLessons, ...allerleiLessons].filter(l => l.week_number === currentWeek);
   }, [stableAllLessons, allerleiLessons, currentWeek]);
-
-  useEffect(() => {
-    console.log('Debug: lessonsForCurrentWeek changed', {
-      lessonsForCurrentWeekLength: lessonsForCurrentWeek.length,
-      allLessonsLength: allLessons.length,
-      allerleiLessonsLength: allerleiLessons.length,
-      currentWeek,
-    });
-  }, [lessonsForCurrentWeek, allLessons, allerleiLessons, currentWeek]);
 
   // Call useLessonHandlers first
   const { 
@@ -176,14 +156,6 @@ function InnerTimetablePage() {
 
   useEffect(() => {
     const computeLessonsWithDetails = () => {
-      console.log('Debug: computeLessonsWithDetails running', {
-        normalLessons: stableAllLessons.filter(l => l.week_number === currentWeek).length,
-        allerleiLessons: allerleiLessons.filter(l => l.week_number === currentWeek).length,
-        yearlyLessons: allYearlyLessons.length,
-        memoizedTopics: memoizedTopics.length,
-        memoizedSubjects: memoizedSubjects.length,
-      });
-
       // 1. NUR normale Lektionen (collectionName !== 'allerlei_lessons') verarbeiten
       const normalLessons = stableAllLessons.filter(l => l.week_number === currentWeek);
 
@@ -227,6 +199,7 @@ function InnerTimetablePage() {
           subject: lesson.subject,
           subject_name: lesson.subject_name || subjectDetail?.name || 'Unbekannt',
           color: subjectDetail?.color || '#3b82f6',
+          topic_id: lesson.topic_id || primaryYearlyLesson?.topic_id || null,
           topic: topic,
           isGradient: false,
           primaryYearlyLesson: primaryYearlyLesson,
@@ -344,23 +317,35 @@ function InnerTimetablePage() {
     memoizedSubjects
   ]);
 
-  const availableYearlyLessonsForPool = useMemo(() => {
-    if (!activeClassId) {
-      console.log('Debug: No activeClassId, returning empty pool');
-      return [];
+  // Prüfen ob aktuelle Woche eine Ferienwoche ist
+  const hasHolidayInWeek = useMemo(() => {
+    if (!weekInfo || !holidays || holidays.length === 0) return false;
+
+    // weekInfo.start = Montag, weekInfo.end = Freitag (aus getWeekInfo)
+    const weekStart = weekInfo.start;
+    const weekEnd = weekInfo.end;
+
+    for (const holiday of holidays) {
+      const holidayStart = new Date(holiday.start_date);
+      holidayStart.setHours(0, 0, 0, 0);
+      const holidayEnd = new Date(holiday.end_date);
+      holidayEnd.setHours(23, 59, 59, 999);
+
+      // Prüfe ob die Woche mit den Ferien überlappt
+      if (weekStart <= holidayEnd && weekEnd >= holidayStart) {
+        return true;
+      }
     }
+    return false;
+  }, [weekInfo, holidays]);
 
-    console.log('Pool recompute – allerleiLessons:', allerleiLessons.map(al => ({
-      id: al.id,
-      primary: al.primary_yearly_lesson_id,
-      added: al.added_yearly_lesson_ids
-    })));
-
-    const subjectsForClass = subjects.filter(s => s.class_id === activeClassId);
-    const uniqueSubjectsForClass = [...new Map(subjectsForClass.map(s => [s.name, s])).values()];
+  const availableYearlyLessonsForPool = useMemo(() => {
+    // Alle Klassen sortiert nach Name
+    const sortedClasses = [...classes].sort((a, b) => a.name.localeCompare(b.name));
     const scheduledLessonsInWeek = lessonsForCurrentWeek;
+
+    // Scheduled Counts berechnen (für alle Fächer)
     const scheduledCounts = lessonsForCurrentWeek.reduce((acc, lesson) => {
-      // Normale Lektionen (nicht Allerlei)
       if (lesson.collectionName !== 'allerlei_lessons') {
         const isSecondary = lessonsForCurrentWeek.some(primary =>
           primary.is_double_lesson &&
@@ -379,14 +364,14 @@ function InnerTimetablePage() {
         return acc;
       }
 
-      // === NEU: Allerlei-Lektionen mitzählen ===
+      // Allerlei-Lektionen mitzählen
       const primaryId = lesson.primary_yearly_lesson_id;
       const addedIds = Array.isArray(lesson.added_yearly_lesson_ids) ? lesson.added_yearly_lesson_ids : [];
 
       [...(primaryId ? [primaryId] : []), ...addedIds].forEach(ylId => {
         let yl = allYearlyLessons.find(y => y.id === ylId);
         if (!yl && lesson.expand) {
-          yl = lesson.expand.primary_yearly_lesson_id || 
+          yl = lesson.expand.primary_yearly_lesson_id ||
                lesson.expand.added_yearly_lesson_ids?.find(y => y.id === ylId);
         }
         if (yl) {
@@ -400,54 +385,64 @@ function InnerTimetablePage() {
 
       return acc;
     }, {});
-    const result = uniqueSubjectsForClass.map(subject => {
-      const totalScheduled = scheduledCounts[subject.name] || 0;
-      const subjectLessons = scheduledLessonsInWeek.filter(l => 
-        (l.expand?.subject?.name === subject.name || l.subject_name === subject.name) && 
-        l.week_number === currentWeek && 
-        !l.is_hidden
-      );
-      const availableLessons = allYearlyLessons
-        .filter(yl => {
-          const matchesSubject = yl.subject_name === subject.name || yl.expand?.subject?.name === subject.name;
-          const matchesWeek = yl.week_number === currentWeek;
-          const lessonCount = subjectLessons.filter(l => 
-            (l.yearly_lesson_id === yl.id || l.second_yearly_lesson_id === yl.id) && 
-            !l.is_hidden &&
-            (l.collectionName !== 'allerlei_lessons' || 
-            l.primary_yearly_lesson_id === yl.id || 
-            (Array.isArray(l.added_yearly_lesson_ids) && l.added_yearly_lesson_ids.includes(yl.id)))
-          ).length;
-          const isNotAllerlei = !yl.is_allerlei;
-          const isPlannedInAllerlei = allerleiLessons.some(al => 
-            al.week_number === currentWeek &&
-            (al.primary_yearly_lesson_id === yl.id || 
-             (Array.isArray(al.added_yearly_lesson_ids) && al.added_yearly_lesson_ids.includes(yl.id)))
-          );
-          const isPlannedAsSlave = scheduledLessonsInWeek.some(l => 
-            l.second_yearly_lesson_id === yl.id && 
-            !l.is_hidden
-          );
-          return matchesSubject && matchesWeek && isNotAllerlei && lessonCount < (yl.is_half_class ? 2 : 1) && !isPlannedInAllerlei && !isPlannedAsSlave;
-        })
-        .sort((a, b) => Number(a.lesson_number) - Number(b.lesson_number));
-      console.log('Debug: Subject data for pool:', {
-        subject: subject.name,
-        totalScheduled,
-        lessonsPerWeek: subject.lessons_per_week || 4,
-        availableLessonsCount: availableLessons.length,
-        subjectLessonsCount: subjectLessons.length
+
+    // Für jede Klasse die Fächer sammeln
+    const result = sortedClasses.map(classData => {
+      const subjectsForClass = subjects
+        .filter(s => s.class_id === classData.id)
+        .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+
+      const uniqueSubjectsForClass = [...new Map(subjectsForClass.map(s => [s.name, s])).values()];
+
+      const classSubjects = uniqueSubjectsForClass.map(subject => {
+        const totalScheduled = scheduledCounts[subject.name] || 0;
+        const subjectLessons = scheduledLessonsInWeek.filter(l =>
+          (l.expand?.subject?.name === subject.name || l.subject_name === subject.name) &&
+          l.week_number === currentWeek &&
+          !l.is_hidden
+        );
+        const availableLessons = allYearlyLessons
+          .filter(yl => {
+            const matchesSubject = yl.subject_name === subject.name || yl.expand?.subject?.name === subject.name;
+            const matchesWeek = yl.week_number === currentWeek;
+            const lessonCount = subjectLessons.filter(l =>
+              (l.yearly_lesson_id === yl.id || l.second_yearly_lesson_id === yl.id) &&
+              !l.is_hidden &&
+              (l.collectionName !== 'allerlei_lessons' ||
+              l.primary_yearly_lesson_id === yl.id ||
+              (Array.isArray(l.added_yearly_lesson_ids) && l.added_yearly_lesson_ids.includes(yl.id)))
+            ).length;
+            const isNotAllerlei = !yl.is_allerlei;
+            const isPlannedInAllerlei = allerleiLessons.some(al =>
+              al.week_number === currentWeek &&
+              (al.primary_yearly_lesson_id === yl.id ||
+               (Array.isArray(al.added_yearly_lesson_ids) && al.added_yearly_lesson_ids.includes(yl.id)))
+            );
+            const isPlannedAsSlave = scheduledLessonsInWeek.some(l =>
+              l.second_yearly_lesson_id === yl.id &&
+              !l.is_hidden
+            );
+            return matchesSubject && matchesWeek && isNotAllerlei && lessonCount < (yl.is_half_class ? 2 : 1) && !isPlannedInAllerlei && !isPlannedAsSlave;
+          })
+          .sort((a, b) => Number(a.lesson_number) - Number(b.lesson_number));
+
+        return {
+          subject,
+          totalScheduled,
+          lessonsPerWeek: subject.lessons_per_week || 4,
+          availableLessons,
+          lessons: subjectLessons
+        };
       });
+
       return {
-        subject,
-        totalScheduled,
-        lessonsPerWeek: subject.lessons_per_week || 4,
-        availableLessons,
-        lessons: subjectLessons // Ensure lessons is always an array
+        classData,
+        subjects: classSubjects
       };
-    });
+    }).filter(c => c.subjects.length > 0); // Nur Klassen mit Fächern anzeigen
+
     return result;
-  }, [subjects, activeClassId, allLessons, allerleiLessons, allYearlyLessons, currentWeek, poolRefreshKey]);
+  }, [subjects, classes, allLessons, allerleiLessons, allYearlyLessons, currentWeek, lessonsForCurrentWeek, poolRefreshKey]);
 
   const handleCreateLesson = (dayOfWeek, periodSlot, subject = null) => {
     setSlotInfo({ day: dayOfWeek, period: periodSlot, week: currentWeek });
@@ -495,20 +490,33 @@ function InnerTimetablePage() {
   const renderDragOverlay = (id) => {
     if (id.startsWith('pool-')) {
       const subjectId = id.replace('pool-', '');
-      const subjectData = availableYearlyLessonsForPool.find(s => String(s.subject.id) === subjectId);
+      // Suche in allen Klassen nach dem Fach
+      let subjectData = null;
+      for (const classGroup of availableYearlyLessonsForPool) {
+        const found = classGroup.subjects.find(s => String(s.subject.id) === subjectId);
+        if (found) {
+          subjectData = found;
+          break;
+        }
+      }
       if (!subjectData) return null;
 
+      const subjectColor = subjectData.subject.color || '#3b82f6';
       return (
-        <div 
-          className="bg-white dark:bg-slate-800 p-4 rounded-xl shadow-2xl border border-slate-300 dark:border-slate-600"
-          style={{ zIndex: 9999 }}
+        <div
+          className="rounded cursor-grabbing flex items-center justify-between shadow-2xl"
+          style={{
+            background: createGradient(subjectColor, -20, '135deg'),
+            height: '40px',
+            padding: '0 0.75rem',
+            width: '180px',
+            zIndex: 9999
+          }}
         >
-          <div className="font-bold text-lg">
-            {subjectData.subject.name}
-          </div>
-          <div className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-            ({subjectData.totalScheduled}/{subjectData.lessonsPerWeek} geplant)
-          </div>
+          <div className="font-bold text-white">{subjectData.subject.name}</div>
+          <span className="text-sm text-white">
+            ({subjectData.totalScheduled}/{subjectData.lessonsPerWeek})
+          </span>
         </div>
       );
     }
@@ -517,10 +525,16 @@ function InnerTimetablePage() {
     const lesson = lessonsWithDetails.find(l => l.id === id);
     if (!lesson) return null;
 
+    // Use || to treat 0 as falsy (fallback to calculated default)
+    const span = lesson?.period_span || (lesson?.is_double_lesson ? 2 : 1);
+
     return (
-      <div 
-        className="opacity-90 scale-105"
-        style={{ zIndex: 9999 }}
+      <div
+        style={{
+          width: 'var(--cell-width, 120px)',
+          height: `calc(var(--cell-height, 80px) * ${span})`,
+          zIndex: 9999
+        }}
       >
         <LessonCard lesson={lesson} isDragging={true} />
       </div>
@@ -540,25 +554,23 @@ function InnerTimetablePage() {
   };
 
   const handlePrevWeek = () => {
-    setCurrentWeek(prev => {
-      if (prev > 1) {
-        return prev - 1;
-      } else {
-        setCurrentYear(year => year - 1);
-        return ACADEMIC_WEEKS;
-      }
-    });
+    if (currentWeek > 1) {
+      setCurrentWeek(prev => prev - 1);
+    } else {
+      const prevYear = currentYear - 1;
+      setCurrentYear(prevYear);
+      setCurrentWeek(getWeeksInYear(prevYear));
+    }
   };
 
   const handleNextWeek = () => {
-    setCurrentWeek(prev => {
-      if (prev < ACADEMIC_WEEKS) {
-        return prev + 1;
-      } else {
-        setCurrentYear(year => year + 1);
-        return 1;
-      }
-    });
+    const weeksInCurrentYear = getWeeksInYear(currentYear);
+    if (currentWeek < weeksInCurrentYear) {
+      setCurrentWeek(prev => prev + 1);
+    } else {
+      setCurrentYear(year => year + 1);
+      setCurrentWeek(1);
+    }
   };
 
   const handlePrevDay = () => {
@@ -595,33 +607,53 @@ function InnerTimetablePage() {
     };
   }, []);
 
+  // Helper: Finde Lektion für einen Slot (inkl. Doppellektion-Coverage)
+  const findLessonForSlot = useCallback((day, period) => {
+    // 1. Direkte Übereinstimmung
+    let lesson = lessonsWithDetails.find(l =>
+      l.day_of_week === day &&
+      l.period_slot === period &&
+      !l.double_master_id &&
+      l.collectionName !== 'allerlei_lessons'
+    );
+
+    // 2. Falls nichts gefunden: Prüfe ob Doppellektion diesen Slot bedeckt
+    if (!lesson) {
+      lesson = lessonsWithDetails.find(l =>
+        l.day_of_week === day &&
+        l.period_slot < period &&
+        !l.double_master_id &&
+        l.is_double_lesson &&
+        (l.period_slot + (l.period_span || 2) - 1) >= period &&
+        l.collectionName !== 'allerlei_lessons'
+      );
+    }
+
+    return lesson;
+  }, [lessonsWithDetails]);
+
   // Neu: Pointer Handler für Alt+Drag direkt im Grid
   const handleGridPointerDown = useCallback((e) => {
     if (!e.altKey) return;
     e.preventDefault();
-    e.stopPropagation(); // ← zusätzlich hier
+    e.stopPropagation();
 
     const cell = e.target.closest('[data-day][data-period]');
     if (!cell) return;
 
     const day = cell.dataset.day;
     const period = parseInt(cell.dataset.period, 10);
-    const lesson = lessonsWithDetails.find(l => 
-      l.day_of_week === day && 
-      l.period_slot === period &&
-      !l.double_master_id &&
-      l.collectionName !== 'allerlei_lessons'
-    );
+    const lesson = findLessonForSlot(day, period);
 
     if (!lesson) return;
 
     setIsSelectingMerge(true);
     setMergePreview({
       day,
-      startPeriod: period,
+      startPeriod: lesson.period_slot, // Verwende den tatsächlichen Start-Slot der Lektion
       lessons: [lesson]
     });
-  }, [lessonsWithDetails]);
+  }, [lessonsWithDetails, findLessonForSlot]);
 
   const handleGridPointerMove = useCallback((e) => {
     if (!isSelectingMerge || !mergePreview) return;
@@ -647,11 +679,12 @@ function InnerTimetablePage() {
       return start <= maxPeriod && end >= minPeriod;
     });
 
-    // Nur Lektionen die wirklich im sichtbaren Block liegen
-    const validLessons = lessonsInRange.filter(l => 
-      l.period_slot >= minPeriod && 
-      l.period_slot <= maxPeriod
-    );
+    // Lektionen die den ausgewählten Bereich überlappen (inkl. Doppellektionen)
+    const validLessons = lessonsInRange.filter(l => {
+      const start = l.period_slot;
+      const end = start + (l.period_span || (l.is_double_lesson ? 2 : 1)) - 1;
+      return start <= maxPeriod && end >= minPeriod;
+    });
 
     if (validLessons.length === 0) return;
 
@@ -686,40 +719,67 @@ function InnerTimetablePage() {
     const lessonsToMergeSorted = lessonsToMerge.sort((a, b) => a.period_slot - b.period_slot);
     const primaryLesson = lessonsToMergeSorted[0];  // Die mit dem kleinsten period_slot
 
-    let primaryYearlyId = primaryLesson.yearly_lesson_id || primaryLesson.second_yearly_lesson_id;
+    // period_span = Summe aller Spans (Doppellektionen zählen als 2)
+    const totalSpan = lessonsToMerge.reduce((sum, l) =>
+      sum + (l.period_span || (l.is_double_lesson ? 2 : 1)), 0);
+
+    // Alle YearlyLesson-IDs sammeln (inkl. second_yearly_lesson_id bei Doppellektionen)
+    const allYearlyIds = lessonsToMergeSorted.flatMap(l => {
+      const ids = [];
+      if (l.yearly_lesson_id) ids.push(l.yearly_lesson_id);
+      if (l.second_yearly_lesson_id) ids.push(l.second_yearly_lesson_id);
+      return ids;
+    }).filter(Boolean);
+
+    const primaryYearlyId = allYearlyIds[0];
+    const addedYearlyIds = allYearlyIds.slice(1);
 
     if (!primaryYearlyId) {
       throw new Error('Die oberste Lektion im Block hat keine gültige YearlyLesson-ID.');
     }
 
-    // Sicherstellen, dass die Primary nicht als "added" auftaucht
-    const addedYearlyIds = lessonsToMergeSorted
-      .slice(1)  // Alle außer der ersten
-      .map(l => l.yearly_lesson_id || l.second_yearly_lesson_id)
-      .filter(Boolean);
-
     const uniqueSubjectNames = [...new Set(lessonsToMerge.map(l => l.subject_name))];
+
+    // Sammle YearlyLesson-IDs die Prüfungen/Halbklassen waren (für Restore)
+    const examYearlyLessonIds = [];
+    const halfClassYearlyLessonIds = [];
+    lessonsToMerge.forEach(l => {
+      console.log('Debug Allerlei merge - Lesson:', { id: l.id, yearly_lesson_id: l.yearly_lesson_id, is_exam: l.is_exam, is_half_class: l.is_half_class });
+      if (l.is_exam) {
+        if (l.yearly_lesson_id) examYearlyLessonIds.push(l.yearly_lesson_id);
+        if (l.second_yearly_lesson_id) examYearlyLessonIds.push(l.second_yearly_lesson_id);
+      }
+      if (l.is_half_class) {
+        if (l.yearly_lesson_id) halfClassYearlyLessonIds.push(l.yearly_lesson_id);
+        if (l.second_yearly_lesson_id) halfClassYearlyLessonIds.push(l.second_yearly_lesson_id);
+      }
+    });
+    console.log('Debug Allerlei merge - examYearlyLessonIds:', examYearlyLessonIds, 'halfClassYearlyLessonIds:', halfClassYearlyLessonIds);
 
     const newAllerleiData = {
       primary_yearly_lesson_id: primaryYearlyId,
       added_yearly_lesson_ids: addedYearlyIds,
       day_of_week: day,
       period_slot: startPeriod,
-      period_span: lessonsToMerge.length,
+      period_span: totalSpan,
       week_number: currentWeek,
       school_year: currentYear,
       class_id: activeClassId,
       user_id: pb.authStore.model?.id,
       subject_name: 'Allerlei',
-      allerlei_subjects: uniqueSubjectNames, // ← NEU
+      allerlei_subjects: uniqueSubjectNames,
       description: `Allerlei: ${uniqueSubjectNames.join(' + ')}`,
       steps: primaryLesson.steps || [],
+      exam_yearly_lesson_ids: examYearlyLessonIds,
+      half_class_yearly_lesson_ids: halfClassYearlyLessonIds,
     };
     let createdWithExpand;
     let finalAllerleiLesson;
     try {
       // 1. Erstelle OHNE expand
+      console.log('Debug Allerlei merge - newAllerleiData:', newAllerleiData);
       const created = await AllerleiLesson.create(newAllerleiData);
+      console.log('Debug Allerlei merge - created:', JSON.stringify(created, null, 2));
 
       // 2. Lade SOFORT mit expand nach – das funktioniert IMMER bei deinen Entities
       createdWithExpand = await pb.collection('allerlei_lessons').getOne(created.id, {
@@ -730,14 +790,20 @@ function InnerTimetablePage() {
       finalAllerleiLesson = {
         ...created,
         expand: createdWithExpand.expand, // für Steps
-        primary_yearly_lesson_id: newAllerleiData.primary_yearly_lesson_id, // ← HINZUFÜGEN
-        added_yearly_lesson_ids: newAllerleiData.added_yearly_lesson_ids,     // ← HINZUFÜGEN
+        primary_yearly_lesson_id: newAllerleiData.primary_yearly_lesson_id,
+        added_yearly_lesson_ids: newAllerleiData.added_yearly_lesson_ids,
         allerlei_subjects: uniqueSubjectNames,
         color: calculateAllerleiGradient(uniqueSubjectNames, memoizedSubjects),
         isGradient: uniqueSubjectNames.length > 1,
+        is_allerlei: true,
         subject_name: 'Allerlei',
         description: `Allerlei: ${uniqueSubjectNames.join(' + ')}`,
-        period_span: lessonsToMerge.length,
+        period_span: totalSpan,
+        // Prüfungs- und Halbklassen-Info für Badge-Anzeige
+        exam_yearly_lesson_ids: examYearlyLessonIds,
+        half_class_yearly_lesson_ids: halfClassYearlyLessonIds,
+        is_exam: examYearlyLessonIds.length > 0,
+        is_half_class: halfClassYearlyLessonIds.length > 0,
       };
 
     } catch (err) {
@@ -761,10 +827,7 @@ function InnerTimetablePage() {
       return { allLessons: newAllLessons, allerleiLessons: newAllerleiLessons };
     });
 
-    // DEBUG
-    console.log('Nach Merge – allerleiLessons im Store:', useLessonStore.getState().allerleiLessons);
-
-    // Danach: Pool refresh trigger + Rendern forcieren + Toast
+    // Pool refresh trigger + Rendern forcieren + Toast
     setPoolRefreshKey(prev => prev + 1); // ← Das ist der entscheidende Trigger
     setRenderKey(Date.now());
     import('react-hot-toast').then(m => m.toast.success('Allerlei erstellt!'));
@@ -854,14 +917,12 @@ function InnerTimetablePage() {
               />
             </motion.div>
 
-            {/* Only show pool in flexible mode */}
-            {settings?.scheduleType === 'flexible' && (
+            {/* Only show pool in flexible mode and not during holidays */}
+            {settings?.scheduleType === 'flexible' && !hasHolidayInWeek && (
               <TimetablePool
-                classes={classes}
-                activeClassId={activeClassId}
-                setActiveClassId={setActiveClassId}
                 availableYearlyLessonsForPool={availableYearlyLessonsForPool}
-                subjects={subjects}
+                gridRef={gridRef}
+                currentWeek={currentWeek}
               />
             )}
           </div>
@@ -883,10 +944,6 @@ function InnerTimetablePage() {
       <TimetableOverlays
         hoverLesson={hoverLesson}
         hoverPosition={hoverPosition}
-        disableHover={disableHover}
-        activeDragId={activeDragId}
-        lessonsWithDetails={lessonsWithDetails}
-        renderDragOverlay={renderDragOverlay}
         overlayRef={overlayRef}
       />
 
@@ -913,6 +970,7 @@ function InnerTimetablePage() {
         setIsModalOpen={setIsModalOpen}
         currentYear={currentYear}
         formData={formData}
+        settings={settings}
       />
     </div>
   );

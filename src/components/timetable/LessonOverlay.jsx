@@ -1,20 +1,6 @@
 import React, { memo } from 'react';
 import { createPortal } from 'react-dom';
-
-const WORK_FORMS = {
-    'single': '👤',
-    'einzel': '👤',
-    'partner': '👥',
-    'partnerarbeit': '👥',
-    'group': '👨‍👩‍👧‍👦',
-    'gruppe': '👨‍👩‍👧‍👦',
-    'gruppenarbeit': '👨‍👩‍👧‍👦',
-    'plenum': '🏛️',
-    'frontal': '🗣️',
-    'discussion': '💬',
-    'diskussion': '💬',
-    'experiment': '🧪'
-};
+import { getWorkFormIcon } from '@/utils/workFormUtils';
 
 const LessonOverlay = memo(({ lesson, overlayRef, position, onMouseMove, onMouseLeave, subjectColor }) => {
     if (position.top === 0) return null;
@@ -63,7 +49,7 @@ const LessonOverlay = memo(({ lesson, overlayRef, position, onMouseMove, onMouse
                                         {step.time ? `${step.time}min` : ''}
                                     </td>
                                     <td className="px-2 py-2 text-slate-700">
-                                        {WORK_FORMS[step.workForm.toLowerCase()] || step.workForm || ''}
+                                        {getWorkFormIcon(step.workForm)}
                                     </td>
                                     <td className="px-2 py-2 text-slate-900">
                                         {step.activity || ''}

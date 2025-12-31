@@ -1,16 +1,40 @@
-import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label"; // Added missing import
+import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/components/ui/use-toast";
-import { Performance, UserPreferences, User } from '@/api/entities';
+import { Performance, User } from '@/api/entities';
 import { ChevronDown, ChevronUp, Edit, Trash2, Save, X, Plus } from 'lucide-react';
-import { debounce } from '../../utils/utils';
+import { getTextColor } from '@/utils/colorUtils';
 
-const LeistungenTable = ({ performances = [], students = [], subjects = [], activeClassId, onEdit, onDelete, onDataChange, expandedRows, setExpandedRows }) => {
+// 5-Stufen-Farbsystem für Noten (Schweizer Notensystem 1-6, 6 ist beste)
+const getGradeColor = (grade) => {
+  if (grade === null || grade === undefined || grade === 0) {
+    return { text: 'text-slate-500 dark:text-slate-400', bg: '' };
+  }
+  if (grade >= 5.0) return { text: 'text-green-600 dark:text-green-400', bg: 'bg-green-100 dark:bg-green-900/30' };
+  if (grade >= 4.5) return { text: 'text-green-500 dark:text-green-500', bg: 'bg-green-50 dark:bg-green-900/20' };
+  if (grade >= 4.0) return { text: 'text-yellow-600 dark:text-yellow-400', bg: 'bg-yellow-50 dark:bg-yellow-900/20' };
+  if (grade >= 3.5) return { text: 'text-orange-500 dark:text-orange-400', bg: 'bg-orange-50 dark:bg-orange-900/20' };
+  return { text: 'text-red-600 dark:text-red-400', bg: 'bg-red-100 dark:bg-red-900/30' };
+};
+
+// Bug 4 Fix: savePreferences als Prop erhalten, keine doppelte Preference-Ladung
+const LeistungenTable = ({
+  performances = [],
+  students = [],
+  subjects = [],
+  activeClassId,
+  onEdit,
+  onDelete,
+  onDataChange,
+  expandedRows,
+  setExpandedRows,
+  savePreferences // Neu: von PerformanceView als Prop erhalten
+}) => {
   const { toast } = useToast();
   const [editingGrades, setEditingGrades] = useState({});
   const [editingFachbereiche, setEditingFachbereiche] = useState({});
@@ -20,87 +44,28 @@ const LeistungenTable = ({ performances = [], students = [], subjects = [], acti
   const [currentPage, setCurrentPage] = useState(1);
   const ITEMS_PER_PAGE = 10;
 
-  // Load preferences
-  useEffect(() => {
-    const loadPreferences = async () => {
-      if (!activeClassId) return;
-      try {
-        const user = User.current?.();
-        if (!user) {
-          console.warn('No user found for preferences');
-          return;
-        }
-        const preference = await UserPreferences.findOne({
-          user_id: user.id,
-          class_id: activeClassId,
-        });
-        if (preference?.preferences?.expandedLeistungenRows) {
-          setExpandedRows(new Set(preference.preferences.expandedLeistungenRows));
-        }
-      } catch (error) {
-        console.error('Error loading preferences:', error);
-        toast({
-          title: "Fehler",
-          description: "Fehler beim Laden der Benutzerpräferenzen.",
-          variant: "destructive",
-        });
-      }
-    };
-    loadPreferences();
-  }, [activeClassId, setExpandedRows, toast]);
+  // Bug 4 Fix: ENTFERNT - Doppelte loadPreferences und saveExpandedRows
+  // Die Daten kommen jetzt via Props aus dem usePreferences Hook
 
-  const saveExpandedRows = useCallback(
-    debounce(async (rows) => {
-      if (!activeClassId) return;
-      try {
-        const user = User.current?.();
-        if (!user) {
-          console.warn('No user found for saving preferences');
-          return;
-        }
-        const preference = await UserPreferences.findOne({
-          user_id: user.id,
-          class_id: activeClassId,
-        });
-        const preferencesData = preference?.preferences || {};
-        preferencesData.expandedLeistungenRows = Array.from(rows);
-        
-        // ENTFERNE: preferencesData.performanceTab = 'leistungen'; // Das überschreibt diagramme!
-        
-        // HARTER OVERRIDE: Stelle sicher, dass Tab diagramme bleibt
-        if (preferencesData.performanceTab !== 'diagramme') {
-          preferencesData.performanceTab = 'diagramme';
-          console.log('LeistungenTable: Forced performanceTab to diagramme');
-        }
-        
-        if (preference) {
-          await UserPreferences.update(preference.id, { preferences: preferencesData });
-        } else {
-          await UserPreferences.create({
-            user_id: user.id,
-            class_id: activeClassId,
-            preferences: {
-              ...preferencesData,
-              performanceTab: 'diagramme' // HARTER Default
-            },
-          });
-        }
-      } catch (error) {
-        console.error('Error saving preferences:', error);
-        toast({
-          title: "Fehler",
-          description: "Fehler beim Speichern der Benutzerpräferenzen.",
-          variant: "destructive",
-        });
-      }
-    }, 1000),
-    [activeClassId, toast]
-  );
+  // Vereinfachte saveExpandedRows - nutzt jetzt den Hook's savePreferences
+  const saveExpandedRows = useCallback((rows) => {
+    if (savePreferences) {
+      savePreferences({
+        expandedLeistungenRows: Array.from(rows)
+      });
+    }
+  }, [savePreferences]);
+
+  // Helper: Fachfarbe aus subjects Array holen
+  const getSubjectColor = useCallback((subjectId) => {
+    const subject = subjects.find(s => s.id === subjectId);
+    return subject?.color || '#3b82f6'; // Default blau
+  }, [subjects]);
 
   const groupedPerformances = useMemo(() => {
     if (!Array.isArray(performances)) return [];
 
-    const filtered = performances.filter(p => 
+    const filtered = performances.filter(p =>
       filterSubject === 'all' || p.subject === filterSubject
     );
 
@@ -124,8 +89,8 @@ const LeistungenTable = ({ performances = [], students = [], subjects = [], acti
     const result = Object.values(grouped).map(group => {
       const validGrades = group.performances.map(p => p.grade).filter(g => typeof g === 'number' && g >= 1 && g <= 6);
       const sum = validGrades.reduce((total, grade) => total + grade, 0);
-      group.average = validGrades.length > 0 
-        ? parseFloat((sum / validGrades.length).toFixed(2)) 
+      group.average = validGrades.length > 0
+        ? parseFloat((sum / validGrades.length).toFixed(2))
         : 0;
       return group;
     });
@@ -172,7 +137,7 @@ const LeistungenTable = ({ performances = [], students = [], subjects = [], acti
   };
 
   const startEditing = (groupKey) => {
-    const group = groupedPerformances.find(g => 
+    const group = groupedPerformances.find(g =>
       `${g.assessment_name}-${g.subject}-${g.date}` === groupKey
     );
 
@@ -201,7 +166,7 @@ const LeistungenTable = ({ performances = [], students = [], subjects = [], acti
   const saveGrades = async (groupKey) => {
     const grades = editingGrades[groupKey];
     const fachbereiche = editingFachbereiche[groupKey] || [];
-    const group = groupedPerformances.find(g => 
+    const group = groupedPerformances.find(g =>
       `${g.assessment_name}-${g.subject}-${g.date}` === groupKey
     );
 
@@ -246,7 +211,7 @@ const LeistungenTable = ({ performances = [], students = [], subjects = [], acti
             subject: group.subject,
             assessment_name: group.assessment_name,
             grade,
-            weight: editingGrades[groupKey]?.weight ?? 1, // Include weight
+            weight: editingGrades[groupKey]?.weight ?? 1,
             fachbereiche,
             user_id: user.id
           };
@@ -289,7 +254,6 @@ const LeistungenTable = ({ performances = [], students = [], subjects = [], acti
       }, 0);
 
       if (onDataChange) onDataChange();
-      saveExpandedRows(newExpanded); // Speichere Präferenzen
 
       toast({
         title: "Erfolg",
@@ -381,7 +345,7 @@ const LeistungenTable = ({ performances = [], students = [], subjects = [], acti
             </SelectContent>
           </Select>
         </div>
-        
+
         <div className="flex items-center gap-2">
           <label className="text-slate-700 dark:text-slate-300 text-sm font-medium">Sortieren:</label>
           <Select value={sortBy} onValueChange={setSortBy}>
@@ -428,6 +392,8 @@ const LeistungenTable = ({ performances = [], students = [], subjects = [], acti
                 const groupKey = `${group.assessment_name}-${group.subject}-${group.date}`;
                 const isExpanded = expandedRows.has(groupKey);
                 const isEditing = !!editingGrades[groupKey];
+                const subjectColor = getSubjectColor(group.subject);
+                const avgColors = getGradeColor(group.average);
 
                 return (
                   <React.Fragment key={groupKey}>
@@ -444,7 +410,15 @@ const LeistungenTable = ({ performances = [], students = [], subjects = [], acti
                       </TableCell>
                       <TableCell className="text-black dark:text-white">{group.date ? new Date(group.date).toLocaleDateString('de-DE') : 'Unbekannt'}</TableCell>
                       <TableCell>
-                        <Badge variant="outline" className="text-black dark:text-white border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700">
+                        {/* Fach-Badge mit Fachfarbe */}
+                        <Badge
+                          variant="outline"
+                          className="border-none font-medium"
+                          style={{
+                            backgroundColor: subjectColor,
+                            color: getTextColor(subjectColor)
+                          }}
+                        >
                           {getSubjectName(group.subject)}
                         </Badge>
                       </TableCell>
@@ -462,7 +436,12 @@ const LeistungenTable = ({ performances = [], students = [], subjects = [], acti
                         </div>
                       </TableCell>
                       <TableCell className="text-black dark:text-white">{group.performances[0]?.weight ?? 1}</TableCell>
-                      <TableCell className="font-bold text-lg text-black dark:text-white">{group.average ? group.average.toFixed(2) : '-'}</TableCell>
+                      {/* Notenschnitt mit 5-Stufen-Farbsystem */}
+                      <TableCell>
+                        <span className={`font-bold text-lg px-2 py-1 rounded ${avgColors.text} ${avgColors.bg}`}>
+                          {group.average ? group.average.toFixed(2) : '-'}
+                        </span>
+                      </TableCell>
                       <TableCell>
                         {isEditing ? (
                           <>
@@ -530,7 +509,7 @@ const LeistungenTable = ({ performances = [], students = [], subjects = [], acti
                                   {(editingFachbereiche[groupKey] || []).map(fachbereich => (
                                     <Badge key={fachbereich} variant="secondary" className="text-xs">
                                       {fachbereich}
-                                      <button 
+                                      <button
                                         onClick={() => removeFachbereich(groupKey, fachbereich)}
                                         className="ml-1.5 hover:text-red-400"
                                       >
@@ -547,7 +526,7 @@ const LeistungenTable = ({ performances = [], students = [], subjects = [], acti
                                 <Label>Gewichtung</Label>
                                 <Input
                                   type="number"
-                                  step="0.1"
+                                  step="0.01"
                                   min="0"
                                   max="10"
                                   placeholder="1"
@@ -582,9 +561,14 @@ const LeistungenTable = ({ performances = [], students = [], subjects = [], acti
                                 if (!student || !student.id) return null;
 
                                 const perf = group.performances.find(p => p.student_id === student.id);
-                                const currentGrade = isEditing 
+                                const currentGrade = isEditing
                                   ? editingGrades[groupKey]?.[student.id] || ''
                                   : (perf && typeof perf.grade === 'number' ? perf.grade.toString() : '');
+
+                                // 5-Stufen-Farbsystem für einzelne Noten
+                                const gradeColors = perf && typeof perf.grade === 'number'
+                                  ? getGradeColor(perf.grade)
+                                  : getGradeColor(null);
 
                                 return (
                                   <div key={student.id} className="flex items-center justify-between p-2 bg-white dark:bg-slate-800 rounded">
@@ -603,13 +587,10 @@ const LeistungenTable = ({ performances = [], students = [], subjects = [], acti
                                         placeholder="Note"
                                       />
                                     ) : (
-                                      <span className={`font-bold text-sm px-2 py-1 rounded ${
-                                        perf && typeof perf.grade === 'number' && perf.grade !== 0
-                                          ? perf.grade <= 4 
-                                            ? 'text-red-600 dark:text-red-400 bg-red-100 dark:bg-red-900/30' 
-                                            : 'text-green-600 dark:text-green-400 bg-green-100 dark:bg-green-900/30'
-                                          : 'text-slate-500 dark:text-slate-400'
-                                      }`} title={perf && perf.grade === 0 ? 'Nicht teilgenommen' : ''}>
+                                      <span
+                                        className={`font-bold text-sm px-2 py-1 rounded ${gradeColors.text} ${gradeColors.bg}`}
+                                        title={perf && perf.grade === 0 ? 'Nicht teilgenommen' : ''}
+                                      >
                                         {perf && typeof perf.grade === 'number' ? perf.grade : '-'}
                                       </span>
                                     )}

@@ -19,48 +19,13 @@ import YearLessonOverlay from "../components/yearly/YearLessonOverlay";
 import { adjustColor } from '@/utils/colorUtils';
 import { useLessonStore } from '@/store';
 import pb from '@/api/pb';
-import { Plus } from "lucide-react";
 import toast from 'react-hot-toast';
 import { Calendar, GraduationCap } from 'lucide-react';
 import useAllYearlyLessons from '@/hooks/useAllYearlyLessons';
 import { syncYearlyLessonToWeekly } from '@/hooks/useYearlyLessonSync';
+import { safeSortByName } from '@/utils/safeData';
 
 const ACADEMIC_WEEKS = 52;
-
-// SAFE STRING HELPER - gleiche Funktion wie in TopicLessonsModal
-const ultraSafeString = (value) => {
-  try {
-    if (value === null || value === undefined) return '';
-    if (typeof value === 'string') return value;
-    if (typeof value === 'number') return value.toString();
-    if (typeof value === 'boolean') return value ? 'true' : 'false';
-    if (typeof value === 'object') {
-      if (React.isValidElement(value)) return '';
-      if (Array.isArray(value)) return value.length.toString();
-      if (value.title) return ultraSafeString(value.title);
-      if (value.name) return ultraSafeString(value.name);
-      return '[Objekt]';
-    }
-    return String(value);
-  } catch (e) {
-    console.warn('ultraSafeString error:', e);
-    return '';
-  }
-};
-
-// SAFE SORT HELPER
-const safeSortByName = (items) => {
-  try {
-    return items.filter(item => item && (item.name || item.title)).sort((a, b) => {
-      const nameA = ultraSafeString(a.name || a.title || '');
-      const nameB = ultraSafeString(b.name || b.title || '');
-      return nameA.localeCompare(nameB);
-    });
-  } catch (e) {
-    console.error('safeSortByName error:', e);
-    return items || [];
-  }
-};
 
 export default function YearlyOverviewPage() {
   return <InnerYearlyOverviewPage />;
@@ -81,7 +46,6 @@ function InnerYearlyOverviewPage() {
   const [classes, setClasses] = useState([]);
   const [holidays, setHolidays] = useState([]);
   const [settings, setSettings] = useState(null);
-  const [isLoading, setIsLoading] = useState(true);
 
   const [activeClassId, setActiveClassId] = useState(null);
   const [activeSubjectName, setActiveSubjectName] = useState('');
@@ -101,9 +65,11 @@ function InnerYearlyOverviewPage() {
   const [currentView, setCurrentView] = useState('Jahr');
   const [currentYear, setCurrentYear] = useState(new Date().getFullYear());
 
-  // Neue States für Quick Actions & Density
+  // Neue States für Quick Actions
   const [showQuickActions, setShowQuickActions] = useState(false);
-  const [densityMode, setDensityMode] = useState('standard'); // 'compact' | 'standard' | 'spacious'
+
+  // densityMode aus Settings ableiten (wird aus DB geladen)
+  const densityMode = settings?.yearlyDensity || 'standard';
 
   // NEU: States für Jahresmodus
   const [yearViewMode, setYearViewMode] = useState('calendar'); // 'calendar' | 'school'
@@ -132,6 +98,27 @@ function InnerYearlyOverviewPage() {
   const overlayRef = useRef(null);
 
   const [selectedLessons, setSelectedLessons] = useState([]); // Für Assign-Modus
+  const [sharedLessonsLimit, setSharedLessonsLimit] = useState(null); // Limit für geteilte Lektionen
+  const [sharedLessonsData, setSharedLessonsData] = useState([]); // Die geteilten Lektionsdaten
+
+  // Lade sharedLessonsLimit und sharedLessonsData beim Mount im Assign-Modus
+  useEffect(() => {
+    if (isAssignMode) {
+      try {
+        const pendingData = localStorage.getItem('pendingSharedLessons');
+        if (pendingData) {
+          const parsed = JSON.parse(pendingData);
+          const topicId = searchParams.get('topic');
+          if (parsed.topicId === topicId && parsed.lessons?.length > 0) {
+            setSharedLessonsLimit(parsed.lessons.length);
+            setSharedLessonsData(parsed.lessons);
+          }
+        }
+      } catch (e) {
+        console.error('Error loading sharedLessonsLimit:', e);
+      }
+    }
+  }, [isAssignMode, searchParams]);
 
   // Sofortiges Setzen beim Betreten
   const handleShowHover = useCallback((lesson, e) => {
@@ -173,14 +160,37 @@ function InnerYearlyOverviewPage() {
     setSelectedLessons(prev => {
       const exists = prev.includes(key);
       if (exists) {
-        // toast.success("Auswahl entfernt");
+        // Beim Entfernen: Prüfe ob nächster Key auch entfernt werden soll (Doppellektion)
+        const nextKey = `${slot.week_number}-${slot.subject}-${slot.lesson_number + 1}`;
+        const keyIndex = prev.indexOf(key);
+
+        // Wenn dies Teil einer Doppellektion war, entferne beide
+        if (keyIndex >= 0 && sharedLessonsData[keyIndex]?.is_double_lesson) {
+          return prev.filter(k => k !== key && k !== nextKey);
+        }
         return prev.filter(k => k !== key);
       } else {
-        // toast.success("Slot ausgewählt");
+        // Beim Hinzufügen: Prüfe ob nächste geteilte Lektion eine Doppellektion ist
+        const nextLessonIndex = prev.length;
+        const nextSharedLesson = sharedLessonsData[nextLessonIndex];
+        const isDouble = nextSharedLesson?.is_double_lesson;
+
+        // Prüfe Limit bei geteilten Lektionen (berücksichtige Doppellektion)
+        const slotsNeeded = isDouble ? 2 : 1;
+        if (sharedLessonsLimit !== null && prev.length + slotsNeeded > sharedLessonsLimit) {
+          toast.error(`Maximal ${sharedLessonsLimit} Lektionen verfuegbar`);
+          return prev;
+        }
+
+        if (isDouble) {
+          // Automatisch beide Slots markieren für Doppellektion
+          const nextKey = `${slot.week_number}-${slot.subject}-${slot.lesson_number + 1}`;
+          return [...prev, key, nextKey];
+        }
         return [...prev, key];
       }
     });
-  }, []);
+  }, [sharedLessonsLimit, sharedLessonsData]);
 
   const handleAssignAndBack = async () => {
     if (selectedLessons.length === 0) {
@@ -194,10 +204,42 @@ function InnerYearlyOverviewPage() {
       (s) => s.name.toLowerCase() === assignSubject?.toLowerCase()
     );
 
-    const updates = selectedLessons.map(async (key) => {
+    // Prüfe ob geteilte Lektionen vorhanden sind
+    let pendingShared = null;
+    let sharedLessons = [];
+    try {
+      const pendingData = localStorage.getItem('pendingSharedLessons');
+      if (pendingData) {
+        pendingShared = JSON.parse(pendingData);
+        if (pendingShared.topicId === assignTopicId) {
+          sharedLessons = pendingShared.lessons || [];
+        }
+      }
+    } catch (e) {
+      console.error('Error parsing pendingSharedLessons:', e);
+    }
+
+    // Sammle alle Optimistic Updates VOR den API-Calls
+    const optimisticLessons = [];
+    const apiCalls = [];
+
+    // Sortiere selectedLessons nach Woche und Lektionsnummer für korrekte Zuordnung
+    const sortedLessons = [...selectedLessons].sort((a, b) => {
+      const [weekA, , numA] = a.split('-');
+      const [weekB, , numB] = b.split('-');
+      if (parseInt(weekA) !== parseInt(weekB)) {
+        return parseInt(weekA) - parseInt(weekB);
+      }
+      return parseInt(numA) - parseInt(numB);
+    });
+
+    sortedLessons.forEach((key, index) => {
       const [week, subjName, number] = key.split("-");
       const weekNum = parseInt(week);
       const lessonNum = parseInt(number);
+
+      // Hole Lektionsdaten aus Snapshot (falls vorhanden)
+      const sharedLessonData = sharedLessons[index] || {};
 
       const existingLesson = lessonsForYear.find(
         (l) =>
@@ -207,10 +249,25 @@ function InnerYearlyOverviewPage() {
       );
 
       if (existingLesson) {
-        await YearlyLesson.update(existingLesson.id, { topic_id: assignTopicId });
+        // Optimistic Update für bestehende Lektion SOFORT
+        const updateData = {
+          topic_id: assignTopicId,
+          // Überschreibe mit Snapshot-Daten falls vorhanden
+          ...(sharedLessonData.name && { name: sharedLessonData.name }),
+          ...(sharedLessonData.notes && { notes: sharedLessonData.notes }),
+          ...(sharedLessonData.steps && { steps: sharedLessonData.steps }),
+          ...(sharedLessonData.is_exam !== undefined && { is_exam: sharedLessonData.is_exam }),
+          ...(sharedLessonData.is_double_lesson !== undefined && { is_double_lesson: sharedLessonData.is_double_lesson }),
+        };
+        const optimisticLesson = { ...existingLesson, ...updateData };
+        optimisticUpdate(optimisticLesson, false);
+
+        // API-Call für später
+        apiCalls.push(YearlyLesson.update(existingLesson.id, updateData));
       } else {
-        // Leerer Slot → neue Lektion anlegen
-        await YearlyLesson.create({
+        // Temporäre ID für optimistic update
+        const tempId = `temp-assign-${Date.now()}-${weekNum}-${lessonNum}`;
+        const lessonData = {
           week_number: weekNum,
           lesson_number: lessonNum,
           subject: subjectObj?.id,
@@ -218,48 +275,86 @@ function InnerYearlyOverviewPage() {
           topic_id: assignTopicId,
           user_id: pb.authStore.model?.id,
           class_id: activeClassId || subjectObj?.class_id,
-          name: "Neue Lektion",
-        });
+          name: sharedLessonData.name || "Neue Lektion",
+          notes: sharedLessonData.notes || "",
+          steps: sharedLessonData.steps || [],
+          is_exam: sharedLessonData.is_exam || false,
+          is_double_lesson: sharedLessonData.is_double_lesson || false,
+        };
+        const tempLesson = {
+          id: tempId,
+          ...lessonData,
+        };
+
+        // Optimistic Update SOFORT
+        optimisticUpdate(tempLesson, true);
+        optimisticLessons.push({ tempId, weekNum, lessonNum });
+
+        // API-Call für später (ersetzt temp mit echter Lektion)
+        apiCalls.push(
+          YearlyLesson.create(lessonData).then(createdLesson => {
+            // Entferne temp-Lektion und füge echte hinzu
+            const tempLesson = optimisticLessons.find(l => l.weekNum === weekNum && l.lessonNum === lessonNum);
+            if (tempLesson) {
+              optimisticUpdate({ id: tempLesson.tempId }, false, true); // Entferne temp
+              optimisticUpdate({ ...createdLesson, lesson_number: lessonNum }, true); // Füge echte hinzu
+            }
+          })
+        );
       }
     });
 
-    await Promise.all(updates);
+    // Warte auf alle API-Calls
+    await Promise.all(apiCalls);
+
+    // Entferne pendingSharedLessons aus localStorage nach erfolgreicher Zuweisung
+    if (pendingShared && pendingShared.topicId === assignTopicId) {
+      localStorage.removeItem('pendingSharedLessons');
+    }
+
     // Draft-Status entfernen falls vorhanden
     try {
       await Topic.update(assignTopicId, { /* is_draft: false – falls du das Feld hast */ });
     } catch (_) {}
+
+    // Invalidiere Queries um sicherzustellen, dass alle Daten aktuell sind
+    queryClientLocal.invalidateQueries({ queryKey: ['allYearlyLessons'], refetchType: 'all' });
+    queryClientLocal.invalidateQueries({ queryKey: ['topics'], refetchType: 'all' });
+    queryClientLocal.invalidateQueries({ queryKey: ['yearlyLessons'], refetchType: 'all' });
 
     navigate(-1);
     toast.success("Lektionen erfolgreich zugewiesen!");
   };
 
   const queryClientLocal = useQueryClient();
+  const userId = pb.authStore.model?.id;
 
   const { allYearlyLessons, isLoading: yearlyLoading, refetch: refetchYearly, optimisticUpdate } = useAllYearlyLessons(currentYear);
 
   const { data: topicsData, isLoading: topicsLoading } = useQuery({
-    queryKey: ['topics', currentYear],
-    queryFn: () => Topic.list({ 'class_id.user_id': pb.authStore.model?.id }),
+    queryKey: ['topics', userId],
+    queryFn: () => Topic.list({ 'class_id.user_id': userId }),
+    staleTime: 0, // Immer frische Daten holen
   });
 
   const { data: subjectsData, isLoading: subjectsLoading } = useQuery({
-    queryKey: ['subjects', currentYear],
-    queryFn: () => Subject.list({ 'class_id.user_id': pb.authStore.model?.id }),
+    queryKey: ['subjects', userId, currentYear],
+    queryFn: () => Subject.list({ 'class_id.user_id': userId }),
   });
 
   const { data: classesData, isLoading: classesLoading } = useQuery({
-    queryKey: ['classes', currentYear],
-    queryFn: () => Class.list({ user_id: pb.authStore.model?.id }),
+    queryKey: ['classes', userId, currentYear],
+    queryFn: () => Class.list({ user_id: userId }),
   });
 
   const { data: holidaysData, isLoading: holidaysLoading } = useQuery({
-    queryKey: ['holidays', currentYear],
-    queryFn: () => Holiday.list({ user_id: pb.authStore.model?.id }),
+    queryKey: ['holidays', userId, currentYear],
+    queryFn: () => Holiday.list({ user_id: userId }),
   });
 
   const { data: settingsData, isLoading: settingsLoading } = useQuery({
-    queryKey: ['settings', currentYear],
-    queryFn: () => Setting.list({ user_id: pb.authStore.model?.id }),
+    queryKey: ['settings', userId, currentYear],
+    queryFn: () => Setting.list({ user_id: userId }),
   });
 
   const prevModeRef = useRef(mode);
@@ -267,7 +362,6 @@ function InnerYearlyOverviewPage() {
   useEffect(() => {
     if (topicsData) {
       const safeTopics = safeSortByName(topicsData || []);
-      console.log('Debug: Safe topics after sorting:', safeTopics);
       setTopics(safeTopics);
     }
     if (subjectsData) {
@@ -288,16 +382,14 @@ function InnerYearlyOverviewPage() {
     }
   }, [topicsData, subjectsData, classesData, holidaysData, settingsData, activeClassId, yearViewMode]);
 
-  useEffect(() => {
-    setIsLoading(yearlyLoading || topicsLoading || subjectsLoading || classesLoading || holidaysLoading || settingsLoading);
-  }, [yearlyLoading, topicsLoading, subjectsLoading, classesLoading, holidaysLoading, settingsLoading]);
+  // Computed loading state - no useEffect needed
+  const isLoading = yearlyLoading || topicsLoading || subjectsLoading || classesLoading || holidaysLoading || settingsLoading;
 
   useEffect(() => {
     if (assignSubject && subjectsData) {
       const matchingSubject = subjectsData.find(s => s.name.toLowerCase() === assignSubject.toLowerCase());
       if (matchingSubject) {
         setActiveSubjectName(matchingSubject.name);
-        console.log('Debug: Set activeSubjectName to', matchingSubject.name);
       } else {
         console.error('No subject found for assignSubject:', assignSubject);
       }
@@ -314,6 +406,19 @@ function InnerYearlyOverviewPage() {
       window.removeEventListener('holidays-changed', handleDataRefresh);
     };
   }, [currentYear, queryClientLocal]);
+
+  // Auf Settings-Änderungen reagieren (z.B. Dichte-Einstellung)
+  useEffect(() => {
+    const handleSettingsChanged = (e) => {
+      if (e.detail?.settings) {
+        setSettings(e.detail.settings);
+        // Auch die Query invalidieren für konsistenten State
+        queryClientLocal.invalidateQueries(['settings']);
+      }
+    };
+    window.addEventListener('settings-changed', handleSettingsChanged);
+    return () => window.removeEventListener('settings-changed', handleSettingsChanged);
+  }, [queryClientLocal]);
 
   useEffect(() => {
     const handleResize = () => {
@@ -362,7 +467,7 @@ function InnerYearlyOverviewPage() {
       sortedClasses.forEach((cls) => {
         const classSubjects = subjects
           .filter((s) => s.class_id === cls.id)
-          .sort((a, b) => a.name.localeCompare(b.name));
+          .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
         allSubjects.push(...classSubjects);
       });
       return allSubjects;
@@ -370,7 +475,7 @@ function InnerYearlyOverviewPage() {
 
     return subjects
       .filter((s) => s.class_id === activeClassId)
-      .sort((a, b) => a.name.localeCompare(b.name));
+      .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
   }, [isAssignMode, assignSubject, subjects, activeClassId, classes]);
 
   const activeClassName = useMemo(() => classes.find(c => c.id === activeClassId)?.name || '', [classes, activeClassId]);
@@ -483,7 +588,10 @@ function InnerYearlyOverviewPage() {
             }
           }
 
-          // setAllYearlyLessons(tempUpdatedPrev); // Entfernt - optimistic updates verwalten den Cache
+          // Optimistic Update für die Hauptlektionen SOFORT durchführen
+          lessonsToUpdate.forEach(mergedLesson => {
+            optimisticUpdate({ ...mergedLesson, topic_id: newTopicId }, false);
+          });
 
           try {
             await Promise.all(
@@ -495,8 +603,8 @@ function InnerYearlyOverviewPage() {
             // KEIN refetch - optimistic updates haben bereits aktualisiert
           } catch (error) {
             console.error("Error updating block lesson topics:", error);
-            // setAllYearlyLessons(allYearlyLessons); // Entfernt - Cache Rollback nicht nötig
-            await refetchYearly(); // Im Fehlerfall neu laden
+            // Bei Fehler: Rollback durch Refetch
+            await refetchYearly();
           }
         } else if (slot) {
           // NEW: Get class_id from slot instead of activeClassId
@@ -509,12 +617,6 @@ function InnerYearlyOverviewPage() {
             return;
           }
           const subjectId = subjects.find(s => s.name === slot.subject && s.class_id === slotClassId)?.id;
-          console.log('Debug: Subject mapping in handleLessonClick', {
-            slotSubject: slot.subject,
-            subjectId,
-            slot,
-            availableSubjects: subjects.map(s => ({ id: s.id, name: s.name }))
-          });
           if (!subjectId) {
             console.error('Error: No valid subject ID found for', slot.subject);
             alert('Ungültiges Fach. Bitte wählen Sie ein gültiges Fach aus.');
@@ -558,14 +660,10 @@ function InnerYearlyOverviewPage() {
             optimisticUpdate({ ...createdLesson, lesson_number: Number(createdLesson.lesson_number) }, true);
 
             // Sync to weekly timetable if in fixed schedule mode
-            console.log('YearlyOverview: Syncing created lesson to weekly timetable');
-
             let tempUpdatedPrev = [...allYearlyLessons, { ...createdLesson, lesson_number: Number(createdLesson.lesson_number) }];
 
             try {
-              // Include the newly created lesson in the array for placement calculation
               await syncYearlyLessonToWeekly(createdLesson, settings, subjects, tempUpdatedPrev);
-              console.log('✓ Successfully synced to weekly timetable');
             } catch (syncError) {
               console.warn('Failed to sync to weekly timetable:', syncError);
             }
@@ -700,14 +798,6 @@ function InnerYearlyOverviewPage() {
     const oldSecondYearlyId = originalLesson?.second_yearly_lesson_id;
 
     let finalLessonData = { ...lessonData };
-    console.log('Debug: Saving lesson with is_half_class:', finalLessonData.is_half_class); // Debugging hinzufügen
-
-    console.log('handleSaveLesson called with:', {
-      hasOriginalLesson: !!originalLesson,
-      hasNewLessonSlot: !!newLessonSlot,
-      primaryId: originalLesson?.id,
-      subjectId: newLessonSlot?.subject || originalLesson?.subject
-    });
 
     // Only create/link second lesson in FLEXIBLE mode (traditional two-lesson approach)
     // In FIXED mode with unified doubles, second_yearly_lesson_id should be null
@@ -745,7 +835,6 @@ function InnerYearlyOverviewPage() {
     } else if (finalLessonData.is_double_lesson && settings?.scheduleType === 'fixed') {
       // FIXED mode with unified double: ensure second_yearly_lesson_id is null
       finalLessonData.second_yearly_lesson_id = null;
-      console.log('Unified double lesson in fixed mode - no second lesson created');
     }
 
     try {
@@ -768,16 +857,35 @@ function InnerYearlyOverviewPage() {
         await YearlyLesson.update(primaryId, updatePayload);
         optimisticUpdate({ id: primaryId, ...updatePayload }, false);
 
-        // Sync updated lesson to weekly timetable if in fixed schedule mode
-        console.log('handleSaveLesson: Syncing updated lesson to weekly timetable');
+        // Sync is_exam and is_half_class to all weekly Lessons with this yearly_lesson_id
         try {
-          const updatedLesson = { id: primaryId, ...updatePayload, ...originalLesson };
-          // Replace the old lesson with the updated one in the array
+          const linkedLessons = await Lesson.list({ yearly_lesson_id: primaryId });
+          for (const weeklyLesson of linkedLessons) {
+            await Lesson.update(weeklyLesson.id, {
+              is_exam: updatePayload.is_exam || false,
+              is_half_class: updatePayload.is_half_class || false
+            });
+          }
+          console.log(`Synced is_exam/is_half_class to ${linkedLessons.length} weekly lessons`);
+
+          // Sofortige UI-Aktualisierung: Auch den lokalen allLessons State updaten
+          setAllLessons(prev => prev.map(l =>
+            l.yearly_lesson_id === primaryId
+              ? { ...l, is_exam: updatePayload.is_exam || false, is_half_class: updatePayload.is_half_class || false }
+              : l
+          ));
+        } catch (syncFlagsError) {
+          console.warn('Failed to sync is_exam/is_half_class to weekly lessons:', syncFlagsError);
+        }
+
+        // Sync updated lesson to weekly timetable if in fixed schedule mode
+        try {
+          // Important: spread originalLesson first, then updatePayload to ensure new values take precedence
+          const updatedLesson = { ...originalLesson, ...updatePayload, id: primaryId };
           const updatedYearlyLessons = allYearlyLessons.map(yl =>
             yl.id === primaryId ? updatedLesson : yl
           );
           await syncYearlyLessonToWeekly(updatedLesson, settings, subjects, updatedYearlyLessons);
-          console.log('✓ Successfully synced updated lesson to weekly timetable');
         } catch (syncError) {
           console.warn('Failed to sync updated lesson to weekly timetable:', syncError);
         }
@@ -798,7 +906,7 @@ function InnerYearlyOverviewPage() {
           steps: cleanLessonData.steps,
           name: cleanLessonData.name || 'Neue Lektion',
           subject: subjectId,
-          class_id: activeClassId,
+          class_id: newLessonSlot?.class_id || activeClassId,
           user_id: pb.authStore.model.id,
           school_year: currentYear,
           week_number: newLessonSlot?.week_number || cleanLessonData.week_number,
@@ -811,12 +919,9 @@ function InnerYearlyOverviewPage() {
         optimisticUpdate({ ...created, lesson_number: Number(created.lesson_number) }, true);
 
         // Sync to weekly timetable if in fixed schedule mode
-        console.log('handleSaveLesson: Syncing created lesson to weekly timetable');
         try {
-          // Include the newly created lesson in the array for placement calculation
           const updatedYearlyLessons = [...allYearlyLessons, created];
           await syncYearlyLessonToWeekly(created, settings, subjects, updatedYearlyLessons);
-          console.log('✓ Successfully synced created lesson to weekly timetable');
         } catch (syncError) {
           console.warn('Failed to sync created lesson to weekly timetable:', syncError);
         }
@@ -925,10 +1030,11 @@ function InnerYearlyOverviewPage() {
 
   const handleSaveTopic = useCallback(async (topicData) => {
     try {
+      let savedTopic;
       if (editingTopic) {
-        await Topic.update(editingTopic.id, topicData);
+        savedTopic = await Topic.update(editingTopic.id, topicData);
       } else {
-        await Topic.create({
+        savedTopic = await Topic.create({
           name: topicData.name,
           description: topicData.description,
           color: topicData.color,
@@ -939,8 +1045,20 @@ function InnerYearlyOverviewPage() {
       }
       setIsTopicModalOpen(false);
       setEditingTopic(null);
-      queryClientLocal.invalidateQueries(['yearlyData', currentYear]);
-      queryClientLocal.invalidateQueries(['timetableData']);
+      // Invalidiere alle relevanten Queries
+      queryClientLocal.invalidateQueries({ queryKey: ['topics'] });
+      queryClientLocal.invalidateQueries({ queryKey: ['yearlyData', currentYear] });
+      queryClientLocal.invalidateQueries({ queryKey: ['timetableData'] });
+      // Aktualisiere lokalen State sofort
+      if (savedTopic) {
+        setTopics(prev => {
+          const exists = prev.some(t => t.id === savedTopic.id);
+          if (exists) {
+            return prev.map(t => t.id === savedTopic.id ? savedTopic : t);
+          }
+          return [...prev, savedTopic];
+        });
+      }
     } catch (error) {
       console.error("Error saving topic:", error);
     }
@@ -960,8 +1078,12 @@ function InnerYearlyOverviewPage() {
       }
       setIsTopicModalOpen(false);
       setEditingTopic(null);
-      queryClientLocal.invalidateQueries(['yearlyData', currentYear]);
-      queryClientLocal.invalidateQueries(['timetableData']);
+      // Aktualisiere lokalen State sofort
+      setTopics(prev => prev.filter(t => t.id !== topicId));
+      // Invalidiere alle relevanten Queries
+      queryClientLocal.invalidateQueries({ queryKey: ['topics'] });
+      queryClientLocal.invalidateQueries({ queryKey: ['yearlyData', currentYear] });
+      queryClientLocal.invalidateQueries({ queryKey: ['timetableData'] });
     } catch (error) {
       console.error("Error deleting topic:", error);
     }
@@ -971,108 +1093,58 @@ function InnerYearlyOverviewPage() {
 
   return (
     <div className="h-screen flex flex-col bg-gradient-to-br from-slate-50 via-slate-100 to-slate-200 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 overflow-hidden transition-colors duration-300">
-      <div className="flex-shrink-0 z-30 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-slate-200 dark:border-slate-700 shadow-sm sticky top-0">
-        <div className="p-6 pb-4 max-w-none mx-auto">
-          <motion.div
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="flex justify-center items-center gap-4 mb-6"
+      {/* Header - gleiche Struktur wie TimetableHeader */}
+      <div className="flex flex-col items-center p-4 shadow-lg">
+        {/* View Toggle Buttons */}
+        <div className="flex items-center space-x-4 mb-4">
+          <div className="flex space-x-4 p-2 bg-white/80 dark:bg-slate-800/80 backdrop-blur-md rounded-lg border border-slate-200 dark:border-slate-700 shadow-lg">
+            {['Tag', 'Woche', 'Jahr'].map((view) => (
+              <Button
+                key={view}
+                variant={currentView === view ? 'default' : 'ghost'}
+                size="sm"
+                onClick={() => handleViewChange(view)}
+                className={`px-4 py-2 rounded-lg transition-all duration-200 ${currentView === view ? 'bg-blue-600 text-white hover:bg-blue-700 shadow-inner' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 hover:shadow-md'}`}
+              >
+                {view}
+              </Button>
+            ))}
+          </div>
+        </div>
+
+        {/* Navigation Section - gleicher Style wie TimetableHeader */}
+        <div className="flex items-center space-x-4 my-4 p-2 bg-gray-100 dark:bg-slate-700 rounded-lg shadow-md">
+          <Button variant="ghost" onClick={() => setCurrentYear(y => y - 1)} className="rounded-lg hover:bg-gray-200 dark:hover:bg-slate-600">
+            <ChevronsLeft />
+          </Button>
+          <h2 className="text-xl font-bold text-gray-800 dark:text-slate-200">
+            {yearViewMode === 'school' ? 'Schuljahr' : 'Kalenderjahr'} {currentYear}/{currentYear + 1}
+          </h2>
+          <Button variant="ghost" onClick={() => setCurrentYear(y => y + 1)} className="rounded-lg hover:bg-gray-200 dark:hover:bg-slate-600">
+            <ChevronsRight />
+          </Button>
+
+          {/* Separater Icon-Button für Kalender/Schuljahr-Toggle */}
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={() => setYearViewMode(prev => prev === 'calendar' ? 'school' : 'calendar')}
+            className="ml-2 rounded-lg"
+            title={yearViewMode === 'calendar' ? 'Zu Schuljahr wechseln' : 'Zu Kalenderjahr wechseln'}
           >
-            <div className="bg-white/80 dark:bg-slate-800/80 backdrop-blur-md rounded-lg p-1 border border-slate-200 dark:border-slate-700 shadow-lg">
-              {['Tag', 'Woche', 'Jahr'].map((view) => (
-                <Button
-                  key={view}
-                  variant={currentView === view ? 'default' : 'ghost'}
-                  size="sm"
-                  onClick={() => handleViewChange(view)}
-                  className={`px-4 py-2 ${currentView === view ? 'bg-blue-600 text-white hover:bg-blue-700' : 'text-slate-300 hover:bg-slate-700'}`}
-                >
-                  {view}
-                </Button>
-              ))}
-            </div>
-          </motion.div>
-
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="flex justify-center items-center gap-4"
-          >
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={() => setCurrentYear(y => y - 1)}
-              className="rounded-lg bg-white/80 dark:bg-slate-800/80 backdrop-blur-md border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 shadow-md text-black dark:text-white"
-            >
-              <ChevronsLeft className="w-4 h-4" />
-            </Button>
-
-            {/* NEU: Umschaltbarer Jahr-Button */}
-            <Button
-              variant="default"
-              className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 rounded-lg font-semibold text-lg shadow-md flex items-center gap-3 min-w-[300px] justify-center"
-              onClick={() => setYearViewMode(prev => prev === 'calendar' ? 'school' : 'calendar')}
-            >
-              {yearViewMode === 'calendar' ? (
-                <>
-                  <Calendar className="w-5 h-5" />
-                  Kalenderjahr {currentYear}/{currentYear + 1}
-                </>
-              ) : (
-                <>
-                  <GraduationCap className="w-5 h-5" />
-                  Schuljahr {currentYear}/{currentYear + 1}
-                </>
-              )}
-            </Button>
-
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={() => setCurrentYear(y => y + 1)}
-              className="rounded-lg bg-white/80 dark:bg-slate-800/80 backdrop-blur-md border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 shadow-md text-black dark:text-white"
-            >
-              <ChevronsRight className="w-4 h-4" />
-            </Button>
-
-            {/* Density Control */}
-            <div className="flex items-center gap-2 ml-4">
-              <label className="text-sm text-gray-600 dark:text-slate-300">Dichte:</label>
-              <div className="flex gap-1 bg-gray-100 dark:bg-slate-700 rounded-lg p-1">
-                {['compact', 'standard', 'spacious'].map((mode) => (
-                  <Button
-                    key={mode}
-                    variant={densityMode === mode ? 'default' : 'ghost'}
-                    size="sm"
-                    onClick={() => setDensityMode(mode)}
-                    className={`px-2 py-1 text-xs ${densityMode === mode ? 'bg-blue-600 text-white' : 'text-gray-600 dark:text-slate-300'}`}
-                  >
-                    {mode === 'compact' ? 'K' : mode === 'standard' ? 'S' : 'L'}
-                  </Button>
-                ))}
-              </div>
-            </div>
-
-            {/* Add Topic button moved here, directly opens TopicModal */}
-            <Button
-              onClick={handleAddTopic}
-              className="ml-4 bg-blue-600 text-white hover:bg-blue-700 rounded-lg shadow-md flex items-center gap-2 px-4 py-2"
-            >
-              <Plus className="w-4 h-4" />
-              Thema hinzufügen
-            </Button>
-          </motion.div>
+            {yearViewMode === 'school' ? <GraduationCap className="w-4 h-4" /> : <Calendar className="w-4 h-4" />}
+          </Button>
         </div>
       </div>
 
-      <div className="flex-1 p-6 pt-2 w-full bg-slate-50 dark:bg-slate-900 yearly-main-grid">
+      <div className="flex-1 p-6 pt-2 max-w-full min-w-0 yearly-main-grid">
         {/* Table Container */}
-        <div className="flex-1 overflow-hidden relative">
+        <div className="h-full relative min-w-0 min-h-0">
           <motion.div
             initial={{ opacity: 0, x: 20 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ delay: 0.2 }}
-            className="bg-white dark:bg-slate-800 backdrop-blur-xl rounded-2xl shadow-xl border border-slate-200 dark:border-slate-700 h-full yearly-table-container"
+            className="bg-white dark:bg-slate-800 backdrop-blur-xl rounded-2xl shadow-xl border border-slate-200 dark:border-slate-700 h-full w-full min-h-0"
           >
             {isLoading ? (
               <div className="flex items-center justify-center h-full">
@@ -1081,32 +1153,61 @@ function InnerYearlyOverviewPage() {
             ) : (
               <>
                 {isAssignMode && (
-                  <div className="fixed top-24 left-1/2 -translate-x-1/2 z-50 bg-white dark:bg-slate-800 rounded-lg shadow-2xl px-8 py-5 border border-green-500/50 max-w-lg">
-                    <div className="text-center">
-                      <p className="text-xl font-bold mb-2">
-                        Lektionen zuweisen an Thema:
-                      </p>
-                      <p className="text-2xl font-extrabold mb-3" style={{ 
-                        color: topics.find(t => t.id === searchParams.get('topic'))?.color || '#3b82f6' 
-                      }}>
-                        {topics.find(t => t.id === searchParams.get('topic'))?.name || 'Draft-Thema'}
-                      </p>
-                      <p className="text-sm text-slate-600 dark:text-slate-400 mb-4">
-                        Klicke auf freie Lektionen oder leere Slots · {selectedLessons.length} ausgewählt
-                      </p>
-                      <Button 
-                        onClick={handleAssignAndBack}
-                        size="lg"
-                        className="bg-green-600 hover:bg-green-700 text-white font-semibold"
-                        disabled={selectedLessons.length === 0}
-                      >
-                        {selectedLessons.length === 0 
-                          ? 'Nichts ausgewählt' 
-                          : `Zuweisen & Zurück (${selectedLessons.length})`
-                        }
-                      </Button>
+                  <>
+                    {/* Assign Mode Header Banner */}
+                    <div className="fixed top-24 left-1/2 -translate-x-1/2 z-50 bg-white dark:bg-slate-800 rounded-lg shadow-2xl px-8 py-5 border border-green-500/50 max-w-lg">
+                      <div className="text-center">
+                        <p className="text-xl font-bold mb-2">
+                          Lektionen zuweisen an Thema:
+                        </p>
+                        <p className="text-2xl font-extrabold mb-3" style={{
+                          color: topics.find(t => t.id === searchParams.get('topic'))?.color || '#3b82f6'
+                        }}>
+                          {topics.find(t => t.id === searchParams.get('topic'))?.name || 'Draft-Thema'}
+                        </p>
+                        <p className="text-sm text-slate-600 dark:text-slate-400 mb-4">
+                          Klicke auf freie Lektionen oder leere Slots · {sharedLessonsLimit !== null
+                            ? `${selectedLessons.length}/${sharedLessonsLimit} Lektionen`
+                            : `${selectedLessons.length} ausgewaehlt`}
+                        </p>
+                        <Button
+                          onClick={handleAssignAndBack}
+                          size="lg"
+                          className="bg-green-600 hover:bg-green-700 text-white font-semibold"
+                          disabled={selectedLessons.length === 0 || (sharedLessonsLimit !== null && selectedLessons.length < sharedLessonsLimit)}
+                        >
+                          {selectedLessons.length === 0
+                            ? 'Nichts ausgewaehlt'
+                            : sharedLessonsLimit !== null && selectedLessons.length < sharedLessonsLimit
+                              ? `Noch ${sharedLessonsLimit - selectedLessons.length} Lektionen waehlen`
+                              : `Zuweisen & Zurueck (${selectedLessons.length})`
+                          }
+                        </Button>
+                      </div>
                     </div>
-                  </div>
+
+                    {/* Floating Counter - sichtbar beim Scrollen */}
+                    {selectedLessons.length > 0 && (
+                      <div className={`fixed bottom-6 right-6 z-50 text-white px-5 py-3 rounded-full shadow-lg flex items-center gap-3 ${
+                        sharedLessonsLimit !== null && selectedLessons.length === sharedLessonsLimit
+                          ? 'bg-green-600'
+                          : 'bg-blue-600 animate-pulse'
+                      }`}>
+                        <div className="w-8 h-8 bg-white/20 rounded-full flex items-center justify-center">
+                          <span className="font-bold text-lg">
+                            {sharedLessonsLimit !== null
+                              ? `${selectedLessons.length}/${sharedLessonsLimit}`
+                              : selectedLessons.length}
+                          </span>
+                        </div>
+                        <span className="font-medium">
+                          {sharedLessonsLimit !== null && selectedLessons.length === sharedLessonsLimit
+                            ? 'Alle Lektionen verteilt'
+                            : `Lektion${selectedLessons.length !== 1 ? 'en' : ''} ausgewaehlt`}
+                        </span>
+                      </div>
+                    )}
+                  </>
                 )}
                 {displayedSubjects.length === 0 ? (
                   <div className="text-center text-slate-400">Keine Fächer verfügbar – Bitte fügen Sie ein Fach hinzu.</div>
