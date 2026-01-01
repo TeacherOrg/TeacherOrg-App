@@ -38,15 +38,15 @@ const useTimetableStates = (settings, currentYear, currentWeek) => {
 
   useEffect(() => {
     const updateCellSizes = () => {
-      // Höhe
-      const headerHeight = 280;
-      const footerSpace = 50;
+      // Höhe - optimiert für bessere Viewport-Nutzung
+      const headerHeight = 200; // Header, Navigation, Controls
+      const footerSpace = 32;
       const availableHeight = window.innerHeight - headerHeight - footerSpace;
       const numSlots = timeSlots.length || 8;
-      const maxHeightPerCell = Math.floor(availableHeight / numSlots) - 5;
+      const maxHeightPerCell = Math.floor(availableHeight / numSlots) - 2;
       const preferredHeight = settings.cellHeight || 80;
       const effectiveHeight = autoFit ? Math.min(preferredHeight, maxHeightPerCell) : preferredHeight;
-      document.documentElement.style.setProperty('--cell-height', `${Math.max(40, effectiveHeight)}px`);
+      document.documentElement.style.setProperty('--cell-height', `${Math.max(50, effectiveHeight)}px`);
 
       // Breite
       const poolWidth = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--pool-width')) || 200;
@@ -57,8 +57,18 @@ const useTimetableStates = (settings, currentYear, currentWeek) => {
       const availableWidthForDays = window.innerWidth - reservedSpace;
       const maxWidthPerCell = Math.floor(availableWidthForDays / 5);
       const preferredWidth = settings.cellWidth || 120;
-      const effectiveWidth = autoFit ? Math.min(preferredWidth, maxWidthPerCell) : Math.min(preferredWidth, maxWidthPerCell);
-      document.documentElement.style.setProperty('--cell-width', `${Math.max(60, effectiveWidth)}px`);
+      const MIN_CELL_WIDTH = 80; // Minimum für Lesbarkeit
+      const effectiveWidth = autoFit
+        ? Math.max(MIN_CELL_WIDTH, Math.min(preferredWidth, maxWidthPerCell))
+        : Math.max(MIN_CELL_WIDTH, Math.min(preferredWidth, maxWidthPerCell));
+
+      // Viewport-Check: Wenn Grid + Pool zu breit, Zellen weiter reduzieren
+      const totalWidth = (effectiveWidth * 5) + timeColumnWidth + poolWidth + contentPadding + gap;
+      const finalWidth = totalWidth > window.innerWidth
+        ? Math.max(60, effectiveWidth - Math.ceil((totalWidth - window.innerWidth) / 5))
+        : effectiveWidth;
+
+      document.documentElement.style.setProperty('--cell-width', `${finalWidth}px`);
     };
 
     updateCellSizes();

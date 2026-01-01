@@ -1,5 +1,6 @@
 import { useCallback } from 'react';
 import { Lesson, YearlyLesson } from '@/api/entities';
+import { getWeekYear } from '@/utils/weekYearUtils';
 import pb from '@/api/pb';
 import { findFreeSlot } from '@/utils/slotUtils'; // Importiere die Funktion, falls nicht bereits vorhanden
 const useLessonHandlers = (editingLesson, currentYear, allLessons, yearlyLessons, timeSlots, currentWeek, queryClientLocal, subjects, optimisticUpdateAllLessons, optimisticUpdateYearlyLessons, addAllerleiLesson, removeAllLesson, setAllLessons, setYearlyLessons, activeClassId, refetch, setIsModalOpen, setEditingLesson, setInitialSubjectForModal, setCopiedLesson) => { const reassignYearlyLessonLinks = useCallback(async (subjectName, currentLessons, yearlyLessonsParam = yearlyLessons) => {
@@ -171,13 +172,6 @@ const useLessonHandlers = (editingLesson, currentYear, allLessons, yearlyLessons
     if (updatePromises.length > 0) {
       await Promise.all(updatePromises);
     }
-    console.log('Debug: Reassigned lessons', lessonsForSubject.map(l => ({
-      id: l.id,
-      yearly_lesson_id: updatedLessonsMap.get(l.id)?.yearly_lesson_id,
-      day: l.day_of_week,
-      period: l.period_slot,
-      name: yearlyLessonsParam.find(yl => yl.id === updatedLessonsMap.get(l.id)?.yearly_lesson_id)?.name || 'Unbekannt'
-    })));
     return Array.from(updatedLessonsMap.values());
   }, [currentWeek, yearlyLessons, optimisticUpdateYearlyLessons, refetch]);
  const updateYearlyLessonOrder = useCallback(async (subjectName, currentLessons, yearlyLessonsParam = yearlyLessons) => {
@@ -264,11 +258,6 @@ const useLessonHandlers = (editingLesson, currentYear, allLessons, yearlyLessons
       }
     }
     await Promise.all(updatePromises);
-    console.log('Debug: Updated yearly lesson order', Array.from(yearlyToNewNum.entries()).map(([ylId, newNum]) => ({
-      yearly_lesson_id: ylId,
-      lesson_number: newNum,
-      name: yearlyLessonsParam.find(yl => yl.id === ylId)?.name || 'Unbekannt'
-    })));
     return updatedYearlyLessons;
   }, [currentWeek, yearlyLessons, refetch]);
  const handleSaveLesson = useCallback(async (lessonData, toDeleteIds) => {
@@ -330,21 +319,8 @@ const useLessonHandlers = (editingLesson, currentYear, allLessons, yearlyLessons
           }
           createDataWithoutSteps.user_id = pb.authStore.model.id;
 
-          // === HIER DIE NEUE LOGIK EINFÜGEN ===
-          function getMondayOfWeek(week, year) {
-            const jan4 = new Date(year, 0, 4);
-            const mondayOfWeek1 = new Date(jan4);
-            mondayOfWeek1.setDate(jan4.getDate() - ((jan4.getDay() + 6) % 7));
-            const monday = new Date(mondayOfWeek1);
-            monday.setDate(mondayOfWeek1.getDate() + (week - 1) * 7);
-            return monday;
-          }
+          createDataWithoutSteps.week_year = getWeekYear(currentWeek, currentYear);
 
-          const monday = getMondayOfWeek(currentWeek, currentYear);
-          createDataWithoutSteps.week_year = monday.getFullYear();
-          // === ENDE NEUE LOGIK ===
-
-          console.log('Create payload for lesson:', createDataWithoutSteps);
           const newLesson = await Lesson.create(createDataWithoutSteps);
           if (!newLesson.yearly_lesson_id && !newLesson.is_allerlei && newLesson.subject) {
             const existingYearlyForSub = yearlyLessons
@@ -386,7 +362,6 @@ const useLessonHandlers = (editingLesson, currentYear, allLessons, yearlyLessons
                 is_half_class: newLesson.is_half_class || false,
                 name: lessonData.name || yearlyLessonToUpdate.name || `Lektion ${yearlyLessonToUpdate.lesson_number}`
               };
-              console.log('Syncing new weekly lesson back to yearly lesson:', yearlyLessonToUpdate.id, yearlyUpdateData);
               await YearlyLesson.update(yearlyLessonToUpdate.id, yearlyUpdateData);
               optimisticUpdateYearlyLessons(yearlyLessonToUpdate.id, yearlyUpdateData);
             }
@@ -394,7 +369,7 @@ const useLessonHandlers = (editingLesson, currentYear, allLessons, yearlyLessons
           if (lessonData.is_half_class && lessonData.isNew) {
             const nextPeriod = lessonData.period_slot + 1;
             if (nextPeriod <= timeSlots.length && !allLessons.some(l => l.day_of_week === lessonData.day_of_week && l.period_slot === nextPeriod && l.week_number === currentWeek)) {
-              const copyData = { ...lessonData, period_slot: nextPeriod, id: null, yearly_lesson_id: newLesson.yearly_lesson_id };
+              const copyData = { ...lessonData, period_slot: nextPeriod, id: null, yearly_lesson_id: newLesson.yearly_lesson_id, week_year: getWeekYear(currentWeek, currentYear) };
               const copyLesson = await Lesson.create(copyData);
               optimisticUpdateAllLessons(copyLesson, true);
             }
@@ -445,7 +420,6 @@ const useLessonHandlers = (editingLesson, currentYear, allLessons, yearlyLessons
           }
           // Skip Lesson.update for Allerlei that was already saved directly
           if (lessonData.collectionName !== 'allerlei_lessons') {
-            console.log('Updating lesson with data:', updateDataWithoutSteps);
             await Lesson.update(id, updateDataWithoutSteps);
             const updatedLesson = { ...oldLesson, ...updateDataWithoutSteps };
             optimisticUpdateAllLessons(updatedLesson);
@@ -461,7 +435,6 @@ const useLessonHandlers = (editingLesson, currentYear, allLessons, yearlyLessons
                   is_half_class: updatedLesson.is_half_class || false,
                   name: lessonData.name || yearlyLessonToUpdate.name || `Lektion ${yearlyLessonToUpdate.lesson_number}`
                 };
-                console.log('Syncing updated weekly lesson back to yearly lesson:', yearlyLessonToUpdate.id, yearlyUpdateData);
                 await YearlyLesson.update(yearlyLessonToUpdate.id, yearlyUpdateData);
                 optimisticUpdateYearlyLessons(yearlyLessonToUpdate.id, yearlyUpdateData);
               }
@@ -550,14 +523,6 @@ const useLessonHandlers = (editingLesson, currentYear, allLessons, yearlyLessons
         console.error('Failed to fetch refreshed yearly lessons');
         throw new Error('Failed to fetch yearly lessons');
       }
-      console.log('Debug: Updated yearlyLessons after save', {
-        affectedSubjects: [...subjectsToReassign],
-        yearlyLessons: refreshedYearly.map(l => ({
-          id: l.id,
-          lesson_number: l.lesson_number,
-          subject_name: l.expand?.subject?.name || l.subject_name
-        }))
-      });
       setYearlyLessons(refreshedYearly.map(l => ({ ...l, lesson_number: Number(l.lesson_number) })));
       let finalLessons = allLessons;
       for (const sub of subjectsToReassign) {
@@ -566,21 +531,20 @@ const useLessonHandlers = (editingLesson, currentYear, allLessons, yearlyLessons
         }
       }
       setAllLessons(JSON.parse(JSON.stringify(finalLessons)));
-      console.log('Set deep-copied finalLessons:', finalLessons);
       await refetch();
-      queryClientLocal.invalidateQueries(['timetableData', currentYear, currentWeek]);
+      queryClientLocal.invalidateQueries({ queryKey: ['timetableData'] });
       queryClientLocal.invalidateQueries(['yearlyData', currentYear]);
       setIsModalOpen(false);
       setEditingLesson(null);
       setInitialSubjectForModal(null);
       setCopiedLesson(null);
-      queryClientLocal.invalidateQueries(['timetableData', currentYear, currentWeek]);
+      queryClientLocal.invalidateQueries({ queryKey: ['timetableData'] });
       queryClientLocal.invalidateQueries(['yearlyData', currentYear]);
     } catch (error) {
       setYearlyLessons(yearlyLessons);
       setAllLessons(allLessons);
       console.error("Error saving lesson:", error);
-      queryClientLocal.invalidateQueries(['timetableData', currentYear, currentWeek]);
+      queryClientLocal.invalidateQueries({ queryKey: ['timetableData'] });
       queryClientLocal.invalidateQueries(['yearlyData', currentYear]);
     }
     }, [editingLesson, currentYear, allLessons, yearlyLessons, timeSlots, currentWeek, queryClientLocal, subjects, optimisticUpdateAllLessons, optimisticUpdateYearlyLessons, addAllerleiLesson, removeAllLesson, setAllLessons, setYearlyLessons, activeClassId, refetch, setIsModalOpen]); const handleDeleteLesson = useCallback(async (lessonId) => {
@@ -595,7 +559,7 @@ const useLessonHandlers = (editingLesson, currentYear, allLessons, yearlyLessons
     try {
       if (lessonToDelete.collectionName === 'allerlei_lessons') {
         await allerleiService.unlink(lessonToDelete.id, allLessons, timeSlots, currentWeek);
-        queryClientLocal.invalidateQueries(['timetableData', currentYear, currentWeek]);
+        queryClientLocal.invalidateQueries({ queryKey: ['timetableData'] });
         queryClientLocal.invalidateQueries(['yearlyData', currentYear]);
         await refetch();
       }
@@ -609,17 +573,15 @@ const useLessonHandlers = (editingLesson, currentYear, allLessons, yearlyLessons
       }
       setAllLessons(finalLessons);
       await refetch();
-      queryClientLocal.invalidateQueries(['timetableData', currentYear, currentWeek]);
+      queryClientLocal.invalidateQueries({ queryKey: ['timetableData'] });
       queryClientLocal.invalidateQueries(['yearlyData', currentYear]);
     } catch (error) {
       console.error('Error deleting lesson:', error);
-      queryClientLocal.invalidateQueries(['timetableData', currentYear, currentWeek]);
+      queryClientLocal.invalidateQueries({ queryKey: ['timetableData'] });
     }
   }, [allLessons, subjects, currentYear, currentWeek, queryClientLocal, removeAllLesson, setAllLessons, refetch, reassignYearlyLessonLinks]);
 
   const handleCreateFromPool = useCallback(async (subject, day, period) => {
-    console.log('Debug: handleCreateFromPool called with:', { subject, day, period });
-
     // Finde die verfügbaren YearlyLessons für das Subject
     const integratedYearlyIds = new Set();
     allLessons
@@ -636,14 +598,6 @@ const useLessonHandlers = (editingLesson, currentYear, allLessons, yearlyLessons
       )
       .sort((a, b) => Number(a.lesson_number) - Number(b.lesson_number));
 
-    console.log('Debug: Available YearlyLessons:', available.map(yl => ({
-      id: yl.id,
-      subject: yl.expand?.subject?.name,
-      week_number: yl.week_number,
-      lesson_number: yl.lesson_number,
-      is_half_class: yl.is_half_class
-    })));
-
     if (available.length === 0) {
       console.warn(`No available YearlyLessons for subject ${subject.name} in week ${currentWeek}`);
       toast.error(`Keine verfügbaren Lektionen für ${subject.name} in Woche ${currentWeek}`);
@@ -651,13 +605,6 @@ const useLessonHandlers = (editingLesson, currentYear, allLessons, yearlyLessons
     }
 
     const yl = available[0];
-    console.log('Debug: Selected YearlyLesson for creation:', {
-      id: yl.id,
-      subject: subject.name,
-      week_number: yl.week_number,
-      lesson_number: yl.lesson_number,
-      is_half_class: yl.is_half_class
-    });
 
     const timeSlot = timeSlots.find(ts => ts.period === period);
     if (!timeSlot) {
@@ -671,6 +618,7 @@ const useLessonHandlers = (editingLesson, currentYear, allLessons, yearlyLessons
       day_of_week: day,
       period_slot: period,
       week_number: currentWeek,
+      week_year: getWeekYear(currentWeek, currentYear),
       start_time: timeSlot.start,
       end_time: timeSlot.end,
       yearly_lesson_id: yl.id,
@@ -685,11 +633,8 @@ const useLessonHandlers = (editingLesson, currentYear, allLessons, yearlyLessons
       class_id: activeClassId,
     };
 
-    console.log('Debug: Creating lesson with data:', createData);
-
     const newLesson = await Lesson.create(createData);
     optimisticUpdateAllLessons(newLesson, true);
-    console.log('Debug: Created lesson:', newLesson);
 
     let tempLessons = [...allLessons, newLesson];
 
@@ -713,25 +658,20 @@ const useLessonHandlers = (editingLesson, currentYear, allLessons, yearlyLessons
             start_time: nextTimeSlot.start,
             end_time: nextTimeSlot.end,
           };
-          console.log('Debug: Creating double lesson with data:', createDataNext);
           const newNext = await Lesson.create(createDataNext);
           optimisticUpdateAllLessons(newNext, true);
           tempLessons.push(newNext);
-          console.log('Debug: Created double lesson:', newNext);
         }
       }
     }
 
     const updatedLessons = await reassignYearlyLessonLinks(subject.name, tempLessons);
     setAllLessons(updatedLessons);
-    console.log('Debug: Updated lessons after reassignment:', updatedLessons);
 
     const updatedYearly = await updateYearlyLessonOrder(subject.name, updatedLessons);
     setYearlyLessons(updatedYearly);
-    console.log('Debug: Updated yearly lessons order:', updatedYearly);
 
     await refetch();
-    console.log('Debug: Refetched data after lesson creation');
   }, [yearlyLessons, allLessons, timeSlots, currentWeek, subjects, optimisticUpdateAllLessons, reassignYearlyLessonLinks, updateYearlyLessonOrder, setAllLessons, setYearlyLessons, refetch, activeClassId]);
 
  return { handleSaveLesson, handleDeleteLesson, reassignYearlyLessonLinks, updateYearlyLessonOrder, handleCreateFromPool };

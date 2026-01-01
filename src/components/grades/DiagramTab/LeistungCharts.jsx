@@ -378,9 +378,16 @@ const Leistungscharts = ({ performances, students, subjects, selectedStudents, s
                 dataKey="Klassenschnitt"
                 fill="url(#classAvgGradient)"
                 opacity={0.8}
+                onClick={(data) => {
+                  if (isSubjectChart && data?.name) {
+                    const subjectId = subjects.find(s => s.name === data.name)?.id;
+                    if (subjectId) setSelectedSubject(subjectId);
+                  }
+                }}
+                style={{ cursor: isSubjectChart ? 'pointer' : 'default' }}
               />
             )}
-            {selectedStudents.map((studentId, index) => {
+            {selectedStudents.map((studentId) => {
               const student = students.find(s => s && s.id === studentId);
               if (!student || !student.name) return null;
               return (
@@ -389,6 +396,13 @@ const Leistungscharts = ({ performances, students, subjects, selectedStudents, s
                   dataKey={student.name}
                   fill={`url(#studentGradient-${student.id})`}
                   opacity={0.8}
+                  onClick={(data) => {
+                    if (isSubjectChart && data?.name) {
+                      const subjectId = subjects.find(s => s.name === data.name)?.id;
+                      if (subjectId) setSelectedSubject(subjectId);
+                    }
+                  }}
+                  style={{ cursor: isSubjectChart ? 'pointer' : 'default' }}
                 />
               );
             })}

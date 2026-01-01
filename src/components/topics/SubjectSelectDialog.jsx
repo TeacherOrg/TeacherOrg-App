@@ -17,13 +17,23 @@ export default function SubjectSelectDialog({
   onClose,
   sharedTopic,
   subjects = [],
-  onSubjectSelected
+  onSubjectSelected,
+  onOpenAssignment // Neuer Callback für Assignment-Modal
 }) {
   const [selectedSubjectId, setSelectedSubjectId] = useState('');
 
   const handleConfirm = () => {
     if (!selectedSubjectId) return;
-    onSubjectSelected(selectedSubjectId, sharedTopic);
+    const selectedSubject = subjects.find(s => s.id === selectedSubjectId);
+
+    // Wenn onOpenAssignment vorhanden und Lektionen im Topic, öffne Assignment-Modal
+    const hasLessons = sharedTopic?.lessons_snapshot?.length > 0;
+    if (onOpenAssignment && hasLessons) {
+      onOpenAssignment(selectedSubject, sharedTopic);
+    } else {
+      // Fallback: Direkt übernehmen (ohne Lektionen)
+      onSubjectSelected(selectedSubjectId, sharedTopic);
+    }
     setSelectedSubjectId('');
     onClose();
   };
@@ -102,8 +112,9 @@ export default function SubjectSelectDialog({
           </div>
 
           <p className="text-sm text-slate-400">
-            Nach der Auswahl werden Sie zur Jahresuebersicht weitergeleitet,
-            um die Lektionen zu platzieren.
+            {sharedTopic?.lessons_snapshot?.length > 0
+              ? 'Nach der Auswahl koennen Sie die Lektionen Ihren Stundenplan-Slots zuweisen.'
+              : 'Nach der Auswahl wird das Thema in Ihrem Account erstellt.'}
           </p>
         </div>
 

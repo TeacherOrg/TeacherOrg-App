@@ -92,9 +92,15 @@ export default function TopicLessonsModal({
         continue;
       }
 
-      if (lesson.is_double_lesson && lesson.second_yearly_lesson_id) {
+      // Unified Doppellektionen (ohne second_id) UND linked Doppellektionen
+      if (lesson.is_double_lesson) {
         totalWidth += 2;
-        i += 2;
+        // Bei linked doubles (mit second_id) überspringe die zweite Lektion
+        if (lesson.second_yearly_lesson_id) {
+          i += 2;
+        } else {
+          i += 1; // Unified double: nur 1 Eintrag, aber 2 Breite
+        }
       } else if (lesson.is_half_class) {
         // Handle half-class without extra span
         totalWidth += 1;
@@ -119,6 +125,14 @@ export default function TopicLessonsModal({
     return Math.min(1200, Math.max(baseWidth, gridColumns.totalWidth * columnWidth + padding));
   }, [gridColumns]);
 
+  // Berechne Gesamtanzahl der Unterrichtsstunden (Doppellektionen = 2)
+  // WICHTIG: Muss VOR dem early return sein wegen React Rules of Hooks
+  const totalLessonCount = useMemo(() => {
+    return safeTopicLessons.reduce((sum, lesson) => {
+      return sum + (lesson.is_double_lesson ? 2 : 1);
+    }, 0);
+  }, [safeTopicLessons]);
+
   // Early return with error boundary
   try {
     if (!isOpen) return null;
@@ -130,7 +144,16 @@ export default function TopicLessonsModal({
 
   const handleEdit = (lesson) => {
     try {
-      setEditingLesson(lesson);
+      // Hole immer die aktuellste Version aus allYearlyLessons
+      const freshLesson = allYearlyLessons.find(l => l.id === lesson.id);
+      const lessonToEdit = freshLesson ? {
+        ...freshLesson,
+        topic: topic || null,
+        topic_id: freshLesson.topic_id || topic?.id || '',
+        color: topic?.color || subjectColor || '#3b82f6'
+      } : lesson;
+
+      setEditingLesson(lessonToEdit);
       setIsLessonModalOpen(true);
     } catch (e) {
       console.error('handleEdit error:', e);
@@ -184,10 +207,16 @@ export default function TopicLessonsModal({
           }
 
           let span = 1;
-          
-          if (lesson.is_double_lesson && lesson.second_yearly_lesson_id) {
+
+          // Unified Doppellektionen (ohne second_id) UND linked Doppellektionen
+          if (lesson.is_double_lesson) {
             span = 2;
-            i += 2;
+            // Bei linked doubles (mit second_id) überspringe die zweite Lektion
+            if (lesson.second_yearly_lesson_id) {
+              i += 2;
+            } else {
+              i += 1; // Unified double: nur 1 Eintrag, aber 2 Breite
+            }
           } else if (lesson.is_half_class) {
             span = 1; // No extra span for half-class
             i += 1;
@@ -220,12 +249,12 @@ export default function TopicLessonsModal({
               style={{ gridColumn: `span ${span}` }} 
               className="h-20 p-1"
             >
-              <YearLessonCell 
-                lesson={safeLesson} 
+              <YearLessonCell
+                lesson={safeLesson}
                 onClick={() => handleEdit(safeLesson)}
-                activeTopicId={activeTopicId} 
-                defaultColor={ultraSafeString(subjectColor || '#3b82f6')} 
-                isDoubleLesson={safeLesson.is_double_lesson && !!safeLesson.second_yearly_lesson_id}
+                activeTopicId={activeTopicId}
+                defaultColor={ultraSafeString(subjectColor || '#3b82f6')}
+                isDoubleLesson={safeLesson.is_double_lesson}
               />
             </div>
           );
@@ -248,7 +277,6 @@ export default function TopicLessonsModal({
   };
 
   const safeTopicTitle = ultraSafeString(topic?.name) || 'Thema';
-  const safeSubject = ultraSafeString(subject) || 'Fach';
   const safeWeek = parseInt(week) || 0;
 
   try {
@@ -275,7 +303,7 @@ export default function TopicLessonsModal({
               Lektionen des Themas {topic?.name} in Woche {week}
             </DialogDescription>
             <div className="text-slate-500 dark:text-slate-400 text-sm">
-              {safeSubject} • Woche {safeWeek} • {safeTopicLessons.length} Lektion{safeTopicLessons.length !== 1 ? 'en' : ''}
+              Woche {safeWeek} • {totalLessonCount} Lektion{totalLessonCount !== 1 ? 'en' : ''}
             </div>
           </DialogHeader>
           

@@ -9,6 +9,7 @@ import SlotPickerModal from './SlotPickerModal';
 import toast from 'react-hot-toast';
 import { YearlyLesson } from '@/api/entities';
 import { LessonBadge } from '@/components/shared/lesson/LessonBadge';
+import { getCurrentWeek } from '@/utils/timetableUtils';
 
 const ACADEMIC_WEEKS = 52;
 
@@ -71,15 +72,6 @@ const getHolidayDisplay = (holiday) => {
       pattern: ''
     };
   }
-};
-
-const getCurrentWeek = () => {
-  const now = new Date();
-  const jan4 = new Date(now.getFullYear(), 0, 4);
-  const daysToMonday = (jan4.getDay() + 6) % 7;
-  const mondayOfWeek1 = new Date(jan4.getTime() - daysToMonday * 86400000);
-  const diffTime = now.getTime() - mondayOfWeek1.getTime();
-  return Math.max(1, Math.min(52, Math.floor(diffTime / (7 * 24 * 60 * 60 * 1000)) + 1));
 };
 
 const YearlyGrid = ({
@@ -277,8 +269,6 @@ const YearlyGrid = ({
         }
       }
     });
-
-    console.log('Detected double lesson pairs in template:', doubleLessonPairs);
 
     // Für jede Woche: Mappe YearlyLessons auf Doppellektionen
     for (let week = 1; week <= academicWeeks; week++) {
@@ -996,22 +986,34 @@ const YearlyGrid = ({
         if (hasTopic) {
           const topic = topicsById.get(lesson.topic_id);
           if (topic) {
-            let span = 1;
-            const topicLessons = [lesson];           // aktuellen Slot zuerst einfügen
-            renderedSlots.add(lessonNumber);
+            let span = 0;
+            const topicLessons = [];
 
-            let j = lessonNumber + 1;                // mit dem NÄCHSTEN Slot weitermachen
+            // Starte mit der aktuellen Lektion
+            let j = lessonNumber;
             while (j <= lessonSlotsCount) {
               const checkKey = `${weekNum}-${subjectObj.id}-${j}`;
-              const check = lessonsByWeek[checkKey];
+              const check = j === lessonNumber ? lesson : lessonsByWeek[checkKey];
+
               if (check && check.topic_id === lesson.topic_id) {
                 topicLessons.push(check);
-                span++;
-                renderedSlots.add(j);
-                j++;
+
+                // Doppellektionen belegen 2 Slots
+                if (check.is_double_lesson) {
+                  span += 2;
+                  j += 2; // Überspringe den nächsten Slot
+                } else {
+                  span += 1;
+                  j += 1;
+                }
               } else {
                 break;
               }
+            }
+
+            // Markiere alle belegten Slots NACH dem Loop
+            for (let s = lessonNumber; s < lessonNumber + span; s++) {
+              renderedSlots.add(s);
             }
 
             // Doppelstunden-Fallback bleibt unverändert (der ist separat ok)
@@ -1303,7 +1305,11 @@ const YearlyGrid = ({
   // ────── SICHERE selectedSet Definition (ab ca. Zeile 440) ──────
   const selectedSet = useMemo(() => {
     // Nur im Assign-Modus relevant – sonst immer leer
-    return isAssignMode && selectedLessons ? new Set(selectedLessons) : new Set();
+    if (!isAssignMode || !selectedLessons) return new Set();
+    // Unterstützt beide Formate: string und object { key, is_double_lesson }
+    return new Set(selectedLessons.map(item =>
+      typeof item === 'string' ? item : item.key
+    ));
   }, [isAssignMode, selectedLessons]);
 
   return (

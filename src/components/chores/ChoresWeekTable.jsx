@@ -266,11 +266,11 @@ const ChoreNameCell = ({
 
 export default function ChoresWeekTable({ chores, weekDates, assignments, students, onEditChore, onExtendAssignment }) {
     return (
-        <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-lg border border-gray-200 dark:border-slate-700 overflow-hidden">
+        <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-lg border border-gray-200 dark:border-slate-700 overflow-auto max-h-[calc(100vh-200px)]">
             <table className="w-full table-fixed border-collapse border-spacing-0">
                 <thead>
-                    <tr className="bg-gray-100 dark:bg-slate-700 border-b border-gray-200 dark:border-slate-600">
-                        <th className="p-4 text-center text-gray-800 dark:text-white font-semibold min-w-[420px] max-w-[420px]">
+                    <tr className="bg-gray-100 dark:bg-slate-700 border-b border-gray-200 dark:border-slate-600 sticky top-0 z-10">
+                        <th className="p-4 text-center text-gray-800 dark:text-white font-semibold min-w-[420px] max-w-[420px] bg-gray-100 dark:bg-slate-700">
                             <div className="flex flex-col items-center gap-1">
                                 <span>Ämtchen</span>
                                 <span className="text-xs text-gray-500 dark:text-slate-300 font-normal">
@@ -279,7 +279,7 @@ export default function ChoresWeekTable({ chores, weekDates, assignments, studen
                             </div>
                         </th>
                         {weekDates.map((dayInfo, index) => (
-                            <th key={dayInfo.dayKey} className={`p-4 text-center text-gray-800 dark:text-white font-semibold min-w-[120px] ${
+                            <th key={dayInfo.dayKey} className={`p-4 text-center text-gray-800 dark:text-white font-semibold min-w-[120px] bg-gray-100 dark:bg-slate-700 ${
                                 index === 0 ? '' : 'border-l border-gray-200 dark:border-slate-600'
                             }`}>
                                 <div className="flex flex-col">

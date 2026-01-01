@@ -23,6 +23,7 @@ const UpdateModal = ({ isOpen, onClose, version }) => {
             { text: 'MurieLame', type: 'turd' },
             { text: 'Neue Sidebar (Ein/Ausklappbar + Ansichtenanpassung', type: 'fixed' },
             { text: 'Einstellungsmenü überarbeitet', type: 'fixed' },
+            { text: 'Löschfunktionen korrigiert', type: 'fixed' },
             { text: 'Technische Updates und Upgrades', type: 'mech' },
           ],
         },
@@ -136,7 +137,7 @@ const UpdateModal = ({ isOpen, onClose, version }) => {
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>TeacherOrg Update: Version Alpha 6.9.0 - nice </DialogTitle>
+          <DialogTitle>TeacherOrg Update: Version Alpha 6.9.1 - nice </DialogTitle>
           <DialogDescription>
             Hier sind die neuesten Änderungen:
           </DialogDescription>

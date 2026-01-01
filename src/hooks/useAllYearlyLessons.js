@@ -14,14 +14,11 @@ export default function useAllYearlyLessons(currentYear) {
     queryFn: async () => {
       if (!userId) return [];
 
-      console.log('useAllYearlyLessons queryFn called for year:', currentYear);
-
       const records = await pb.collection('yearly_lessons').getFullList({
         filter: `user_id = '${userId}'`,
         expand: 'topic,subject',
       });
 
-      console.log('useAllYearlyLessons queryFn finished - loaded:', records.length);
       return records.map(l => ({ ...l, lesson_number: Number(l.lesson_number) }));
     },
     staleTime: 1000 * 60 * 5, // 5 Minuten - verhindert automatisches Refetch und ermöglicht optimistic updates
@@ -36,7 +33,6 @@ export default function useAllYearlyLessons(currentYear) {
   }, [data, setAllYearlyLessons]);
 
   const refetchAllYearlyLessons = useCallback(() => {
-    console.log('refetchAllYearlyLessons called - invalidating query');
     queryClient.invalidateQueries({ queryKey: ['allYearlyLessons', userId, currentYear] });
   }, [queryClient, userId, currentYear]);
 
@@ -50,8 +46,6 @@ export default function useAllYearlyLessons(currentYear) {
       console.error('Error: Cannot delete lesson without id');
       return;
     }
-
-    console.log('optimisticUpdate - updating React Query cache:', { isNew, isDelete, lessonId: updatedLesson.id });
 
     // Update den Cache direkt
     const newData = queryClient.setQueryData(['allYearlyLessons', userId, currentYear], (oldData) => {
@@ -79,8 +73,6 @@ export default function useAllYearlyLessons(currentYear) {
     if (newData) {
       setAllYearlyLessons(newData);
     }
-    
-    console.log('optimisticUpdate - cache updated, new length:', newData?.length);
   }, [queryClient, userId, currentYear, setAllYearlyLessons]);
 
   return {

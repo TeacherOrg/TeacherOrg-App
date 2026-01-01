@@ -2,6 +2,7 @@ import { useCallback } from 'react';
 import { PointerSensor, KeyboardSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { sortableKeyboardCoordinates } from '@dnd-kit/sortable';
 import { Lesson } from "@/api/entities";
+import { getWeekYear } from '@/utils/weekYearUtils';
 import { toast } from 'react-hot-toast';
 import pb from '@/api/pb'; // Add this import
 
@@ -180,6 +181,7 @@ const useDragAndDrop = (lessonsForCurrentWeek, allLessons, allerleiLessons, curr
         day_of_week: finalTarget.day,
         period_slot: finalTarget.period,
         week_number: currentWeek,
+        week_year: getWeekYear(currentWeek, currentYear),
         school_year: currentYear,
         yearly_lesson_id: masterYL.id,
         topic_id: masterYL.topic_id || null,

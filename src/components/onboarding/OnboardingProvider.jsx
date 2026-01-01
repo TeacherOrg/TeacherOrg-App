@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import pb from '@/api/pb';
 
 // Tutorial IDs - diese werden im User-Record gespeichert
@@ -24,6 +25,9 @@ export const ROUTE_TUTORIAL_MAP = {
 const OnboardingContext = createContext(null);
 
 export function OnboardingProvider({ children }) {
+  // Query Client für Cache-Invalidierung
+  const queryClient = useQueryClient();
+
   // State
   const [completedTutorials, setCompletedTutorials] = useState([]);
   const [activeTutorial, setActiveTutorial] = useState(null);
@@ -136,10 +140,13 @@ export function OnboardingProvider({ children }) {
       }
       setShowSetupWizard(false);
       await completeTutorial(TUTORIAL_IDS.SETUP);
+
+      // Query Cache invalidieren damit Timetable neue Daten lädt
+      queryClient.invalidateQueries({ queryKey: ['timetableData'] });
     } catch (error) {
       console.error('Error completing setup wizard:', error);
     }
-  }, [completeTutorial]);
+  }, [completeTutorial, queryClient]);
 
   // Automatischer Trigger für Feature-Tutorials
   const triggerTutorialForRoute = useCallback((pathname) => {

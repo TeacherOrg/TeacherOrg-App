@@ -40,7 +40,8 @@ export default function TopicManager({
         if (!acc[lesson.topic_id]) {
           acc[lesson.topic_id] = 0;
         }
-        acc[lesson.topic_id]++;
+        // Doppellektionen zählen als 2 Unterrichtsstunden
+        acc[lesson.topic_id] += lesson.is_double_lesson ? 2 : 1;
       }
       return acc;
     }, {});

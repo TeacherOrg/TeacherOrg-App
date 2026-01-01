@@ -299,6 +299,22 @@ const DomainSection = ({
 let __CurriculumTreeError = null;
 let CurriculumTreeMain = null;
 
+// Fach-Kurzformen für Filter-Buttons
+const SUBJECT_SHORTCUTS = {
+  'Deutsch': 'De',
+  'Mathematik': 'Ma',
+  'Natur, Mensch, Gesellschaft': 'NMG',
+  'Bewegung und Sport': 'BuS',
+  'Musik': 'Mu',
+  'Bildnerisches Gestalten': 'BG',
+  'Textiles und Technisches Gestalten': 'TTG',
+  'Englisch': 'En',
+  'Französisch': 'Fr',
+  'Medien und Informatik': 'MI',
+  'Berufliche Orientierung': 'BO',
+  'Politische Bildung': 'PB'
+};
+
 try {
 	CurriculumTreeMain = function CurriculumTreeMain({
 	  competencies,
@@ -310,10 +326,21 @@ try {
 	  onTopicsUpdate = null,
 	  canOverride = true,
 	  assignTopicId = null,
-	  onAssignComplete = null
+	  onAssignComplete = null,
+	  userSubjects = []  // Für "Meine Fächer" Filter
 	}) {
 	  const [searchTerm, setSearchTerm] = useState('');
 	  const [selectedCycle, setSelectedCycle] = useState('all');
+	  const [selectedSubjectFilter, setSelectedSubjectFilter] = useState('all');
+
+	  // Ermittle verfügbare Fächer aus den Kompetenzen
+	  const availableSubjects = useMemo(() => {
+	    const subjects = [...new Set(competencies.map(c => c.fach_name))];
+	    return subjects.sort((a, b) => {
+	      const order = Object.keys(SUBJECT_SHORTCUTS);
+	      return order.indexOf(a) - order.indexOf(b);
+	    });
+	  }, [competencies]);
 
 	  // Direkte Store-Subscription um Re-Renders bei Topic-Änderungen zu triggern
 	  // Dies ist notwendig weil useCompetencyStatus sonst nicht neu berechnet wird
@@ -329,9 +356,33 @@ try {
 	    statistics
 	  } = useCompetencyStatus(competencies, onTopicsUpdate);
 
+	  // Fallback für leere Daten
+	  if (!competencies || competencies.length === 0) {
+	    return (
+	      <div className="p-6 bg-slate-100 dark:bg-slate-800/60 rounded-xl text-center">
+	        <div className="text-slate-500 dark:text-slate-400 text-sm">
+	          Keine Lehrplan-Kompetenzen für dieses Fach vorhanden.
+	        </div>
+	        <div className="text-xs text-slate-400 dark:text-slate-500 mt-2">
+	          Die Daten werden automatisch geladen, wenn ein passendes Fach (z.B. Deutsch) vorhanden ist.
+	        </div>
+	      </div>
+	    );
+	  }
+
 	  // Group competencies by hauptbereich and unterbereich
 	  const groupedCompetencies = useMemo(() => {
 	    let filtered = competencies;
+
+	    // Filter by subject (Fach)
+	    if (selectedSubjectFilter === 'mine') {
+	      // "Meine Fächer" - nur Fächer die der User erstellt hat
+	      const userSubjectNames = userSubjects.map(s => s.name);
+	      filtered = filtered.filter(c => userSubjectNames.includes(c.fach_name));
+	    } else if (selectedSubjectFilter !== 'all') {
+	      // Einzelnes Fach ausgewählt
+	      filtered = filtered.filter(c => c.fach_name === selectedSubjectFilter);
+	    }
 
 	    // Filter by search term
 	    if (searchTerm) {
@@ -370,9 +421,9 @@ try {
 	      });
 	    });
 
-	    // Sort groups by hauptbereich
-	    return Object.values(grouped).sort((a, b) => a.hauptbereich.localeCompare(b.hauptbereich));
-	  }, [competencies, searchTerm, selectedCycle]);
+	    // Sort groups by hauptbereich (numeric sort for NMG.1, NMG.2, ..., NMG.10, NMG.11, etc.)
+	    return Object.values(grouped).sort((a, b) => a.hauptbereich.localeCompare(b.hauptbereich, undefined, { numeric: true }));
+	  }, [competencies, searchTerm, selectedCycle, selectedSubjectFilter, userSubjects]);
 
 	  return (
 	    <div className="space-y-4">
@@ -396,23 +447,49 @@ try {
 	        </div>
 	      </div>
 
-	      {/* Filters */}
-	      <div className="flex gap-3">
-	        <div className="flex-1 relative">
-	          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
-	          <Input
-	            value={searchTerm}
-	            onChange={(e) => setSearchTerm(e.target.value)}
-	            placeholder="Kompetenzen durchsuchen..."
-	            className="pl-10 bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white"
-	          />
-	        </div>
-	        <div className="flex gap-2">
+	      {/* Fach-Filter */}
+	      <div className="flex flex-wrap gap-1.5">
+	        <Button
+	          variant={selectedSubjectFilter === 'all' ? 'default' : 'outline'}
+	          size="sm"
+	          onClick={() => setSelectedSubjectFilter('all')}
+	          className={`h-7 px-2 text-xs ${selectedSubjectFilter === 'all' ? 'bg-blue-600' : 'border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300'}`}
+	        >
+	          Alle
+	        </Button>
+	        {userSubjects.length > 0 && (
+	          <Button
+	            variant={selectedSubjectFilter === 'mine' ? 'default' : 'outline'}
+	            size="sm"
+	            onClick={() => setSelectedSubjectFilter('mine')}
+	            className={`h-7 px-2 text-xs ${selectedSubjectFilter === 'mine' ? 'bg-green-600' : 'border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300'}`}
+	          >
+	            Meine
+	          </Button>
+	        )}
+	        <div className="w-px bg-slate-300 dark:bg-slate-600 mx-1" />
+	        {availableSubjects.map(subjectName => (
+	          <Button
+	            key={subjectName}
+	            variant={selectedSubjectFilter === subjectName ? 'default' : 'outline'}
+	            size="sm"
+	            onClick={() => setSelectedSubjectFilter(subjectName)}
+	            className={`h-7 px-2 text-xs ${selectedSubjectFilter === subjectName ? 'bg-blue-600' : 'border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300'}`}
+	            title={subjectName}
+	          >
+	            {SUBJECT_SHORTCUTS[subjectName] || subjectName.substring(0, 3)}
+	          </Button>
+	        ))}
+	      </div>
+
+	      {/* Zyklus-Filter + Suche */}
+	      <div className="flex gap-3 items-center">
+	        <div className="flex gap-1.5">
 	          <Button
 	            variant={selectedCycle === 'all' ? 'default' : 'outline'}
 	            size="sm"
 	            onClick={() => setSelectedCycle('all')}
-	            className={selectedCycle === 'all' ? 'bg-blue-600' : 'border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300'}
+	            className={`h-7 px-2 text-xs ${selectedCycle === 'all' ? 'bg-slate-600' : 'border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300'}`}
 	          >
 	            Alle
 	          </Button>
@@ -422,11 +499,20 @@ try {
 	              variant={selectedCycle === cycle ? 'default' : 'outline'}
 	              size="sm"
 	              onClick={() => setSelectedCycle(cycle)}
-	              className={selectedCycle === cycle ? 'bg-blue-600' : 'border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300'}
+	              className={`h-7 px-2 text-xs ${selectedCycle === cycle ? 'bg-slate-600' : 'border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300'}`}
 	            >
-	              Zyklus {cycle}
+	              Z{cycle}
 	            </Button>
 	          ))}
+	        </div>
+	        <div className="flex-1 max-w-xs relative">
+	          <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 w-3 h-3 text-slate-400" />
+	          <Input
+	            value={searchTerm}
+	            onChange={(e) => setSearchTerm(e.target.value)}
+	            placeholder="Suche..."
+	            className="h-7 pl-7 text-xs bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white"
+	          />
 	        </div>
 	      </div>
 

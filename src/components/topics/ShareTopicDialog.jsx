@@ -88,7 +88,9 @@ export default function ShareTopicDialog({
         color: topic.color || '#3b82f6',
         goals: topic.goals || '',
         materials: topic.materials || [],
-        lehrplan_kompetenz_ids: topic.lehrplan_kompetenz_ids || []
+        lehrplan_kompetenz_ids: topic.lehrplan_kompetenz_ids || [],
+        estimated_lessons: topic.estimated_lessons || 0
+        // department wird nicht geteilt - Empfaenger waehlt selbst
       };
 
       // Create lessons snapshot (only content, no positioning)

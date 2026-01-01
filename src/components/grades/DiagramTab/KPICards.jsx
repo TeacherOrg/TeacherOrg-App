@@ -65,6 +65,7 @@ const KPICards = ({ performances, students, subjects, selectedSubject = 'all', s
         criticalCount: 0,
         criticalStudents: [],
         criticalFachbereiche: [],
+        subjectStats: [],
         studentCount: students?.length || 0,
         isSingleStudent: false
       };

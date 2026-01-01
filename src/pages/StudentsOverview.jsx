@@ -328,13 +328,14 @@ export default function StudentsOverview() {
                 {searchQuery ? "Keine Schüler gefunden" : "Keine Schüler vorhanden"}
               </h3>
               <p className="text-slate-600 dark:text-slate-400">
-                {searchQuery 
+                {searchQuery
                   ? "Versuchen Sie eine andere Suche"
                   : "Fügen Sie Schüler in den Einstellungen hinzu"}
               </p>
             </CardContent>
           </Card>
         ) : (
+          <div className="overflow-y-auto max-h-[calc(100vh-320px)] pr-2 scrollbar-thin scrollbar-thumb-slate-300 dark:scrollbar-thumb-slate-600 scrollbar-track-transparent">
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-4">
             {filteredAndSortedCards.map((card, index) => {
               const gradeColors = getGradeColor(card.average);
@@ -465,6 +466,7 @@ export default function StudentsOverview() {
                 </motion.div>
               );
             })}
+          </div>
           </div>
         )}
       </div>

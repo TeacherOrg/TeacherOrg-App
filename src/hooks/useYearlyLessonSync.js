@@ -1,5 +1,6 @@
 import { useCallback } from 'react';
 import { Lesson } from '@/api/entities';
+import { getWeekYear } from '@/utils/weekYearUtils';
 import pb from '@/api/pb';
 
 /**
@@ -24,8 +25,6 @@ function findYearlyLessonPlacement({ yearlyLesson, template, subjects, allYearly
     console.warn('Cannot find subject name for YearlyLesson:', yearlyLesson.id, 'subject ID:', yearlyLesson.subject);
     return null;
   }
-
-  console.log(`Finding placement for YearlyLesson ${yearlyLesson.id}: ${subjectName}, Week ${yearlyLesson.week_number}, Lesson #${yearlyLesson.lesson_number}`);
 
   // Find all template slots for this subject
   const subjectSlots = [];
@@ -57,20 +56,12 @@ function findYearlyLessonPlacement({ yearlyLesson, template, subjects, allYearly
     )
     .sort((a, b) => Number(a.lesson_number) - Number(b.lesson_number));
 
-  console.log(`  → Found ${allForSubject.length} lessons for ${subjectName} in week ${yearlyLesson.week_number}`);
-  console.log(`  → Template has ${subjectSlots.length} slots for ${subjectName}`);
-  console.log(`  → Current lesson_number: ${yearlyLesson.lesson_number}`);
-
   // CRITICAL FIX: Use lesson_number directly to map to slot index
   // lesson_number is 1-based (L1, L2, L3...), so subtract 1 for 0-based array index
   const slotIndex = Number(yearlyLesson.lesson_number) - 1;
 
-  console.log(`  → Calculated slot index: ${slotIndex}`);
-
   if (slotIndex >= 0 && slotIndex < subjectSlots.length) {
-    const placement = subjectSlots[slotIndex];
-    console.log(`  ✓ Placing at ${placement.day}, period ${placement.period}`);
-    return placement;
+    return subjectSlots[slotIndex];
   }
 
   // Fallback: if lesson_number exceeds available slots, place in last slot
@@ -177,7 +168,6 @@ export async function syncYearlyLessonToWeekly(yearlyLesson, settings, subjects,
       const sameClass = currentSlotInDay.class_id === nextSlotInDay.class_id;
       const isConsecutive = nextSlotInDay.period === currentSlotInDay.period + 1;
 
-      console.log(`    → Checking double lesson: ${sameSubject && sameClass && isConsecutive ? 'YES' : 'NO'}`);
       return sameSubject && sameClass && isConsecutive;
     }
 
@@ -209,22 +199,22 @@ export async function syncYearlyLessonToWeekly(yearlyLesson, settings, subjects,
         is_allerlei: yearlyLesson.is_allerlei,
         allerlei_subjects: yearlyLesson.allerlei_subjects || []
       });
-
-      console.log('Updated existing Lesson:', existing[0].id);
     } else {
       // Create new Lesson
+      const schoolYear = yearlyLesson.school_year || new Date().getFullYear();
       const lessonData = {
         subject: yearlyLesson.subject,
         class_id: yearlyLesson.class_id,
         day_of_week: placement.day,
         period_slot: placement.period,
         week_number: yearlyLesson.week_number,
+        week_year: getWeekYear(yearlyLesson.week_number, schoolYear),
         yearly_lesson_id: yearlyLesson.id,
         topic_id: yearlyLesson.topic_id,
         start_time: timeSlot.start,
         end_time: timeSlot.end,
         user_id: pb.authStore.model?.id,
-        school_year: yearlyLesson.school_year || new Date().getFullYear(),
+        school_year: schoolYear,
         is_double_lesson: isDoubleLesson,
         period_span: isDoubleLesson ? 2 : 1,
         second_yearly_lesson_id: yearlyLesson.second_yearly_lesson_id || null,
@@ -235,8 +225,7 @@ export async function syncYearlyLessonToWeekly(yearlyLesson, settings, subjects,
         allerlei_subjects: yearlyLesson.allerlei_subjects || []
       };
 
-      const newLesson = await Lesson.create(lessonData);
-      console.log('Created new Lesson:', newLesson.id, 'for YearlyLesson:', yearlyLesson.id, '| is_double_lesson:', isDoubleLesson);
+      await Lesson.create(lessonData);
     }
   } catch (error) {
     console.error('Error syncing YearlyLesson to weekly Lesson:', error);

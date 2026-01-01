@@ -1,4 +1,5 @@
 import { Lesson } from '@/api/entities';
+import { getWeekYear } from './weekYearUtils';
 import toast from 'react-hot-toast';
 
 /**
@@ -6,7 +7,7 @@ import toast from 'react-hot-toast';
  * @param {Object} template - Fixed schedule template object
  * @returns {Set} Set of keys identifying double lesson slots
  */
-function detectDoubleLessonSlots(template) {
+export function detectDoubleLessonSlots(template) {
   const doubleSlots = new Set();
   const days = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'];
 
@@ -24,6 +25,37 @@ function detectDoubleLessonSlots(template) {
         current.class_id === next.class_id
       ) {
         const key = `${day}-${current.period}-${current.subject}-${current.class_id}`;
+        doubleSlots.add(key);
+      }
+    }
+  });
+
+  return doubleSlots;
+}
+
+/**
+ * Gets double lesson slots for a specific subject
+ * @param {Object} template - Fixed schedule template object
+ * @param {string} subjectName - Name of the subject
+ * @param {string} classId - ID of the class
+ * @returns {Set} Set of keys "day-period" identifying double slots for this subject
+ */
+export function getDoubleSlotsForSubject(template, subjectName, classId) {
+  const doubleSlots = new Set();
+  const days = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'];
+
+  days.forEach(day => {
+    const slots = (template[day] || [])
+      .filter(s => s.subject === subjectName && s.class_id === classId)
+      .sort((a, b) => a.period - b.period);
+
+    for (let i = 0; i < slots.length - 1; i++) {
+      const current = slots[i];
+      const next = slots[i + 1];
+
+      // If consecutive periods → mark first period as double start
+      if (current.period + 1 === next.period) {
+        const key = `${day}-${current.period}`;
         doubleSlots.add(key);
       }
     }
@@ -187,6 +219,7 @@ function mapTemplateToLessons({
         day_of_week: day,
         period_slot: slot.period,
         week_number: week,
+        week_year: getWeekYear(week, currentYear),
         yearly_lesson_id: yearlyLesson.id,
         is_double_lesson: isDouble && !!yearlyLesson.second_yearly_lesson_id,
         second_yearly_lesson_id: isDouble && yearlyLesson.second_yearly_lesson_id ? yearlyLesson.second_yearly_lesson_id : null,
@@ -286,8 +319,12 @@ export async function generateLessonsFromFixedTemplate({
     throw new Error('Template ist leer oder nicht definiert');
   }
 
+  // Kein Fehler wenn keine YearlyLessons - Template wird gespeichert,
+  // Lektionen werden pro Woche übersprungen (siehe Zeile 319-324)
   if (!yearlyLessons || yearlyLessons.length === 0) {
-    throw new Error('Keine YearlyLessons vorhanden. Bitte erstellen Sie zuerst Jahresplanung.');
+    console.log('Keine YearlyLessons vorhanden - Template wird gespeichert, Generierung übersprungen.');
+    toast.success('Vorlage gespeichert. Lektionen werden generiert sobald Jahresplanung erstellt wird.', { id: 'bulk-create-progress' });
+    return { created: 0, skipped: 52, doubleLessons: 0 };
   }
 
   console.log('Starting fixed schedule generation...', {

@@ -1,15 +1,21 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Subject, Topic, YearlyLesson, Lesson, LehrplanKompetenz as CurriculumCompetency, SharedTopic } from "@/api/entities";
 import { deleteTopicWithLessons } from '@/api/topicService';
+import { syncYearlyLessonToWeekly } from '@/hooks/useYearlyLessonSync';
 import TopicCard from '../components/topics/TopicCard';
 import AddTopicCard from '../components/topics/AddTopicCard';
 import TopicModal from '../components/topics/TopicModal';
 import ReceivedTopicModal from '../components/topics/ReceivedTopicModal';
 import SubjectSelectDialog from '../components/topics/SubjectSelectDialog';
+import SharedLessonAssignmentModal from '../components/topics/SharedLessonAssignmentModal';
+import ArchivedTopicsNotification from '../components/topics/ArchivedTopicsNotification';
+import ArchivedTopicReassignModal from '../components/topics/ArchivedTopicReassignModal';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger, ContextMenuSeparator } from "@/components/ui/context-menu";
 import CurriculumImport from '../components/curriculum/CurriculumImport';
 import CurriculumTree from '../components/curriculum/CurriculumTree';
 import { motion } from 'framer-motion';
-import { BookOpen, Loader2, GraduationCap } from 'lucide-react';
+import { BookOpen, Loader2, GraduationCap, Archive, ChevronDown, ChevronUp, FolderInput, Copy } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from 'sonner';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -35,6 +41,15 @@ const getSubjectId = (topicOrSubject) => {
   return null;
 };
 
+// Liste aller unterstützten Fächer im Lehrplan 21
+// WICHTIG: Namen müssen mit fach_name in lehrplanData.js übereinstimmen
+const SUPPORTED_LEHRPLAN_SUBJECTS = [
+  'Deutsch', 'Mathematik', 'NMG',
+  'Bewegung und Sport', 'Musik', 'Bildnerisches Gestalten',
+  'Textiles und Technisches Gestalten', 'Englisch', 'Französisch',
+  'Medien und Informatik', 'Berufliche Orientierung', 'Politische Bildung'
+];
+
 const TopicsView = () => {
   const [subjects, setSubjects] = useState([]);
   const [allTopics, setAllTopics] = useState([]);
@@ -54,17 +69,64 @@ const TopicsView = () => {
   const [isReceivedModalOpen, setIsReceivedModalOpen] = useState(false);
   const [isSubjectSelectOpen, setIsSubjectSelectOpen] = useState(false);
 
+  // States für Lektions-Zuweisung Modal (geteilte Themen)
+  const [isAssignmentModalOpen, setIsAssignmentModalOpen] = useState(false);
+  const [assignmentSubject, setAssignmentSubject] = useState(null);
+  const [assignmentSharedTopic, setAssignmentSharedTopic] = useState(null);
+  const [timetableSettings, setTimetableSettings] = useState(null);
+
+  // States für archivierte Themen Assignment
+  const [archivedAssignmentTopic, setArchivedAssignmentTopic] = useState(null);
+  const [archivedAssignmentLessons, setArchivedAssignmentLessons] = useState([]);
+
+  // States für archivierte Themen
+  const [isArchiveExpanded, setIsArchiveExpanded] = useState(false);
+  const [showArchiveNotification, setShowArchiveNotification] = useState(false);
+  const [selectedArchivedTopic, setSelectedArchivedTopic] = useState(null);
+  const [isReassignDialogOpen, setIsReassignDialogOpen] = useState(false);
+
+  // States für Duplizieren
+  const [duplicateSourceTopic, setDuplicateSourceTopic] = useState(null);
+  const [isDuplicateSelectOpen, setIsDuplicateSelectOpen] = useState(false);
+
   const queryClient = useQueryClient();
   const location = useLocation();
   const navigate = useNavigate();
 
   // Store-Synchronisation für useCompetencyStatus Hook
-  const { setTopics, setAllYearlyLessons, setAllLessons } = useLessonStore();
+  const { setTopics, setAllYearlyLessons, setAllLessons, allYearlyLessons: storeYearlyLessons } = useLessonStore();
 
   useEffect(() => {
     loadData();
     checkPendingShares();
   }, []);
+
+  // Aktualisiere Daten wenn ein Fach gelöscht wurde
+  useEffect(() => {
+    const handleSubjectDeleted = () => {
+      loadData();
+    };
+    window.addEventListener('subject-deleted', handleSubjectDeleted);
+    return () => window.removeEventListener('subject-deleted', handleSubjectDeleted);
+  }, []);
+
+  // Archivierte Topics berechnen (Topics ohne subject)
+  const archivedTopics = useMemo(() => {
+    return allTopics.filter(t => {
+      const subjectId = typeof t.subject === 'object' ? t.subject?.id : t.subject;
+      return !subjectId || subjectId.trim() === '';
+    });
+  }, [allTopics]);
+
+  // Prüfe auf archivierte Topics und zeige Notification
+  useEffect(() => {
+    if (archivedTopics.length > 0 && !isLoading) {
+      const dismissed = sessionStorage.getItem('archiveNotificationDismissed');
+      if (!dismissed) {
+        setShowArchiveNotification(true);
+      }
+    }
+  }, [archivedTopics, isLoading]);
 
   // Prüfe auf ausstehende geteilte Themen
   const checkPendingShares = async () => {
@@ -105,6 +167,8 @@ const TopicsView = () => {
         goals: topicData.goals || '',
         materials: topicData.materials || [],
         lehrplan_kompetenz_ids: topicData.lehrplan_kompetenz_ids || [], // 1:1 vom Sender übernehmen
+        estimated_lessons: topicData.estimated_lessons || 0,
+        department: null, // Empfaenger waehlt selbst
         subject: subjectId,
         class_id: subject.class_id,
         user_id: pb.authStore.model.id,
@@ -179,6 +243,651 @@ const TopicsView = () => {
     }
   };
 
+  // Handler um Assignment Modal zu öffnen
+  const handleOpenAssignment = async (selectedSubject, sharedTopic) => {
+    try {
+      // Lade Settings für den fixen Stundenplan
+      const { Setting } = await import('@/api/entities');
+      const settingsList = await Setting.list();
+      const userSettings = settingsList.find(s => s.user_id === pb.authStore.model?.id);
+
+      // Bei flexiblem Stundenplan: Original-Navigation verwenden
+      if (!userSettings?.fixedScheduleTemplate || userSettings?.scheduleType !== 'fixed') {
+        // Fallback: Zur YearlyOverview navigieren (alte Methode)
+        const lessonsSnapshot = sharedTopic.lessons_snapshot || [];
+        if (lessonsSnapshot.length > 0) {
+          localStorage.setItem('pendingSharedLessons', JSON.stringify({
+            topicId: 'pending',  // Wird beim Akzeptieren gesetzt
+            lessons: lessonsSnapshot
+          }));
+        }
+        // Übernehme Topic direkt (ohne Modal)
+        handleAcceptShare(selectedSubject.id, sharedTopic);
+        return;
+      }
+
+      setTimetableSettings(userSettings || null);
+      setAssignmentSubject(selectedSubject);
+      setAssignmentSharedTopic(sharedTopic);
+      setIsAssignmentModalOpen(true);
+    } catch (error) {
+      console.error('Error loading settings:', error);
+      // Fallback: Öffne Modal ohne Settings
+      setTimetableSettings(null);
+      setAssignmentSubject(selectedSubject);
+      setAssignmentSharedTopic(sharedTopic);
+      setIsAssignmentModalOpen(true);
+    }
+  };
+
+  // Handler für abgeschlossene Lektions-Zuweisung
+  const handleAssignmentComplete = async ({ sharedTopic, selectedSubject, assignments, unassignedLessons, warnings }) => {
+    try {
+      const topicData = sharedTopic.topic_snapshot;
+
+      // 1. Neues Topic erstellen
+      const newTopic = await Topic.create({
+        name: topicData.name,
+        description: topicData.description || '',
+        color: topicData.color || '#3b82f6',
+        goals: topicData.goals || '',
+        materials: topicData.materials || [],
+        lehrplan_kompetenz_ids: topicData.lehrplan_kompetenz_ids || [],
+        estimated_lessons: topicData.estimated_lessons || 0,
+        department: null, // Empfaenger waehlt selbst
+        subject: selectedSubject.id,
+        class_id: selectedSubject.class_id,
+        user_id: pb.authStore.model.id,
+        school_year: new Date().getFullYear()
+      });
+
+      // 2. YearlyLessons für zugewiesene Lektionen erstellen
+      const createdLessons = [];
+      for (const assignment of assignments) {
+        const lesson = assignment.lesson;
+        const yearlyLesson = await YearlyLesson.create({
+          week_number: assignment.week,
+          lesson_number: assignment.slot,
+          subject: selectedSubject.id,
+          class_id: selectedSubject.class_id,
+          user_id: pb.authStore.model.id,
+          school_year: new Date().getFullYear(),
+          topic_id: newTopic.id,
+          name: lesson.name || lesson.notes || `Lektion ${assignment.slot}`,
+          notes: lesson.notes || '',
+          steps: lesson.steps || [],
+          is_exam: lesson.is_exam || false,
+          is_double_lesson: assignment.isDouble
+        });
+
+        createdLessons.push(yearlyLesson);
+
+        // Wenn Doppellektion, zweite YearlyLesson erstellen und verlinken
+        if (assignment.isDouble) {
+          const secondLesson = await YearlyLesson.create({
+            week_number: assignment.week,
+            lesson_number: assignment.slot + 1,
+            subject: selectedSubject.id,
+            class_id: selectedSubject.class_id,
+            user_id: pb.authStore.model.id,
+            school_year: new Date().getFullYear(),
+            topic_id: newTopic.id,
+            name: lesson.name || lesson.notes || `Lektion ${assignment.slot + 1}`,
+            notes: lesson.notes || '',
+            steps: lesson.steps || [],
+            is_exam: lesson.is_exam || false,
+            is_double_lesson: true
+          });
+
+          // Verlinke nur erste Lektion zur zweiten (unidirektional)
+          await YearlyLesson.update(yearlyLesson.id, {
+            second_yearly_lesson_id: secondLesson.id
+          });
+
+          createdLessons.push(secondLesson);
+        }
+      }
+
+      // 2b. Sync YearlyLessons zu Wochenstunden (nur bei fixem Stundenplan)
+      if (timetableSettings?.scheduleType === 'fixed') {
+        for (const yearlyLesson of createdLessons) {
+          try {
+            await syncYearlyLessonToWeekly(yearlyLesson, timetableSettings, subjects, createdLessons);
+          } catch (syncError) {
+            console.warn('Sync to weekly failed for lesson:', yearlyLesson.id, syncError);
+          }
+        }
+      }
+
+      // 3. SharedTopic Status aktualisieren
+      await SharedTopic.update(sharedTopic.id, {
+        status: 'accepted',
+        responded_at: new Date().toISOString()
+      });
+
+      // 4. UI aktualisieren
+      setAllTopics(prev => [...prev, newTopic]);
+      setTopics(prev => [...prev, newTopic]);
+
+      // Nicht zugewiesene Lektionen im localStorage speichern falls vorhanden
+      if (unassignedLessons.length > 0) {
+        localStorage.setItem('pendingSharedLessons', JSON.stringify({
+          topicId: newTopic.id,
+          lessons: unassignedLessons.map(u => u.lesson)
+        }));
+        toast.info(`${unassignedLessons.length} Lektion(en) wurden nicht zugewiesen und koennen spaeter platziert werden.`);
+      }
+
+      toast.success(`Thema uebernommen! ${createdLessons.length} Lektion(en) erstellt.`);
+
+      // Modal schließen und zum nächsten pending share wechseln
+      setIsAssignmentModalOpen(false);
+      setAssignmentSubject(null);
+      setAssignmentSharedTopic(null);
+
+      const remaining = pendingSharedTopics.filter(s => s.id !== sharedTopic.id);
+      setPendingSharedTopics(remaining);
+
+      if (remaining.length > 0) {
+        setCurrentSharedTopic(remaining[0]);
+        setIsReceivedModalOpen(true);
+      } else {
+        setCurrentSharedTopic(null);
+      }
+
+      // Queries invalidieren
+      queryClient.invalidateQueries({ queryKey: ['topics'] });
+      queryClient.invalidateQueries({ queryKey: ['yearlyLessons'] });
+      queryClient.invalidateQueries({ queryKey: ['allYearlyLessons'] });
+      queryClient.invalidateQueries({ queryKey: ['lessons'] });
+
+    } catch (error) {
+      console.error('Error completing assignment:', error);
+      toast.error('Fehler beim Erstellen der Lektionen');
+    }
+  };
+
+  // Handler um Assignment Modal für archivierte Themen zu öffnen
+  const handleOpenArchivedAssignment = async (selectedSubject, topic, lessonsSnapshot) => {
+    try {
+      // Lade Settings für den fixen Stundenplan
+      const { Setting } = await import('@/api/entities');
+      const settingsList = await Setting.list();
+      const userSettings = settingsList.find(s => s.user_id === pb.authStore.model?.id);
+
+      // Bei flexiblem Stundenplan: Original-Navigation zur YearlyOverview
+      if (!userSettings?.fixedScheduleTemplate || userSettings?.scheduleType !== 'fixed') {
+        localStorage.setItem('pendingArchivedLessons', JSON.stringify({
+          topicId: topic.id,
+          fromSnapshot: true,
+          lessons: lessonsSnapshot.map(l => ({
+            id: null,
+            name: l.name || '',
+            notes: l.notes || '',
+            steps: l.steps || [],
+            is_exam: l.is_exam || false,
+            is_double_lesson: l.is_double_lesson || false
+          }))
+        }));
+        toast.success('Thema zugewiesen. Platziere jetzt die Lektionen.');
+        setIsReassignDialogOpen(false);
+        navigate(`/YearlyOverview?subject=${encodeURIComponent(selectedSubject.name)}&mode=reassign&topic=${topic.id}`);
+        return;
+      }
+
+      setTimetableSettings(userSettings || null);
+      setAssignmentSubject(selectedSubject);
+      setArchivedAssignmentTopic(topic);
+      setArchivedAssignmentLessons(lessonsSnapshot);
+
+      // Erstelle ein "Fake" sharedTopic Objekt für das Modal
+      setAssignmentSharedTopic({
+        topic_snapshot: {
+          name: topic.name,
+          description: topic.description,
+          color: topic.color,
+          goals: topic.goals,
+          materials: topic.materials,
+          lehrplan_kompetenz_ids: topic.lehrplan_kompetenz_ids
+        },
+        lessons_snapshot: lessonsSnapshot
+      });
+
+      setIsAssignmentModalOpen(true);
+      setIsReassignDialogOpen(false);
+    } catch (error) {
+      console.error('Error loading settings for archived assignment:', error);
+      setTimetableSettings(null);
+      setAssignmentSubject(selectedSubject);
+      setArchivedAssignmentTopic(topic);
+      setArchivedAssignmentLessons(lessonsSnapshot);
+      setAssignmentSharedTopic({
+        topic_snapshot: { name: topic.name, color: topic.color },
+        lessons_snapshot: lessonsSnapshot
+      });
+      setIsAssignmentModalOpen(true);
+      setIsReassignDialogOpen(false);
+    }
+  };
+
+  // Handler für abgeschlossene archivierte Themen Zuweisung
+  const handleArchivedAssignmentComplete = async ({ sharedTopic, selectedSubject, assignments, unassignedLessons }) => {
+    try {
+      // Topic ist bereits aktualisiert (wurde in ArchivedTopicReassignModal gemacht)
+      // Wir müssen nur die YearlyLessons erstellen
+
+      const topicId = archivedAssignmentTopic?.id;
+      if (!topicId) {
+        toast.error('Topic ID nicht gefunden');
+        return;
+      }
+
+      // YearlyLessons für zugewiesene Lektionen erstellen
+      const createdLessons = [];
+      for (const assignment of assignments) {
+        const lesson = assignment.lesson;
+        const yearlyLesson = await YearlyLesson.create({
+          week_number: assignment.week,
+          lesson_number: assignment.slot,
+          subject: selectedSubject.id,
+          class_id: selectedSubject.class_id,
+          user_id: pb.authStore.model.id,
+          school_year: new Date().getFullYear(),
+          topic_id: topicId,
+          name: lesson.name || lesson.notes || `Lektion ${assignment.slot}`,
+          notes: lesson.notes || '',
+          steps: lesson.steps || [],
+          is_exam: lesson.is_exam || false,
+          is_double_lesson: assignment.isDouble
+        });
+
+        createdLessons.push(yearlyLesson);
+
+        // Wenn Doppellektion, zweite YearlyLesson erstellen und verlinken
+        if (assignment.isDouble) {
+          const secondLesson = await YearlyLesson.create({
+            week_number: assignment.week,
+            lesson_number: assignment.slot + 1,
+            subject: selectedSubject.id,
+            class_id: selectedSubject.class_id,
+            user_id: pb.authStore.model.id,
+            school_year: new Date().getFullYear(),
+            topic_id: topicId,
+            name: lesson.name || lesson.notes || `Lektion ${assignment.slot + 1}`,
+            notes: lesson.notes || '',
+            steps: lesson.steps || [],
+            is_exam: lesson.is_exam || false,
+            is_double_lesson: true
+          });
+
+          // Verlinke nur erste Lektion zur zweiten (unidirektional)
+          await YearlyLesson.update(yearlyLesson.id, {
+            second_yearly_lesson_id: secondLesson.id
+          });
+
+          createdLessons.push(secondLesson);
+        }
+      }
+
+      // Sync YearlyLessons zu Wochenstunden (nur bei fixem Stundenplan)
+      if (timetableSettings?.scheduleType === 'fixed') {
+        for (const yearlyLesson of createdLessons) {
+          try {
+            await syncYearlyLessonToWeekly(yearlyLesson, timetableSettings, subjects, createdLessons);
+          } catch (syncError) {
+            console.warn('Sync to weekly failed for lesson:', yearlyLesson.id, syncError);
+          }
+        }
+      }
+
+      // Nicht zugewiesene Lektionen im localStorage speichern falls vorhanden
+      if (unassignedLessons.length > 0) {
+        localStorage.setItem('pendingArchivedLessons', JSON.stringify({
+          topicId: topicId,
+          lessons: unassignedLessons.map(u => u.lesson)
+        }));
+        toast.info(`${unassignedLessons.length} Lektion(en) wurden nicht zugewiesen und koennen spaeter platziert werden.`);
+      }
+
+      toast.success(`Thema wiederhergestellt! ${createdLessons.length} Lektion(en) erstellt.`);
+
+      // Modal schließen und States zurücksetzen
+      setIsAssignmentModalOpen(false);
+      setAssignmentSubject(null);
+      setAssignmentSharedTopic(null);
+      setArchivedAssignmentTopic(null);
+      setArchivedAssignmentLessons([]);
+
+      // Daten neu laden
+      loadData();
+
+      // Queries invalidieren
+      queryClient.invalidateQueries({ queryKey: ['topics'] });
+      queryClient.invalidateQueries({ queryKey: ['yearlyLessons'] });
+      queryClient.invalidateQueries({ queryKey: ['allYearlyLessons'] });
+      queryClient.invalidateQueries({ queryKey: ['lessons'] });
+
+    } catch (error) {
+      console.error('Error completing archived assignment:', error);
+      toast.error('Fehler beim Erstellen der Lektionen');
+    }
+  };
+
+  // Handler: Topic archivieren (Rechtsklick-Menü)
+  const handleArchiveTopic = async (topic) => {
+    try {
+      // Lade YearlyLessons für dieses Topic
+      const allYearlyLessonsData = await YearlyLesson.list();
+      const topicLessons = allYearlyLessonsData
+        .filter(yl => yl.topic_id === topic.id)
+        // Sortiere nach week_number, dann lesson_number für korrekte Reihenfolge
+        .sort((a, b) => {
+          if (a.week_number !== b.week_number) return a.week_number - b.week_number;
+          return a.lesson_number - b.lesson_number;
+        });
+
+      // Erstelle lessons_snapshot
+      const lessonsSnapshot = topicLessons.map(l => ({
+        name: l.notes || l.name || '',
+        notes: l.notes || '',
+        steps: l.steps || [],
+        is_exam: l.is_exam || false,
+        is_double_lesson: l.is_double_lesson || false,
+        original_week: l.week_number,
+        original_lesson_number: l.lesson_number
+      }));
+
+      // Erstelle topic_snapshot (für materials und lehrplan_kompetenz_ids)
+      const topicSnapshot = {
+        materials: topic.materials || [],
+        lehrplan_kompetenz_ids: topic.lehrplan_kompetenz_ids || []
+      };
+
+      // Topic aktualisieren: subject auf null setzen = archivieren
+      await Topic.update(topic.id, {
+        subject: null,
+        lessons_snapshot: lessonsSnapshot.length > 0 ? lessonsSnapshot : null,
+        topic_snapshot: topicSnapshot
+      });
+
+      // YearlyLessons löschen (werden im Snapshot gespeichert)
+      for (const lesson of topicLessons) {
+        await YearlyLesson.delete(lesson.id);
+      }
+
+      toast.success(`Thema "${topic.name}" archiviert`);
+
+      // UI aktualisieren
+      loadData();
+
+      // Queries invalidieren
+      queryClient.invalidateQueries({ queryKey: ['topics'] });
+      queryClient.invalidateQueries({ queryKey: ['yearlyLessons'] });
+      queryClient.invalidateQueries({ queryKey: ['allYearlyLessons'] });
+
+    } catch (error) {
+      console.error('Error archiving topic:', error);
+      toast.error('Fehler beim Archivieren des Themas');
+    }
+  };
+
+  // Handler: Topic duplizieren starten (Rechtsklick-Menü)
+  const handleDuplicateTopic = async (topic) => {
+    try {
+      // Lade YearlyLessons für dieses Topic
+      const allYearlyLessonsData = await YearlyLesson.list();
+      const topicLessons = allYearlyLessonsData
+        .filter(yl => yl.topic_id === topic.id)
+        // Sortiere nach week_number, dann lesson_number für korrekte Reihenfolge
+        .sort((a, b) => {
+          if (a.week_number !== b.week_number) return a.week_number - b.week_number;
+          return a.lesson_number - b.lesson_number;
+        });
+
+      // Erstelle lessons_snapshot
+      const lessonsSnapshot = topicLessons.map(l => ({
+        name: l.notes || l.name || '',
+        notes: l.notes || '',
+        steps: l.steps || [],
+        is_exam: l.is_exam || false,
+        is_double_lesson: l.is_double_lesson || false
+      }));
+
+      // Topic mit _lessonsSnapshot Property speichern
+      setDuplicateSourceTopic({
+        ...topic,
+        _lessonsSnapshot: lessonsSnapshot
+      });
+
+      // SubjectSelectDialog öffnen
+      setIsDuplicateSelectOpen(true);
+
+    } catch (error) {
+      console.error('Error preparing topic duplication:', error);
+      toast.error('Fehler beim Vorbereiten der Duplizierung');
+    }
+  };
+
+  // Handler: Fach für Duplizierung ausgewählt (ohne Lektionen)
+  const handleDuplicateSubjectSelected = async (subjectId, sharedTopic) => {
+    try {
+      const subject = subjects.find(s => s.id === subjectId);
+      if (!subject || !duplicateSourceTopic) return;
+
+      const topicData = sharedTopic?.topic_snapshot || duplicateSourceTopic;
+
+      // Neues Topic erstellen (Kopie)
+      const newTopic = await Topic.create({
+        name: topicData.name + ' (Kopie)',
+        description: topicData.description || '',
+        color: topicData.color || '#3b82f6',
+        goals: topicData.goals || '',
+        materials: topicData.materials || [],
+        lehrplan_kompetenz_ids: topicData.lehrplan_kompetenz_ids || [],
+        subject: subjectId,
+        class_id: subject.class_id,
+        user_id: pb.authStore.model.id,
+        school_year: new Date().getFullYear()
+      });
+
+      toast.success(`Thema "${newTopic.name}" erstellt`);
+
+      // UI aktualisieren
+      setAllTopics(prev => [...prev, newTopic]);
+      setTopics(prev => [...prev, newTopic]);
+
+      // States zurücksetzen
+      setIsDuplicateSelectOpen(false);
+      setDuplicateSourceTopic(null);
+
+      // Queries invalidieren
+      queryClient.invalidateQueries({ queryKey: ['topics'] });
+
+    } catch (error) {
+      console.error('Error duplicating topic:', error);
+      toast.error('Fehler beim Duplizieren des Themas');
+    }
+  };
+
+  // Handler: Duplizierung mit Lektionen abschliessen
+  const handleDuplicateAssignmentComplete = async ({ sharedTopic, selectedSubject, assignments, unassignedLessons }) => {
+    try {
+      const topicData = sharedTopic.topic_snapshot;
+
+      // 1. Neues Topic erstellen (Kopie)
+      const newTopic = await Topic.create({
+        name: topicData.name,
+        description: topicData.description || '',
+        color: topicData.color || '#3b82f6',
+        goals: topicData.goals || '',
+        materials: topicData.materials || [],
+        lehrplan_kompetenz_ids: topicData.lehrplan_kompetenz_ids || [],
+        estimated_lessons: topicData.estimated_lessons || 0,
+        department: null, // Empfaenger waehlt selbst
+        subject: selectedSubject.id,
+        class_id: selectedSubject.class_id,
+        user_id: pb.authStore.model.id,
+        school_year: new Date().getFullYear()
+      });
+
+      // 2. YearlyLessons für zugewiesene Lektionen erstellen
+      const createdLessons = [];
+      for (const assignment of assignments) {
+        const lesson = assignment.lesson;
+        const yearlyLesson = await YearlyLesson.create({
+          week_number: assignment.week,
+          lesson_number: assignment.slot,
+          subject: selectedSubject.id,
+          class_id: selectedSubject.class_id,
+          user_id: pb.authStore.model.id,
+          school_year: new Date().getFullYear(),
+          topic_id: newTopic.id,
+          name: lesson.name || lesson.notes || `Lektion ${assignment.slot}`,
+          notes: lesson.notes || '',
+          steps: lesson.steps || [],
+          is_exam: lesson.is_exam || false,
+          is_double_lesson: assignment.isDouble
+        });
+
+        createdLessons.push(yearlyLesson);
+
+        // Wenn Doppellektion, zweite YearlyLesson erstellen und verlinken
+        if (assignment.isDouble) {
+          const secondLesson = await YearlyLesson.create({
+            week_number: assignment.week,
+            lesson_number: assignment.slot + 1,
+            subject: selectedSubject.id,
+            class_id: selectedSubject.class_id,
+            user_id: pb.authStore.model.id,
+            school_year: new Date().getFullYear(),
+            topic_id: newTopic.id,
+            name: lesson.name || lesson.notes || `Lektion ${assignment.slot + 1}`,
+            notes: lesson.notes || '',
+            steps: lesson.steps || [],
+            is_exam: lesson.is_exam || false,
+            is_double_lesson: true
+          });
+
+          // Verlinke nur erste Lektion zur zweiten (unidirektional)
+          await YearlyLesson.update(yearlyLesson.id, {
+            second_yearly_lesson_id: secondLesson.id
+          });
+
+          createdLessons.push(secondLesson);
+        }
+      }
+
+      // 2b. Sync YearlyLessons zu Wochenstunden (nur bei fixem Stundenplan)
+      if (timetableSettings?.scheduleType === 'fixed') {
+        for (const yearlyLesson of createdLessons) {
+          try {
+            await syncYearlyLessonToWeekly(yearlyLesson, timetableSettings, subjects, createdLessons);
+          } catch (syncError) {
+            console.warn('Sync to weekly failed for lesson:', yearlyLesson.id, syncError);
+          }
+        }
+      }
+
+      // 3. UI aktualisieren
+      setAllTopics(prev => [...prev, newTopic]);
+      setTopics(prev => [...prev, newTopic]);
+
+      if (unassignedLessons.length > 0) {
+        toast.info(`${unassignedLessons.length} Lektion(en) wurden nicht zugewiesen.`);
+      }
+
+      toast.success(`Thema dupliziert! ${createdLessons.length} Lektion(en) erstellt.`);
+
+      // Modal schließen und States zurücksetzen
+      setIsAssignmentModalOpen(false);
+      setAssignmentSubject(null);
+      setAssignmentSharedTopic(null);
+      setDuplicateSourceTopic(null);
+
+      // Queries invalidieren
+      queryClient.invalidateQueries({ queryKey: ['topics'] });
+      queryClient.invalidateQueries({ queryKey: ['yearlyLessons'] });
+      queryClient.invalidateQueries({ queryKey: ['allYearlyLessons'] });
+      queryClient.invalidateQueries({ queryKey: ['lessons'] });
+
+    } catch (error) {
+      console.error('Error completing duplicate assignment:', error);
+      toast.error('Fehler beim Duplizieren des Themas');
+    }
+  };
+
+  // Handler: Assignment Modal für Duplizierung öffnen (mit Lektionen)
+  const handleDuplicateOpenAssignment = async (selectedSubject, sharedTopic) => {
+    try {
+      // Lade Settings für den fixen Stundenplan
+      const { Setting } = await import('@/api/entities');
+      const settingsList = await Setting.list();
+      const userSettings = settingsList.find(s => s.user_id === pb.authStore.model?.id);
+
+      // Bei flexiblem Stundenplan: Direkt duplizieren ohne Assignment-Modal
+      if (!userSettings?.fixedScheduleTemplate || userSettings?.scheduleType !== 'fixed') {
+        // Erstelle Topic ohne Lektionen (User muss manuell zuweisen)
+        const newTopic = await Topic.create({
+          name: (duplicateSourceTopic?.name || '') + ' (Kopie)',
+          description: duplicateSourceTopic?.description || '',
+          color: duplicateSourceTopic?.color || '#3b82f6',
+          goals: duplicateSourceTopic?.goals || '',
+          materials: duplicateSourceTopic?.materials || [],
+          lehrplan_kompetenz_ids: duplicateSourceTopic?.lehrplan_kompetenz_ids || [],
+          subject: selectedSubject.id,
+          class_id: selectedSubject.class_id,
+          user_id: pb.authStore.model.id,
+          school_year: new Date().getFullYear()
+        });
+
+        // Speichere Lektionen für spätere Zuweisung
+        const lessonsSnapshot = duplicateSourceTopic?._lessonsSnapshot || [];
+        if (lessonsSnapshot.length > 0) {
+          localStorage.setItem('pendingDuplicatedLessons', JSON.stringify({
+            topicId: newTopic.id,
+            lessons: lessonsSnapshot
+          }));
+          toast.success(`Thema "${newTopic.name}" erstellt. Platziere jetzt die ${lessonsSnapshot.length} Lektionen.`);
+          navigate(`/YearlyOverview?subject=${encodeURIComponent(selectedSubject.name)}&mode=assign&topic=${newTopic.id}`);
+        } else {
+          toast.success(`Thema "${newTopic.name}" erstellt.`);
+        }
+
+        // UI aktualisieren und States zurücksetzen
+        setAllTopics(prev => [...prev, newTopic]);
+        setTopics(prev => [...prev, newTopic]);
+        setIsDuplicateSelectOpen(false);
+        setDuplicateSourceTopic(null);
+        queryClient.invalidateQueries({ queryKey: ['topics'] });
+        return;
+      }
+
+      setTimetableSettings(userSettings || null);
+      setAssignmentSubject(selectedSubject);
+
+      // Erstelle sharedTopic-Format für das Modal
+      setAssignmentSharedTopic({
+        topic_snapshot: {
+          name: (duplicateSourceTopic?.name || '') + ' (Kopie)',
+          description: duplicateSourceTopic?.description || '',
+          color: duplicateSourceTopic?.color || '#3b82f6',
+          goals: duplicateSourceTopic?.goals || '',
+          materials: duplicateSourceTopic?.materials || [],
+          lehrplan_kompetenz_ids: duplicateSourceTopic?.lehrplan_kompetenz_ids || []
+        },
+        lessons_snapshot: duplicateSourceTopic?._lessonsSnapshot || []
+      });
+
+      // Duplicate-Dialog schließen, Assignment-Modal öffnen
+      setIsDuplicateSelectOpen(false);
+      setIsAssignmentModalOpen(true);
+
+    } catch (error) {
+      console.error('Error opening duplicate assignment:', error);
+      toast.error('Fehler beim Öffnen des Zuweisungs-Modals');
+    }
+  };
+
   useEffect(() => {
     const searchParams = new URLSearchParams(location.search);
     const selectMode = searchParams.get('select') === 'true';
@@ -232,12 +941,26 @@ const TopicsView = () => {
       setAllYearlyLessons(yearlyLessonsData || []);
       setAllLessons(lessonsData || []);
 
+      // Debug-Logging für Lehrplan-Kompetenzen
+      console.log('[TopicsView] Loaded competencies:', competenciesData?.length || 0);
+      if (competenciesData?.length > 0) {
+        const fachNames = [...new Set(competenciesData.map(c => c.fach_name))];
+        console.log('[TopicsView] Competencies by fach_name:', fachNames);
+      }
+
       setCurriculumCompetencies(competenciesData || []);
 
-      if (competenciesData.length === 0 && subjectsData.some(s => s.name === 'Deutsch')) {
-        await initializeLehrplan21();
-        const updatedCompetencies = await CurriculumCompetency.list();
-        setCurriculumCompetencies(updatedCompetencies || []);
+      // Initialisiere den GESAMTEN Lehrplan 21 (alle 12 Fächer, unabhängig von User-Fächern)
+      const loadedSubjects = [...new Set(competenciesData.map(c => c.fach_name))];
+      const missingSubjects = SUPPORTED_LEHRPLAN_SUBJECTS.filter(s => !loadedSubjects.includes(s));
+
+      if (missingSubjects.length > 0) {
+        console.log('[TopicsView] Fehlende Lehrplan-Fächer:', missingSubjects);
+        const initialized = await initializeFullLehrplan21(competenciesData);
+        if (initialized > 0) {
+          const updatedCompetencies = await CurriculumCompetency.list();
+          setCurriculumCompetencies(updatedCompetencies || []);
+        }
       }
     } catch (error) {
       console.error('Error loading data:', error);
@@ -247,16 +970,30 @@ const TopicsView = () => {
     }
   };
 
-  const initializeLehrplan21 = async () => {
-    const lehrplan21Data = getLehrplanData('Deutsch');
-  
-    try {
-      await CurriculumCompetency.bulkCreate(lehrplan21Data);
-      toast.success('Lehrplan 21 für Deutsch geladen!');
-    } catch (error) {
-      console.error('Error initializing Lehrplan 21:', error);
-      toast.error('Fehler beim Initialisieren des Lehrplans 21');
+  // Initialisiert den GESAMTEN Lehrplan 21 (alle 12 Fächer)
+  const initializeFullLehrplan21 = async (existingCompetencies) => {
+    let initialized = 0;
+
+    for (const subjectName of SUPPORTED_LEHRPLAN_SUBJECTS) {
+      // Prüfe ob bereits Kompetenzen für dieses Fach existieren
+      const hasExisting = existingCompetencies.some(c => c.fach_name === subjectName);
+      if (!hasExisting) {
+        const lehrplanData = getLehrplanData(subjectName);
+        if (lehrplanData.length > 0) {
+          try {
+            await CurriculumCompetency.bulkCreate(lehrplanData);
+            console.log(`[TopicsView] Lehrplan für ${subjectName} initialisiert (${lehrplanData.length} Kompetenzen)`);
+            initialized++;
+          } catch (error) {
+            console.error(`Error initializing Lehrplan for ${subjectName}:`, error);
+          }
+        }
+      }
     }
+    if (initialized > 0) {
+      toast.success(`Lehrplan 21 für ${initialized} Fach/Fächer geladen!`);
+    }
+    return initialized;
   };
 
   const handleAddTopic = (subjectId) => {
@@ -284,8 +1021,9 @@ const TopicsView = () => {
       color: topicData.color || '#3b82f6',
       estimated_lessons: topicData.estimated_lessons || 0,
       goals: topicData.goals || '',
-      department: topicData.department || '',
+      department: topicData.department || null,
       lehrplan_kompetenz_ids: topicData.lehrplan_kompetenz_ids || [],
+      materials: topicData.materials || [],
       school_year: new Date().getFullYear()
     };
 
@@ -478,7 +1216,7 @@ const TopicsView = () => {
           </TabsTrigger>
           <TabsTrigger value="curriculum" className="flex items-center gap-2">
             <GraduationCap className="w-4 h-4" />
-            Lehrplan 21 ({curriculumCompetencies.length})
+            Lehrplan 21
           </TabsTrigger>
         </TabsList>
 
@@ -533,14 +1271,36 @@ const TopicsView = () => {
 
                   <div className="flex flex-wrap gap-4 pb-4">
                     {subjectTopics.map((topic) => (
-                      <TopicCard
-                        key={topic.id}
-                        topic={topic}
-                        onClick={() => {
-                          setSelectedTopic(topic);
-                          setIsModalOpen(true);
-                        }}
-                      />
+                      <ContextMenu key={topic.id}>
+                        <ContextMenuTrigger asChild>
+                          <div>
+                            <TopicCard
+                              topic={topic}
+                              onClick={() => {
+                                setSelectedTopic(topic);
+                                setIsModalOpen(true);
+                              }}
+                            />
+                          </div>
+                        </ContextMenuTrigger>
+                        <ContextMenuContent className="bg-slate-900 border-slate-700">
+                          <ContextMenuItem
+                            onClick={() => handleDuplicateTopic(topic)}
+                            className="text-white hover:bg-slate-800 cursor-pointer"
+                          >
+                            <Copy className="w-4 h-4 mr-2" />
+                            Duplizieren
+                          </ContextMenuItem>
+                          <ContextMenuSeparator className="bg-slate-700" />
+                          <ContextMenuItem
+                            onClick={() => handleArchiveTopic(topic)}
+                            className="text-orange-400 hover:bg-slate-800 cursor-pointer"
+                          >
+                            <Archive className="w-4 h-4 mr-2" />
+                            Archivieren
+                          </ContextMenuItem>
+                        </ContextMenuContent>
+                      </ContextMenu>
                     ))}
                     <AddTopicCard onClick={() => handleAddTopic(subject.id)} />
                   </div>
@@ -560,63 +1320,86 @@ const TopicsView = () => {
               );
             })
           )}
+
+          {/* Archiv-Bereich für nicht zugewiesene Topics */}
+          {archivedTopics.length > 0 && (
+            <motion.div
+              id="archive-section"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="mt-8 border-t border-slate-300 dark:border-slate-700 pt-6"
+            >
+              <Collapsible open={isArchiveExpanded} onOpenChange={setIsArchiveExpanded}>
+                <CollapsibleTrigger asChild>
+                  <div className="flex items-center gap-3 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 p-3 rounded-lg transition-colors">
+                    <div className="w-10 h-10 rounded-lg flex items-center justify-center shadow-md bg-orange-500">
+                      <Archive className="w-5 h-5 text-white" />
+                    </div>
+                    <h2 className="text-xl font-semibold text-slate-600 dark:text-slate-400">
+                      Archiv
+                    </h2>
+                    <span className="bg-orange-500 text-white text-sm px-2 py-0.5 rounded-full">
+                      {archivedTopics.length}
+                    </span>
+                    <div className="flex-1" />
+                    {isArchiveExpanded ? (
+                      <ChevronUp className="w-5 h-5 text-slate-500" />
+                    ) : (
+                      <ChevronDown className="w-5 h-5 text-slate-500" />
+                    )}
+                  </div>
+                </CollapsibleTrigger>
+                <CollapsibleContent>
+                  <p className="text-sm text-slate-500 dark:text-slate-400 mb-4 pl-3">
+                    Diese Themen sind keinem Fach zugewiesen. Rechtsklick zum Zuweisen.
+                  </p>
+                  <div className="flex flex-wrap gap-4 pt-2 pb-4">
+                    {archivedTopics.map((topic) => (
+                      <ContextMenu key={topic.id}>
+                        <ContextMenuTrigger asChild>
+                          <div>
+                            <TopicCard
+                              topic={topic}
+                              onClick={() => {
+                                setSelectedArchivedTopic(topic);
+                                setIsReassignDialogOpen(true);
+                              }}
+                            />
+                          </div>
+                        </ContextMenuTrigger>
+                        <ContextMenuContent className="bg-slate-900 border-slate-700">
+                          <ContextMenuItem
+                            onClick={() => {
+                              setSelectedArchivedTopic(topic);
+                              setIsReassignDialogOpen(true);
+                            }}
+                            className="text-white hover:bg-slate-800 cursor-pointer"
+                          >
+                            <FolderInput className="w-4 h-4 mr-2" />
+                            Neuem Fach zuweisen
+                          </ContextMenuItem>
+                        </ContextMenuContent>
+                      </ContextMenu>
+                    ))}
+                  </div>
+                </CollapsibleContent>
+              </Collapsible>
+            </motion.div>
+          )}
         </TabsContent>
 
         <TabsContent value="curriculum" className="space-y-6">
-          {subjects.length === 0 ? (
-            <div className="text-center py-20 bg-white/60 dark:bg-slate-800/60 rounded-2xl shadow-lg">
-              <GraduationCap className="w-16 h-16 mx-auto mb-4 text-slate-400 dark:text-slate-500" />
-              <h3 className="text-xl font-semibold text-slate-900 dark:text-white mb-2">
-                Keine Fächer vorhanden
-              </h3>
-              <p className="text-slate-600 dark:text-slate-400">
-                Erstellen Sie zuerst Fächer in den Einstellungen
-              </p>
-            </div>
-          ) : (
-            <>
-              {subjects.map(subject => {
-                // Fix: Optional Chaining für undefined data – verwende curriculumCompetencies statt competenciesWithAssignments
-                const subjectCompetencies = curriculumCompetencies.filter(c => c.fach_name === subject.name);  // ← Ändern zu fach_name
-                console.log('subjectCompetencies for', subject.name, subjectCompetencies);
-
-                if (subjectCompetencies.length === 0) return null;
-
-                return (
-                  <motion.div
-                    key={subject.id}
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                  >
-                    <div className="flex items-center gap-3 mb-4">
-                      <div 
-                        className="w-10 h-10 rounded-lg flex items-center justify-center shadow-md"
-                        style={{ backgroundColor: subject.color || '#3b82f6' }}
-                      >
-                        <span className="text-white font-bold text-lg">
-                          {subject.name.charAt(0)}
-                        </span>
-                      </div>
-                      <h2 className="text-xl font-semibold text-slate-800 dark:text-white">
-                        {subject.name} - Lehrplan 21 (Aargau)
-                      </h2>
-                    </div>
-
-                    {/* CurriculumTree mit View-Daten - im Selection-Modus wenn showCompetencySelection aktiv */}
-                    <CurriculumTree
-                      competencies={subjectCompetencies}
-                      onTopicsUpdate={handleTopicsUpdate}
-                      isSelectable={showCompetencySelection}
-                      selectedCompetencyIds={selectedCompetencyIds}
-                      onSelectCompetency={handleCompetencySelect}
-                      assignTopicId={assignTopicId}
-                      onAssignComplete={handleCompetencyAssignComplete}
-                    />
-                  </motion.div>
-                );
-              })}
-            </>
-          )}
+          {/* CurriculumTree mit ALLEN Kompetenzen - Filterung erfolgt in der Komponente */}
+          <CurriculumTree
+            competencies={curriculumCompetencies}
+            onTopicsUpdate={handleTopicsUpdate}
+            isSelectable={showCompetencySelection}
+            selectedCompetencyIds={selectedCompetencyIds}
+            onSelectCompetency={handleCompetencySelect}
+            assignTopicId={assignTopicId}
+            onAssignComplete={handleCompetencyAssignComplete}
+            userSubjects={subjects}  // Für "Meine Fächer" Filter
+          />
         </TabsContent>
       </Tabs>
 
@@ -654,9 +1437,78 @@ const TopicsView = () => {
             sharedTopic={currentSharedTopic}
             subjects={subjects}
             onSubjectSelected={handleAcceptShare}
+            onOpenAssignment={handleOpenAssignment}
           />
         </>
       )}
+
+      {/* SubjectSelectDialog für Duplizieren */}
+      {duplicateSourceTopic && (
+        <SubjectSelectDialog
+          isOpen={isDuplicateSelectOpen}
+          onClose={() => {
+            setIsDuplicateSelectOpen(false);
+            setDuplicateSourceTopic(null);
+          }}
+          sharedTopic={{
+            topic_snapshot: duplicateSourceTopic,
+            lessons_snapshot: duplicateSourceTopic._lessonsSnapshot || []
+          }}
+          subjects={subjects}
+          onSubjectSelected={handleDuplicateSubjectSelected}
+          onOpenAssignment={handleDuplicateOpenAssignment}
+        />
+      )}
+
+      {/* Lektions-Zuweisung Modal (für geteilte, archivierte UND duplizierte Themen) */}
+      {assignmentSharedTopic && (
+        <SharedLessonAssignmentModal
+          isOpen={isAssignmentModalOpen}
+          onClose={() => {
+            setIsAssignmentModalOpen(false);
+            setAssignmentSubject(null);
+            setAssignmentSharedTopic(null);
+            setArchivedAssignmentTopic(null);
+            setArchivedAssignmentLessons([]);
+            setDuplicateSourceTopic(null);
+          }}
+          sharedTopic={assignmentSharedTopic}
+          selectedSubject={assignmentSubject}
+          subjects={subjects}
+          settings={timetableSettings}
+          allYearlyLessons={storeYearlyLessons}
+          onComplete={archivedAssignmentTopic ? handleArchivedAssignmentComplete : (duplicateSourceTopic ? handleDuplicateAssignmentComplete : handleAssignmentComplete)}
+        />
+      )}
+
+      {/* Archiv Notification */}
+      <ArchivedTopicsNotification
+        isOpen={showArchiveNotification}
+        onClose={() => setShowArchiveNotification(false)}
+        archivedCount={archivedTopics.length}
+        onReassign={() => {
+          setIsArchiveExpanded(true);
+          // Scroll to archive section
+          setTimeout(() => {
+            document.getElementById('archive-section')?.scrollIntoView({ behavior: 'smooth' });
+          }, 100);
+        }}
+      />
+
+      {/* Archiviertes Topic neu zuweisen */}
+      <ArchivedTopicReassignModal
+        isOpen={isReassignDialogOpen}
+        onClose={() => {
+          setIsReassignDialogOpen(false);
+          setSelectedArchivedTopic(null);
+        }}
+        topic={selectedArchivedTopic}
+        subjects={subjects}
+        onReassigned={() => {
+          loadData();
+        }}
+        onOpenAssignment={handleOpenArchivedAssignment}
+      />
     </div>
   );
 };

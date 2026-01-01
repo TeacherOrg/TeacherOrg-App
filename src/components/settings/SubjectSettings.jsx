@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Subject, Lesson, YearlyLesson, Topic, Performance, Fachbereich } from '@/api/entities';
+import { Subject, Lesson, YearlyLesson, Topic, Performance, Fachbereich, Setting } from '@/api/entities';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -58,6 +58,7 @@ const SortableSubjectItem = ({ subject, children }) => {
 const SubjectSettings = ({ subjects, classes, activeClassId, setActiveClassId, refreshData }) => {
     const [newSubject, setNewSubject] = useState({ name: '', color: '#3b82f6', lessons_per_week: 4, emoji: '' });
     const [editingSubjectId, setEditingSubjectId] = useState(null);
+    const [editingSubjectData, setEditingSubjectData] = useState(null);
     const [showColorPicker, setShowColorPicker] = useState(false);
     const [editingShowColorPicker, setEditingShowColorPicker] = useState(false);
     const [showEmojiPicker, setShowEmojiPicker] = useState(false);
@@ -133,9 +134,15 @@ const SubjectSettings = ({ subjects, classes, activeClassId, setActiveClassId, r
         }
     };
 
-    const handleUpdateSubject = async (id, field, value) => {
+    // Lokale Änderungen im Edit-Modus (kein DB-Aufruf)
+    const handleLocalUpdate = (field, value) => {
+        setEditingSubjectData(prev => ({ ...prev, [field]: value }));
+    };
+
+    // Speichert alle Änderungen in die DB (wird beim Check-Button aufgerufen)
+    const handleUpdateSubject = async (id, data) => {
         try {
-            await Subject.update(id, { [field]: value });
+            await Subject.update(id, data);
             await refreshData();
             toast.success('Fach aktualisiert.');
         } catch (error) {
@@ -145,32 +152,119 @@ const SubjectSettings = ({ subjects, classes, activeClassId, setActiveClassId, r
     };
 
     const handleDeleteSubject = async (id) => {
-        if (!window.confirm("Sind Sie sicher? Dies löscht ALLE Themen, Lektionen, Noten und Fachbereiche dieses Fachs unwiderruflich. Fortfahren?")) {
+        if (!window.confirm("Sind Sie sicher? Dies löscht alle Lektionen, Noten und Fachbereiche dieses Fachs. Themen werden archiviert und können später wiederverwendet werden. Fortfahren?")) {
             return;
         }
 
         try {
             // 1. Alle abhängigen Records finden
-            const [yearlyLessons, topics, performances, fachbereiche] = await Promise.all([
+            const [yearlyLessons, lessons, topics, performances, fachbereiche] = await Promise.all([
                 YearlyLesson.list({ subject: id }),
+                Lesson.list({ subject: id }),
                 Topic.list({ subject: id }),
                 Performance.list({ subject: id }),
                 Fachbereich.list({ subject_id: id }),
             ]);
 
-            // 2. Alles löschen (Reihenfolge egal, weil keine harten Delete)
+            // 2. Topics archivieren MIT Snapshot (BEVOR YearlyLessons gelöscht werden!)
+            // Das ermöglicht spätere Wiederverwendung der Lektionen bei Neuzuweisung
+            for (const topic of topics) {
+                try {
+                    // Finde alle YearlyLessons für dieses Topic
+                    const topicYearlyLessons = yearlyLessons.filter(yl => yl.topic_id === topic.id);
+
+                    // Erstelle Snapshot der Lektionen (wie beim Sharing)
+                    const lessonsSnapshot = topicYearlyLessons
+                        .sort((a, b) => (a.week_number - b.week_number) || (a.lesson_number - b.lesson_number))
+                        .map(lesson => ({
+                            name: lesson.name || '',
+                            notes: lesson.notes || '',
+                            steps: lesson.steps || [],
+                            is_exam: lesson.is_exam || false,
+                            is_double_lesson: lesson.is_double_lesson || false,
+                            original_week: lesson.week_number,
+                            original_lesson_number: lesson.lesson_number
+                        }));
+
+                    // NEU: Erstelle Topic-Snapshot (wie bei shared_topics)
+                    // Sichert materials und lehrplan_kompetenz_ids explizit
+                    const topicSnapshot = {
+                        name: topic.name || topic.title || 'Unbenanntes Thema',
+                        description: topic.description || '',
+                        color: topic.color || '#3b82f6',
+                        goals: topic.goals || '',
+                        materials: topic.materials || [],
+                        lehrplan_kompetenz_ids: topic.lehrplan_kompetenz_ids || []
+                    };
+
+                    // Topic archivieren mit BEIDEN Snapshots
+                    // competency_status_overrides wird gelöscht da die manuellen Status nicht mehr relevant sind
+                    await Topic.update(topic.id, {
+                        subject: null,
+                        lessons_snapshot: lessonsSnapshot.length > 0 ? lessonsSnapshot : null,
+                        topic_snapshot: topicSnapshot,
+                        competency_status_overrides: null  // Bereinige manuelle Kompetenz-Status
+                    });
+                    console.log(`Topic "${topic.name}" archiviert mit ${lessonsSnapshot.length} Lektionen und Topic-Snapshot`);
+                } catch (archiveError) {
+                    console.warn('Topic archiving failed:', topic.id, archiveError);
+                    // Fallback: Topic löschen wenn Archivieren nicht möglich
+                    try {
+                        await Topic.delete(topic.id);
+                    } catch (deleteError) {
+                        console.error('Error deleting topic:', deleteError);
+                    }
+                }
+            }
+
+            // 3. Lessons löschen
+            await Promise.all(lessons.map(l => Lesson.delete(l.id)));
+
+            // 4. YearlyLessons, Performances und Fachbereiche löschen
             await Promise.all([
                 ...yearlyLessons.map(yl => YearlyLesson.delete(yl.id)),
-                ...topics.map(t => Topic.delete(t.id)),
                 ...performances.map(p => Performance.delete(p.id)),
                 ...fachbereiche.map(f => Fachbereich.delete(f.id)),
             ]);
 
-            // 3. Fach selbst löschen
+            // 5. fixedScheduleTemplate bereinigen - Slots für dieses Fach entfernen
+            const subjectToDelete = subjects.find(s => s.id === id);
+            if (subjectToDelete) {
+                try {
+                    const settingsList = await Setting.list({ user_id: pb.authStore.model?.id });
+                    if (settingsList.length > 0) {
+                        const currentSettings = settingsList[0];
+                        const template = currentSettings.fixedScheduleTemplate || {};
+
+                        // Entferne alle Slots für dieses Fach aus dem Template
+                        const days = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'];
+                        const cleanedTemplate = {};
+
+                        for (const day of days) {
+                            if (template[day]) {
+                                // Filtere Slots, die NICHT zu diesem Fach gehören
+                                cleanedTemplate[day] = template[day].filter(slot =>
+                                    slot.subject !== subjectToDelete.name
+                                );
+                            }
+                        }
+
+                        // Speichere das bereinigte Template
+                        await Setting.update(currentSettings.id, {
+                            fixedScheduleTemplate: cleanedTemplate
+                        });
+                    }
+                } catch (templateError) {
+                    console.warn('Failed to clean fixedScheduleTemplate:', templateError);
+                }
+            }
+
+            // 6. Fach selbst löschen
             await Subject.delete(id);
 
             await refreshData();
-            toast.success('Fach und alle zugehörigen Daten gelöscht.');
+            window.dispatchEvent(new CustomEvent('subject-deleted'));
+            toast.success('Fach und Stundenplan-Einträge gelöscht. Themen wurden archiviert.');
         } catch (error) {
             console.error('Error deleting subject:', error);
             toast.error('Fehler beim Löschen: ' + error.message);
@@ -311,15 +405,15 @@ const SubjectSettings = ({ subjects, classes, activeClassId, setActiveClassId, r
                                                 <div className="space-y-3">
                                                     <div className="grid grid-cols-2 gap-4">
                                                         <Input
-                                                            value={subject.name}
-                                                            onChange={(e) => handleUpdateSubject(subject.id, 'name', e.target.value)}
+                                                            value={editingSubjectData?.name || ''}
+                                                            onChange={(e) => handleLocalUpdate('name', e.target.value)}
                                                             className="bg-slate-100 dark:bg-slate-700 border-slate-300 dark:border-slate-600 text-black dark:text-white"
                                                         />
                                                         <Input
                                                             type="number"
                                                             min="1"
-                                                            value={subject.lessons_per_week}
-                                                            onChange={(e) => handleUpdateSubject(subject.id, 'lessons_per_week', Number(e.target.value))}
+                                                            value={editingSubjectData?.lessons_per_week || 4}
+                                                            onChange={(e) => handleLocalUpdate('lessons_per_week', Number(e.target.value))}
                                                             className="bg-slate-100 dark:bg-slate-700 border-slate-300 dark:border-slate-600 text-black dark:text-white"
                                                         />
                                                     </div>
@@ -331,10 +425,10 @@ const SubjectSettings = ({ subjects, classes, activeClassId, setActiveClassId, r
                                                                     key={color}
                                                                     type="button"
                                                                     className={`w-7 h-7 rounded-full border-2 transition-all hover:scale-110 ${
-                                                                        subject.color === color ? 'border-black dark:border-white scale-110' : 'border-slate-300 dark:border-slate-500'
+                                                                        editingSubjectData?.color === color ? 'border-black dark:border-white scale-110' : 'border-slate-300 dark:border-slate-500'
                                                                     }`}
                                                                     style={{ backgroundColor: color }}
-                                                                    onClick={() => { handleUpdateSubject(subject.id, 'color', color); setEditingShowColorPicker(false); }}
+                                                                    onClick={() => { handleLocalUpdate('color', color); setEditingShowColorPicker(false); }}
                                                                 />
                                                             ))}
                                                             <button
@@ -347,8 +441,8 @@ const SubjectSettings = ({ subjects, classes, activeClassId, setActiveClassId, r
                                                             {editingShowColorPicker && (
                                                                 <Input
                                                                     type="color"
-                                                                    value={subject.color}
-                                                                    onChange={(e) => handleUpdateSubject(subject.id, 'color', e.target.value)}
+                                                                    value={editingSubjectData?.color || '#3b82f6'}
+                                                                    onChange={(e) => handleLocalUpdate('color', e.target.value)}
                                                                     className="w-14 h-10 p-1 bg-slate-100 dark:bg-slate-700 border-slate-300 dark:border-slate-600"
                                                                 />
                                                             )}
@@ -362,7 +456,7 @@ const SubjectSettings = ({ subjects, classes, activeClassId, setActiveClassId, r
                                                                 className="w-10 h-10 rounded-lg border-2 border-slate-300 dark:border-slate-500 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 transition-all flex items-center justify-center text-2xl"
                                                                 onClick={() => setEditingShowEmojiPicker(!editingShowEmojiPicker)}
                                                             >
-                                                                {subject.emoji || '📚'}
+                                                                {editingSubjectData?.emoji || '📚'}
                                                             </button>
                                                             {editingShowEmojiPicker && (
                                                                 <div className="absolute z-10 mt-2 p-4 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg shadow-lg max-h-64 overflow-y-auto grid grid-cols-5 gap-2">
@@ -371,10 +465,10 @@ const SubjectSettings = ({ subjects, classes, activeClassId, setActiveClassId, r
                                                                             key={emoji}
                                                                             type="button"
                                                                             className={`w-8 h-8 rounded-full border-2 transition-all hover:scale-110 flex items-center justify-center text-2xl ${
-                                                                                subject.emoji === emoji ? 'border-black dark:border-white scale-110 shadow-lg' : 'border-slate-300 dark:border-slate-500'
+                                                                                editingSubjectData?.emoji === emoji ? 'border-black dark:border-white scale-110 shadow-lg' : 'border-slate-300 dark:border-slate-500'
                                                                             }`}
                                                                             onClick={() => {
-                                                                                handleUpdateSubject(subject.id, 'emoji', emoji);
+                                                                                handleLocalUpdate('emoji', emoji);
                                                                                 setEditingShowEmojiPicker(false);
                                                                             }}
                                                                         >
@@ -384,10 +478,10 @@ const SubjectSettings = ({ subjects, classes, activeClassId, setActiveClassId, r
                                                                     <button
                                                                         type="button"
                                                                         className={`w-8 h-8 rounded-full border-2 transition-all hover:scale-110 flex items-center justify-center text-sm ${
-                                                                            subject.emoji === '' ? 'border-black dark:border-white scale-110 shadow-lg' : 'border-slate-300 dark:border-slate-500'
+                                                                            editingSubjectData?.emoji === '' ? 'border-black dark:border-white scale-110 shadow-lg' : 'border-slate-300 dark:border-slate-500'
                                                                         }`}
                                                                         onClick={() => {
-                                                                            handleUpdateSubject(subject.id, 'emoji', '');
+                                                                            handleLocalUpdate('emoji', '');
                                                                             setEditingShowEmojiPicker(false);
                                                                         }}
                                                                     >
@@ -398,7 +492,15 @@ const SubjectSettings = ({ subjects, classes, activeClassId, setActiveClassId, r
                                                         </div>
                                                     </div>
                                                     <div className="flex justify-end gap-2">
-                                                        <Button size="sm" onClick={() => { setEditingSubjectId(null); setEditingShowColorPicker(false); setEditingShowEmojiPicker(false); }} className="bg-green-600 hover:bg-green-700">
+                                                        <Button size="sm" onClick={async () => {
+                                                            if (editingSubjectId && editingSubjectData) {
+                                                                await handleUpdateSubject(editingSubjectId, editingSubjectData);
+                                                            }
+                                                            setEditingSubjectId(null);
+                                                            setEditingSubjectData(null);
+                                                            setEditingShowColorPicker(false);
+                                                            setEditingShowEmojiPicker(false);
+                                                        }} className="bg-green-600 hover:bg-green-700">
                                                             <Check className="w-4 h-4" />
                                                         </Button>
                                                     </div>
@@ -412,7 +514,17 @@ const SubjectSettings = ({ subjects, classes, activeClassId, setActiveClassId, r
                                                         <span className="text-xl mr-2">{subject.emoji || '📚'}</span>
                                                     </div>
                                                     <div className="flex items-center gap-2">
-                                                        <Button variant="ghost" size="icon" className="w-8 h-8 hover:bg-slate-200 dark:hover:bg-slate-700" onClick={() => { setEditingSubjectId(subject.id); setEditingShowColorPicker(false); setEditingShowEmojiPicker(false); }}>
+                                                        <Button variant="ghost" size="icon" className="w-8 h-8 hover:bg-slate-200 dark:hover:bg-slate-700" onClick={() => {
+                                                            setEditingSubjectId(subject.id);
+                                                            setEditingSubjectData({
+                                                                name: subject.name,
+                                                                color: subject.color,
+                                                                emoji: subject.emoji || '',
+                                                                lessons_per_week: subject.lessons_per_week
+                                                            });
+                                                            setEditingShowColorPicker(false);
+                                                            setEditingShowEmojiPicker(false);
+                                                        }}>
                                                             <Edit className="w-4 h-4" />
                                                         </Button>
                                                         <Button variant="ghost" size="icon" className="w-8 h-8 hover:bg-red-100 dark:hover:bg-red-900/30 text-red-500" onClick={() => handleDeleteSubject(subject.id)}>

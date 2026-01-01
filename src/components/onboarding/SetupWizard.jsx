@@ -20,10 +20,12 @@ import {
   SkipForward,
   FileText,
   UserPlus,
+  Edit3,
 } from 'lucide-react';
 import { Class, Subject, Student, Setting } from '@/api/entities';
 import pb from '@/api/pb';
 import toast from 'react-hot-toast';
+import TemplateEditorModal from '@/components/settings/TemplateEditorModal';
 
 // Preset colors for subjects
 const PRESET_COLORS = [
@@ -62,6 +64,8 @@ export function SetupWizard({ isOpen, onComplete }) {
   const [studentList, setStudentList] = useState('');
   const [showImportDialog, setShowImportDialog] = useState(false);
   const [scheduleType, setScheduleType] = useState('flexible');
+  const [fixedScheduleTemplate, setFixedScheduleTemplate] = useState({});
+  const [isTemplateEditorOpen, setIsTemplateEditorOpen] = useState(false);
   const [timeSettings, setTimeSettings] = useState({
     startTime: '08:00',
     lessonsPerDay: 8,
@@ -71,6 +75,9 @@ export function SetupWizard({ isOpen, onComplete }) {
     morningBreakDuration: 20,
     lunchBreakAfter: 4,
     lunchBreakDuration: 40,
+    afternoonBreakAfter: 6,
+    afternoonBreakDuration: 15,
+    schoolYearStartWeek: 35,
   });
 
   const currentStepData = WIZARD_STEPS[currentStep];
@@ -137,10 +144,12 @@ export function SetupWizard({ isOpen, onComplete }) {
           morningBreakDuration: timeSettings.morningBreakDuration,
           lunchBreakAfter: timeSettings.lunchBreakAfter,
           lunchBreakDuration: timeSettings.lunchBreakDuration,
-          afternoonBreakAfter: 6,
-          afternoonBreakDuration: 15,
+          afternoonBreakAfter: timeSettings.afternoonBreakAfter,
+          afternoonBreakDuration: timeSettings.afternoonBreakDuration,
+          schoolYearStartWeek: timeSettings.schoolYearStartWeek,
           cellWidth: 120,
           cellHeight: 80,
+          fixedScheduleTemplate: scheduleType === 'fixed' ? fixedScheduleTemplate : {},
         };
 
         if (existingSettings.length > 0) {
@@ -632,6 +641,39 @@ export function SetupWizard({ isOpen, onComplete }) {
                 </div>
               </button>
             </div>
+
+            {scheduleType === 'fixed' && createdClassId && subjects.length > 0 && (
+              <div className="p-4 bg-slate-50 dark:bg-slate-800/50 rounded-lg space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h4 className="text-sm font-semibold text-slate-900 dark:text-white">Stundenplan-Vorlage</h4>
+                    <p className="text-xs text-slate-600 dark:text-slate-400">
+                      Erstellen Sie Ihre wöchentliche Stundenplan-Vorlage
+                    </p>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setIsTemplateEditorOpen(true)}
+                    className="flex items-center gap-2"
+                  >
+                    <Edit3 className="w-4 h-4" />
+                    Vorlage bearbeiten
+                  </Button>
+                </div>
+                {Object.keys(fixedScheduleTemplate).length > 0 && (
+                  <p className="text-xs text-green-600 dark:text-green-400">
+                    Vorlage wurde erstellt
+                  </p>
+                )}
+              </div>
+            )}
+
+            {scheduleType === 'fixed' && (!createdClassId || subjects.length === 0) && (
+              <p className="text-xs text-amber-600 dark:text-amber-400 text-center">
+                Erstellen Sie zuerst eine Klasse und Fächer, um die Vorlage zu bearbeiten.
+              </p>
+            )}
           </div>
         );
 
@@ -690,6 +732,21 @@ export function SetupWizard({ isOpen, onComplete }) {
               </div>
             </div>
 
+            <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+              <div>
+                <Label className="text-slate-700 dark:text-slate-300 text-xs">Startwoche Schuljahr (KW)</Label>
+                <Input
+                  type="number"
+                  min="1"
+                  max="52"
+                  value={timeSettings.schoolYearStartWeek}
+                  onChange={(e) => setTimeSettings({ ...timeSettings, schoolYearStartWeek: Number(e.target.value) })}
+                  className="mt-1 bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 h-8 text-sm w-20"
+                />
+                <p className="text-xs text-slate-500 mt-1">Woche, ab der das Schuljahr beginnt</p>
+              </div>
+            </div>
+
             <div className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg space-y-2">
               <h4 className="text-xs font-medium text-slate-700 dark:text-slate-300">Grosse Pausen</h4>
               <div className="grid grid-cols-2 gap-2">
@@ -734,6 +791,28 @@ export function SetupWizard({ isOpen, onComplete }) {
                     max="90"
                     value={timeSettings.lunchBreakDuration}
                     onChange={(e) => setTimeSettings({ ...timeSettings, lunchBreakDuration: Number(e.target.value) })}
+                    className="mt-1 bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 h-7 text-xs"
+                  />
+                </div>
+                <div>
+                  <Label className="text-slate-600 dark:text-slate-400 text-xs">Nachmittagspause nach Lektion</Label>
+                  <Input
+                    type="number"
+                    min="1"
+                    max="12"
+                    value={timeSettings.afternoonBreakAfter}
+                    onChange={(e) => setTimeSettings({ ...timeSettings, afternoonBreakAfter: Number(e.target.value) })}
+                    className="mt-1 bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 h-7 text-xs"
+                  />
+                </div>
+                <div>
+                  <Label className="text-slate-600 dark:text-slate-400 text-xs">Dauer (Min)</Label>
+                  <Input
+                    type="number"
+                    min="5"
+                    max="60"
+                    value={timeSettings.afternoonBreakDuration}
+                    onChange={(e) => setTimeSettings({ ...timeSettings, afternoonBreakDuration: Number(e.target.value) })}
                     className="mt-1 bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 h-7 text-xs"
                   />
                 </div>
@@ -792,6 +871,7 @@ export function SetupWizard({ isOpen, onComplete }) {
   };
 
   return (
+    <>
     <Dialog open={isOpen} onOpenChange={() => {}}>
       <DialogContent className="max-w-lg bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 p-0" hideCloseButton aria-describedby={undefined}>
         <VisuallyHidden.Root>
@@ -891,6 +971,18 @@ export function SetupWizard({ isOpen, onComplete }) {
         </div>
       </DialogContent>
     </Dialog>
+
+    {/* Template Editor Modal - außerhalb des Dialogs für korrektes Drag & Drop */}
+    <TemplateEditorModal
+      isOpen={isTemplateEditorOpen}
+      onClose={() => setIsTemplateEditorOpen(false)}
+      initialTemplate={fixedScheduleTemplate}
+      onSave={setFixedScheduleTemplate}
+      classes={createdClassId ? [{ id: createdClassId, name: className }] : []}
+      subjects={subjects}
+      lessonsPerDay={timeSettings.lessonsPerDay}
+    />
+  </>
   );
 }
 

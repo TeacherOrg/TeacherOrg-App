@@ -79,12 +79,6 @@ const useTimetableData = (currentYear, currentWeek) => {
             return [];
           }),
         ]);
-        console.log('Debug: Fetched data', {
-          classesData,
-          subjectsData: subjectsData.length,
-          lessonsData: lessonsData.length,
-          topicsData: topicsData.length,
-        });
         return {
           lessonsData: lessonsData || [],
           yearlyLessonsData: yearlyLessonsData || [],
@@ -116,44 +110,35 @@ const useTimetableData = (currentYear, currentWeek) => {
       }
       if (!data) return;
 
-      console.log('Debug: initializeData running with activeClassId:', activeClassId);
-
       const hasPendingChanges = (Array.isArray(allLessons) ? allLessons : []).some(l => l.id && l.id.startsWith('temp-') && l.week_number === currentWeek);
       if (!hasPendingChanges) {
         if (!isEqual(allLessons, data.lessonsData || [])) {
           setAllLessons(data.lessonsData || []);
-          console.log('Debug: Updated allLessons');
         }
       }
       if (!isEqual(allerleiLessons, data.allerleiLessonsData || [])) {
         setAllerleiLessons(data.allerleiLessonsData || []);
-        console.log('Debug: Updated allerleiLessons');
       }
       if (!isEqual(topics, data.topicsData || [])) {
         setTopics(data.topicsData || []);
-        console.log('Debug: Updated topics');
       }
       if (!isEqual(classes, data.classesData || [])) {
         setClasses(data.classesData || []);
-        console.log('Debug: Updated classes');
       }
       if (!isEqual(holidays, data.holidaysData || [])) {
         setHolidays(data.holidaysData || []);
-        console.log('Debug: Updated holidays');
       }
 
       let localActiveClassId = activeClassId;
       if (data.classesData.length > 0 && !activeClassId) {
         localActiveClassId = data.classesData[0].id;
         setActiveClassId(localActiveClassId);
-        console.log('Debug: Set activeClassId to', localActiveClassId);
       }
 
       if (localActiveClassId) {
         const filteredSubjects = data.subjectsData?.filter(s => s.class_id === localActiveClassId) || [];
         if (!isEqual(subjects, filteredSubjects)) {
           setSubjects(filteredSubjects);
-          console.log('Debug: Set filtered subjects for class', localActiveClassId);
         }
       }
 
@@ -162,11 +147,11 @@ const useTimetableData = (currentYear, currentWeek) => {
           const defaultClass = await Class.create({
             name: 'Default Klasse',
             user_id: currentUserId,
-            year: currentYear,
+            teacher_id: currentUserId,
+            school_year: currentYear,
           });
           setClasses([defaultClass]);
           setActiveClassId(defaultClass.id);
-          console.log('Debug: Created default class, setting activeClassId to', defaultClass.id);
           queryClientLocal.invalidateQueries(['timetableData', currentYear, currentWeek]);
           await refetch();
           import('react-hot-toast').then(({ toast }) => {
@@ -182,15 +167,8 @@ const useTimetableData = (currentYear, currentWeek) => {
 
       if (data.settingsData?.length > 0) {
         const latestSettings = data.settingsData.sort((a, b) => new Date(b.updated) - new Date(a.updated))[0];
-        console.log('=== REFETCH SETTINGS ===');
-        console.log('Full settingsData array:', JSON.stringify(data.settingsData, null, 2));
-        console.log('Latest settings (after sort):', JSON.stringify(latestSettings, null, 2));
-        console.log('scheduleType in latestSettings:', latestSettings.scheduleType);
         if (!isEqual(settings, latestSettings)) {
           setSettings(latestSettings);
-          console.log('Debug: Updated settings in store');
-        } else {
-          console.log('Debug: Settings unchanged (isEqual returned true)');
         }
       } else {
         const defaultSettings = {

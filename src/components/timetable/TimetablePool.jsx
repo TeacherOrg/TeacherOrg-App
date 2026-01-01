@@ -45,6 +45,11 @@ const TimetablePool = ({
     return Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, calculatedWidth));
   }, [availableYearlyLessonsForPool]);
 
+  // Synchronisiere Pool-Breite mit CSS-Variable für useTimetableStates
+  useLayoutEffect(() => {
+    document.documentElement.style.setProperty('--pool-width', `${poolWidth}px`);
+  }, [poolWidth]);
+
   useLayoutEffect(() => {
 
     const update = () => {

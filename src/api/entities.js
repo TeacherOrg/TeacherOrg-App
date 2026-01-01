@@ -12,7 +12,7 @@ class PbEntity {
     const expandMap = {
       lesson: 'subject,user_id,yearly_lesson_id,second_yearly_lesson_id,topic_id',
       yearly_lesson: 'topic,subject',
-      allerlei_lesson: 'primary_yearly_lesson_id.expand.subject,added_yearly_lesson_ids.expand.subject,user_id,class_id,topic_id',
+      allerlei_lesson: 'primary_yearly_lesson_id.subject,added_yearly_lesson_ids.subject,user_id,topic_id',
       topic: 'class_id,subject',
       subject: 'class_id',
       setting: 'user_id',
@@ -55,7 +55,7 @@ class PbEntity {
     }
 
     // Numerische Felder konvertieren
-    ['lesson_number', 'week_number', 'school_year'].forEach(field => {
+    ['lesson_number', 'week_number', 'school_year', 'week_year'].forEach(field => {
       if (prepared[field] !== undefined && prepared[field] !== null) {
         prepared[field] = Number(prepared[field]);
       }
@@ -69,6 +69,11 @@ class PbEntity {
     // Konvertiere topic_id zu null, wenn leer oder 'no_topic' für yearly_lesson
     if (this.name === 'yearly_lesson' && (prepared.topic_id === '' || prepared.topic_id === 'no_topic')) {
       prepared.topic_id = null;
+    }
+
+    // Konvertiere department zu null, wenn leer (Relation akzeptiert keine leeren Strings)
+    if (this.name === 'topic' && (prepared.department === '' || prepared.department === undefined)) {
+      prepared.department = null;
     }
 
     // Setze is_draft für topic
@@ -92,7 +97,7 @@ class PbEntity {
     }
 
     // Handhabung für relationale Felder (IDs)
-    const relationalFields = ['user_id', 'class_id', 'student_id', 'subject', 'competency_id', 'topic_id', 'yearly_lesson_id', 'second_yearly_lesson_id'];
+    const relationalFields = ['user_id', 'class_id', 'student_id', 'subject', 'competency_id', 'topic_id', 'yearly_lesson_id', 'second_yearly_lesson_id', 'department'];
     relationalFields.forEach(field => {
       if (prepared[field] !== undefined && prepared[field] !== null) {
         if (field === 'topic_id' && prepared[field] === 'no_topic') return;
@@ -176,7 +181,7 @@ class PbEntity {
       normalizedItem.fach_name = item.fach_name || 'Unbekannt';  // ← Hinzufügen: Default auf 'Unbekannt'
     }
 
-    ['lesson_number', 'week_number', 'school_year'].forEach(field => {
+    ['lesson_number', 'week_number', 'school_year', 'week_year'].forEach(field => {
       if (normalizedItem[field] !== undefined && normalizedItem[field] !== null) {
         normalizedItem[field] = Number(normalizedItem[field]);
       }

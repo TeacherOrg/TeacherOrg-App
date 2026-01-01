@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Setting, Class, Subject, Holiday, YearlyLesson, Lesson } from '@/api/entities';
+import { Setting, Class, Subject, Holiday, YearlyLesson, Lesson, Student, Topic, Performance, UeberfachlichKompetenz, AllerleiLesson, Competency, Chore, ChoreAssignment, Group, UserPreferences, Fachbereich } from '@/api/entities';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { X, User as UserIcon, Sun, Moon, Monitor, Home, RotateCcw, Lock, LogOut, HelpCircle, CheckCircle } from 'lucide-react';
+import { X, User as UserIcon, Sun, Moon, Monitor, Home, RotateCcw, Lock, LogOut, HelpCircle, CheckCircle, Trash2, Loader2, AlertTriangle } from 'lucide-react';
+import { Separator } from '@/components/ui/separator';
 import pb from '@/api/pb';
 import CalendarLoader from '../ui/CalendarLoader';
 import { generateLessonsFromFixedTemplate } from '@/utils/fixedScheduleGenerator';
@@ -36,6 +37,11 @@ const ProfileSettings = ({
   const [confirmPassword, setConfirmPassword] = useState('');
   const [passwordMessage, setPasswordMessage] = useState('');
   const [emailMessage, setEmailMessage] = useState('');
+
+  // Account löschen State
+  const [isDeletingAccount, setIsDeletingAccount] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState('');
 
   useEffect(() => {
     const loadUser = async () => {
@@ -92,6 +98,193 @@ const ProfileSettings = ({
     // Custom Event für App.jsx auslösen, um Cache und Store zu leeren
     window.dispatchEvent(new CustomEvent('user-logout'));
     window.location.href = '/login';
+  };
+
+  // Account komplett löschen
+  const handleDeleteAccount = async () => {
+    if (deleteConfirmText !== 'LÖSCHEN') {
+      toast.error('Bitte geben Sie "LÖSCHEN" ein, um fortzufahren.');
+      return;
+    }
+
+    setIsDeletingAccount(true);
+    try {
+      const userId = pb.authStore.model.id;
+
+      // Helper für Rate-Limiting
+      const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+      // 1. Alle Klassen des Users laden
+      const userClasses = await Class.filter({ user_id: userId });
+      const classIds = userClasses.map(c => c.id);
+
+      // 2. Alle abhängigen Daten laden
+      const [
+        allSubjects,
+        allStudents,
+        allLessons,
+        allYearlyLessons,
+        allTopics,
+        allPerformances,
+        allUeberfachlich,
+        allSettings,
+        allHolidays
+      ] = await Promise.all([
+        Subject.list().catch(() => []),
+        Student.list().catch(() => []),
+        Lesson.list({ user_id: userId }).catch(() => []),
+        YearlyLesson.list({ user_id: userId }).catch(() => []),
+        Topic.list().catch(() => []),
+        Performance.list().catch(() => []),
+        UeberfachlichKompetenz.list().catch(() => []),
+        Setting.filter({ user_id: userId }).catch(() => []),
+        Holiday.filter({ user_id: userId }).catch(() => [])
+      ]);
+
+      // Filter nach User-Klassen
+      const userSubjects = allSubjects.filter(s => classIds.includes(s.class_id));
+      const userStudents = allStudents.filter(s => classIds.includes(s.class_id));
+      const userTopics = allTopics.filter(t => classIds.includes(t.class_id));
+      const subjectIds = userSubjects.map(s => s.id);
+      const studentIds = userStudents.map(s => s.id);
+      const userPerformances = allPerformances.filter(p => studentIds.includes(p.student_id) || classIds.includes(p.class_id));
+      const userUeberfachlich = allUeberfachlich.filter(u => studentIds.includes(u.student_id) || classIds.includes(u.class_id));
+
+      // Zusätzliche Entities mit try/catch
+      let allerleiLessons = [], competencies = [], chores = [], choreAssignments = [], groups = [], groupSets = [], userPrefs = [], fachbereiche = [];
+
+      try { allerleiLessons = await AllerleiLesson.list({ user_id: userId }); } catch(e) {}
+      try { competencies = await Competency.list(); competencies = competencies.filter(c => classIds.includes(c.class_id)); } catch(e) {}
+      try { chores = await Chore.list(); chores = chores.filter(c => classIds.includes(c.class_id)); } catch(e) {}
+      try { choreAssignments = await ChoreAssignment.list(); choreAssignments = choreAssignments.filter(c => classIds.includes(c.class_id)); } catch(e) {}
+      try { groups = await Group.list(); groups = groups.filter(g => classIds.includes(g.class_id)); } catch(e) {}
+      try { groupSets = await pb.collection('group_sets').getFullList(); groupSets = groupSets.filter(g => classIds.includes(g.class_id)); } catch(e) {}
+      try { userPrefs = await UserPreferences.list(); userPrefs = userPrefs.filter(p => classIds.includes(p.class_id)); } catch(e) {}
+      try {
+        for (const subjectId of subjectIds) {
+          const fb = await Fachbereich.list({ subject_id: subjectId });
+          fachbereiche.push(...fb);
+        }
+      } catch(e) {}
+
+      console.log('Deleting account data:', {
+        classes: userClasses.length,
+        subjects: userSubjects.length,
+        students: userStudents.length,
+        lessons: allLessons.length,
+        yearlyLessons: allYearlyLessons.length,
+        topics: userTopics.length,
+        performances: userPerformances.length,
+        settings: allSettings.length,
+        holidays: allHolidays.length
+      });
+
+      // 3. Löschen in korrekter Reihenfolge (wegen Relations)
+
+      // Performances
+      for (const p of userPerformances) {
+        try { await Performance.delete(p.id); await delay(30); } catch(e) { console.warn('Error deleting performance:', e); }
+      }
+
+      // UeberfachlichKompetenzen
+      for (const u of userUeberfachlich) {
+        try { await UeberfachlichKompetenz.delete(u.id); await delay(30); } catch(e) { console.warn('Error deleting ueberfachlich:', e); }
+      }
+
+      // ChoreAssignments
+      for (const ca of choreAssignments) {
+        try { await ChoreAssignment.delete(ca.id); await delay(30); } catch(e) {}
+      }
+
+      // Chores
+      for (const c of chores) {
+        try { await Chore.delete(c.id); await delay(30); } catch(e) {}
+      }
+
+      // Competencies
+      for (const c of competencies) {
+        try { await Competency.delete(c.id); await delay(30); } catch(e) {}
+      }
+
+      // GroupSets
+      for (const gs of groupSets) {
+        try { await pb.collection('group_sets').delete(gs.id); await delay(30); } catch(e) {}
+      }
+
+      // Groups
+      for (const g of groups) {
+        try { await Group.delete(g.id); await delay(30); } catch(e) {}
+      }
+
+      // UserPreferences
+      for (const up of userPrefs) {
+        try { await UserPreferences.delete(up.id); await delay(30); } catch(e) {}
+      }
+
+      // AllerleiLessons
+      for (const al of allerleiLessons) {
+        try { await AllerleiLesson.delete(al.id); await delay(30); } catch(e) {}
+      }
+
+      // YearlyLessons
+      for (const yl of allYearlyLessons) {
+        try { await YearlyLesson.delete(yl.id); await delay(30); } catch(e) { console.warn('Error deleting yearly lesson:', e); }
+      }
+
+      // Lessons
+      for (const l of allLessons) {
+        try { await Lesson.delete(l.id); await delay(30); } catch(e) { console.warn('Error deleting lesson:', e); }
+      }
+
+      // Topics
+      for (const t of userTopics) {
+        try { await Topic.delete(t.id); await delay(30); } catch(e) { console.warn('Error deleting topic:', e); }
+      }
+
+      // Fachbereiche
+      for (const fb of fachbereiche) {
+        try { await Fachbereich.delete(fb.id); await delay(30); } catch(e) {}
+      }
+
+      // Subjects
+      for (const s of userSubjects) {
+        try { await Subject.delete(s.id); await delay(30); } catch(e) { console.warn('Error deleting subject:', e); }
+      }
+
+      // Students
+      for (const s of userStudents) {
+        try { await Student.delete(s.id); await delay(30); } catch(e) { console.warn('Error deleting student:', e); }
+      }
+
+      // Classes
+      for (const c of userClasses) {
+        try { await Class.delete(c.id); await delay(30); } catch(e) { console.warn('Error deleting class:', e); }
+      }
+
+      // Settings
+      for (const s of allSettings) {
+        try { await Setting.delete(s.id); await delay(30); } catch(e) { console.warn('Error deleting setting:', e); }
+      }
+
+      // Holidays
+      for (const h of allHolidays) {
+        try { await Holiday.delete(h.id); await delay(30); } catch(e) { console.warn('Error deleting holiday:', e); }
+      }
+
+      // 4. User selbst löschen
+      await pb.collection('users').delete(userId);
+
+      // 5. Aufräumen und weiterleiten
+      toast.success('Account wurde gelöscht.');
+      pb.authStore.clear();
+      window.dispatchEvent(new CustomEvent('user-logout'));
+      window.location.href = '/login';
+
+    } catch (error) {
+      console.error('Error deleting account:', error);
+      toast.error(`Fehler beim Löschen des Accounts: ${error.message}`);
+      setIsDeletingAccount(false);
+    }
   };
 
   const handlePasswordChange = async () => {
@@ -301,11 +494,84 @@ const ProfileSettings = ({
             Account-Aktionen
           </CardTitle>
         </CardHeader>
-        <CardContent>
-          <Button variant="destructive" onClick={handleLogout}>
-            Ausloggen
-          </Button>
-          <p className="text-sm text-slate-600 dark:text-slate-400 mt-2">Sie werden zur Login-Seite umgeleitet.</p>
+        <CardContent className="space-y-4">
+          <div>
+            <Button variant="destructive" onClick={handleLogout}>
+              Ausloggen
+            </Button>
+            <p className="text-sm text-slate-600 dark:text-slate-400 mt-2">Sie werden zur Login-Seite umgeleitet.</p>
+          </div>
+
+          <Separator className="bg-slate-200 dark:bg-slate-700" />
+
+          <div>
+            {!showDeleteConfirm ? (
+              <Button
+                variant="destructive"
+                onClick={() => setShowDeleteConfirm(true)}
+                className="bg-red-700 hover:bg-red-800"
+              >
+                <Trash2 className="w-4 h-4 mr-2" />
+                Account löschen
+              </Button>
+            ) : (
+              <div className="space-y-3 p-4 border border-red-500 rounded-lg bg-red-50 dark:bg-red-950/30">
+                <div className="flex items-center gap-2 text-red-700 dark:text-red-400">
+                  <AlertTriangle className="w-5 h-5" />
+                  <span className="font-semibold">Achtung: Diese Aktion kann nicht rückgängig gemacht werden!</span>
+                </div>
+                <p className="text-sm text-red-600 dark:text-red-400">
+                  Alle Ihre Daten werden unwiderruflich gelöscht: Klassen, Fächer, Schüler, Lektionen, Themen, Leistungsdaten und Einstellungen.
+                </p>
+                <div>
+                  <Label className="text-sm text-red-700 dark:text-red-400">
+                    Geben Sie <strong>LÖSCHEN</strong> ein, um zu bestätigen:
+                  </Label>
+                  <Input
+                    value={deleteConfirmText}
+                    onChange={(e) => setDeleteConfirmText(e.target.value)}
+                    placeholder="LÖSCHEN"
+                    className="mt-1 border-red-300 dark:border-red-700 bg-white dark:bg-slate-800"
+                    disabled={isDeletingAccount}
+                  />
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    variant="destructive"
+                    onClick={handleDeleteAccount}
+                    disabled={isDeletingAccount || deleteConfirmText !== 'LÖSCHEN'}
+                    className="bg-red-700 hover:bg-red-800"
+                  >
+                    {isDeletingAccount ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Lösche Account...
+                      </>
+                    ) : (
+                      <>
+                        <Trash2 className="w-4 h-4 mr-2" />
+                        Endgültig löschen
+                      </>
+                    )}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setShowDeleteConfirm(false);
+                      setDeleteConfirmText('');
+                    }}
+                    disabled={isDeletingAccount}
+                    className="border-slate-300 dark:border-slate-600"
+                  >
+                    Abbrechen
+                  </Button>
+                </div>
+              </div>
+            )}
+            <p className="text-sm text-red-600 dark:text-red-400 mt-2">
+              ⚠️ Dies löscht unwiderruflich alle Ihre Daten!
+            </p>
+          </div>
         </CardContent>
       </Card>
     </div>
@@ -645,7 +911,15 @@ const SettingsModal = ({ isOpen, onClose }) => {
         </div>
         <div className="p-4 flex justify-end gap-3 border-t border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800">
           <Button variant="outline" onClick={onClose}>Abbrechen</Button>
-          <Button onClick={handleSave} disabled={!hasPendingChanges()} className="bg-blue-600 hover:bg-blue-700">Speichern & Schließen</Button>
+          {hasPendingChanges() ? (
+            <Button onClick={handleSave} className="bg-blue-600 hover:bg-blue-700">
+              Speichern & Schließen
+            </Button>
+          ) : (
+            <Button variant="outline" onClick={onClose}>
+              Schließen
+            </Button>
+          )}
         </div>
       </div>
     </div>

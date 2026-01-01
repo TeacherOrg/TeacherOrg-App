@@ -24,6 +24,7 @@ import { Calendar, GraduationCap } from 'lucide-react';
 import useAllYearlyLessons from '@/hooks/useAllYearlyLessons';
 import { syncYearlyLessonToWeekly } from '@/hooks/useYearlyLessonSync';
 import { safeSortByName } from '@/utils/safeData';
+import { getCurrentSchoolYear } from '@/utils/weekYearUtils';
 
 const ACADEMIC_WEEKS = 52;
 
@@ -37,6 +38,8 @@ function InnerYearlyOverviewPage() {
   const mode = searchParams.get('mode');
   const assignSubject = searchParams.get('subject');
   const isAssignMode = mode === 'assign';
+  const isReassignMode = mode === 'reassign';
+  const isAnyAssignMode = isAssignMode || isReassignMode;
   const topicMode = searchParams.get('topic');
 
   // Nicht mehr benötigt - verwenden jetzt optimisticUpdate aus Hook
@@ -63,7 +66,7 @@ function InnerYearlyOverviewPage() {
   const [selectedTopicInfo, setSelectedTopicInfo] = useState(null);
 
   const [currentView, setCurrentView] = useState('Jahr');
-  const [currentYear, setCurrentYear] = useState(new Date().getFullYear());
+  const [currentYear, setCurrentYear] = useState(() => getCurrentSchoolYear(35));
 
   // Neue States für Quick Actions
   const [showQuickActions, setShowQuickActions] = useState(false);
@@ -120,6 +123,25 @@ function InnerYearlyOverviewPage() {
     }
   }, [isAssignMode, searchParams]);
 
+  // Lade archivierte Lektionen beim Mount im Reassign-Modus
+  useEffect(() => {
+    if (isReassignMode) {
+      try {
+        const pendingData = localStorage.getItem('pendingArchivedLessons');
+        if (pendingData) {
+          const parsed = JSON.parse(pendingData);
+          const topicId = searchParams.get('topic');
+          if (parsed.topicId === topicId && parsed.lessons?.length > 0) {
+            setSharedLessonsLimit(parsed.lessons.length);
+            setSharedLessonsData(parsed.lessons);
+          }
+        }
+      } catch (e) {
+        console.error('Error loading pendingArchivedLessons:', e);
+      }
+    }
+  }, [isReassignMode, searchParams]);
+
   // Sofortiges Setzen beim Betreten
   const handleShowHover = useCallback((lesson, e) => {
     const rect = e.currentTarget.getBoundingClientRect();
@@ -156,38 +178,33 @@ function InnerYearlyOverviewPage() {
     if (!slot?.week_number || !slot.subject || slot.lesson_number == null) return;
 
     const key = `${slot.week_number}-${slot.subject}-${slot.lesson_number}`;
+    // Prüfe ob Slot eine Doppellektion ist (aus Template ODER sharedLessonsData)
+    const isDoubleFromTemplate = slot.is_double_lesson || slot._isTemplateDouble;
 
     setSelectedLessons(prev => {
-      const exists = prev.includes(key);
-      if (exists) {
-        // Beim Entfernen: Prüfe ob nächster Key auch entfernt werden soll (Doppellektion)
-        const nextKey = `${slot.week_number}-${slot.subject}-${slot.lesson_number + 1}`;
-        const keyIndex = prev.indexOf(key);
+      // Prüfe ob Key bereits existiert (unterstützt beide Formate: string und object)
+      const exists = prev.some(item =>
+        typeof item === 'string' ? item === key : item.key === key
+      );
 
-        // Wenn dies Teil einer Doppellektion war, entferne beide
-        if (keyIndex >= 0 && sharedLessonsData[keyIndex]?.is_double_lesson) {
-          return prev.filter(k => k !== key && k !== nextKey);
-        }
-        return prev.filter(k => k !== key);
+      if (exists) {
+        // Entferne den Eintrag
+        return prev.filter(item =>
+          typeof item === 'string' ? item !== key : item.key !== key
+        );
       } else {
-        // Beim Hinzufügen: Prüfe ob nächste geteilte Lektion eine Doppellektion ist
+        // Beim Hinzufügen: Prüfe Limit
         const nextLessonIndex = prev.length;
         const nextSharedLesson = sharedLessonsData[nextLessonIndex];
-        const isDouble = nextSharedLesson?.is_double_lesson;
+        const isDouble = isDoubleFromTemplate || nextSharedLesson?.is_double_lesson;
 
-        // Prüfe Limit bei geteilten Lektionen (berücksichtige Doppellektion)
-        const slotsNeeded = isDouble ? 2 : 1;
-        if (sharedLessonsLimit !== null && prev.length + slotsNeeded > sharedLessonsLimit) {
+        if (sharedLessonsLimit !== null && prev.length + 1 > sharedLessonsLimit) {
           toast.error(`Maximal ${sharedLessonsLimit} Lektionen verfuegbar`);
           return prev;
         }
 
-        if (isDouble) {
-          // Automatisch beide Slots markieren für Doppellektion
-          const nextKey = `${slot.week_number}-${slot.subject}-${slot.lesson_number + 1}`;
-          return [...prev, key, nextKey];
-        }
-        return [...prev, key];
+        // Speichere Key mit is_double_lesson Info als Objekt
+        return [...prev, { key, is_double_lesson: isDouble }];
       }
     });
   }, [sharedLessonsLimit, sharedLessonsData]);
@@ -204,9 +221,12 @@ function InnerYearlyOverviewPage() {
       (s) => s.name.toLowerCase() === assignSubject?.toLowerCase()
     );
 
-    // Prüfe ob geteilte Lektionen vorhanden sind
+    // Prüfe ob geteilte oder archivierte Lektionen vorhanden sind
     let pendingShared = null;
     let sharedLessons = [];
+    let pendingArchived = null;
+    let archivedLessons = [];
+
     try {
       const pendingData = localStorage.getItem('pendingSharedLessons');
       if (pendingData) {
@@ -219,27 +239,52 @@ function InnerYearlyOverviewPage() {
       console.error('Error parsing pendingSharedLessons:', e);
     }
 
+    // Für Reassign-Mode: Lade archivierte Lektionen (diese haben bereits IDs!)
+    try {
+      const archivedData = localStorage.getItem('pendingArchivedLessons');
+      if (archivedData) {
+        pendingArchived = JSON.parse(archivedData);
+        if (pendingArchived.topicId === assignTopicId) {
+          archivedLessons = pendingArchived.lessons || [];
+        }
+      }
+    } catch (e) {
+      console.error('Error parsing pendingArchivedLessons:', e);
+    }
+
+    // Kombiniere: Im Reassign-Mode verwende archivedLessons, sonst sharedLessons
+    const lessonsToAssign = isReassignMode ? archivedLessons : sharedLessons;
+
     // Sammle alle Optimistic Updates VOR den API-Calls
     const optimisticLessons = [];
     const apiCalls = [];
 
     // Sortiere selectedLessons nach Woche und Lektionsnummer für korrekte Zuordnung
+    // Unterstützt beide Formate: string ("week-subject-num") und object ({ key, is_double_lesson })
     const sortedLessons = [...selectedLessons].sort((a, b) => {
-      const [weekA, , numA] = a.split('-');
-      const [weekB, , numB] = b.split('-');
+      const keyA = typeof a === 'string' ? a : a.key;
+      const keyB = typeof b === 'string' ? b : b.key;
+      const [weekA, , numA] = keyA.split('-');
+      const [weekB, , numB] = keyB.split('-');
       if (parseInt(weekA) !== parseInt(weekB)) {
         return parseInt(weekA) - parseInt(weekB);
       }
       return parseInt(numA) - parseInt(numB);
     });
 
-    sortedLessons.forEach((key, index) => {
-      const [week, subjName, number] = key.split("-");
+    sortedLessons.forEach((item, index) => {
+      // Extrahiere Key und is_double_lesson aus dem Item (string oder object)
+      const keyStr = typeof item === 'string' ? item : item.key;
+      const isDoubleFromSlot = typeof item === 'object' ? item.is_double_lesson : false;
+
+      const [week, subjName, number] = keyStr.split("-");
       const weekNum = parseInt(week);
       const lessonNum = parseInt(number);
 
-      // Hole Lektionsdaten aus Snapshot (falls vorhanden)
-      const sharedLessonData = sharedLessons[index] || {};
+      // Hole Lektionsdaten aus Snapshot (falls vorhanden) - verwende lessonsToAssign
+      const lessonData = lessonsToAssign[index] || {};
+      // Doppellektion: aus Slot-Info ODER aus Snapshot
+      const isDouble = isDoubleFromSlot || lessonData.is_double_lesson || false;
 
       const existingLesson = lessonsForYear.find(
         (l) =>
@@ -253,21 +298,32 @@ function InnerYearlyOverviewPage() {
         const updateData = {
           topic_id: assignTopicId,
           // Überschreibe mit Snapshot-Daten falls vorhanden
-          ...(sharedLessonData.name && { name: sharedLessonData.name }),
-          ...(sharedLessonData.notes && { notes: sharedLessonData.notes }),
-          ...(sharedLessonData.steps && { steps: sharedLessonData.steps }),
-          ...(sharedLessonData.is_exam !== undefined && { is_exam: sharedLessonData.is_exam }),
-          ...(sharedLessonData.is_double_lesson !== undefined && { is_double_lesson: sharedLessonData.is_double_lesson }),
+          ...(lessonData.name && { name: lessonData.name }),
+          ...(lessonData.notes && { notes: lessonData.notes }),
+          ...(lessonData.steps && { steps: lessonData.steps }),
+          ...(lessonData.is_exam !== undefined && { is_exam: lessonData.is_exam }),
+          // Verwende is_double_lesson aus Slot oder Snapshot
+          is_double_lesson: isDouble,
         };
         const optimisticLesson = { ...existingLesson, ...updateData };
         optimisticUpdate(optimisticLesson, false);
 
-        // API-Call für später
-        apiCalls.push(YearlyLesson.update(existingLesson.id, updateData));
+        // API-Call für später - mit Sync zur Wochenansicht
+        apiCalls.push(
+          YearlyLesson.update(existingLesson.id, updateData).then(async () => {
+            // Sync zur Wochenansicht im Fixed-Schedule-Modus
+            try {
+              const updatedLesson = { ...existingLesson, ...updateData };
+              await syncYearlyLessonToWeekly(updatedLesson, settings, subjects, allYearlyLessons);
+            } catch (syncError) {
+              console.warn('Failed to sync updated lesson to weekly timetable:', syncError);
+            }
+          })
+        );
       } else {
         // Temporäre ID für optimistic update
         const tempId = `temp-assign-${Date.now()}-${weekNum}-${lessonNum}`;
-        const lessonData = {
+        const newLessonData = {
           week_number: weekNum,
           lesson_number: lessonNum,
           subject: subjectObj?.id,
@@ -275,29 +331,37 @@ function InnerYearlyOverviewPage() {
           topic_id: assignTopicId,
           user_id: pb.authStore.model?.id,
           class_id: activeClassId || subjectObj?.class_id,
-          name: sharedLessonData.name || "Neue Lektion",
-          notes: sharedLessonData.notes || "",
-          steps: sharedLessonData.steps || [],
-          is_exam: sharedLessonData.is_exam || false,
-          is_double_lesson: sharedLessonData.is_double_lesson || false,
+          name: lessonData.name || "Neue Lektion",
+          notes: lessonData.notes || "",
+          steps: lessonData.steps || [],
+          is_exam: lessonData.is_exam || false,
+          // Verwende is_double_lesson aus Slot oder Snapshot
+          is_double_lesson: isDouble,
         };
         const tempLesson = {
           id: tempId,
-          ...lessonData,
+          ...newLessonData,
         };
 
         // Optimistic Update SOFORT
         optimisticUpdate(tempLesson, true);
         optimisticLessons.push({ tempId, weekNum, lessonNum });
 
-        // API-Call für später (ersetzt temp mit echter Lektion)
+        // API-Call für später (ersetzt temp mit echter Lektion) - mit Sync zur Wochenansicht
         apiCalls.push(
-          YearlyLesson.create(lessonData).then(createdLesson => {
+          YearlyLesson.create(newLessonData).then(async (createdLesson) => {
             // Entferne temp-Lektion und füge echte hinzu
             const tempLesson = optimisticLessons.find(l => l.weekNum === weekNum && l.lessonNum === lessonNum);
             if (tempLesson) {
               optimisticUpdate({ id: tempLesson.tempId }, false, true); // Entferne temp
               optimisticUpdate({ ...createdLesson, lesson_number: lessonNum }, true); // Füge echte hinzu
+            }
+
+            // Sync zur Wochenansicht im Fixed-Schedule-Modus
+            try {
+              await syncYearlyLessonToWeekly(createdLesson, settings, subjects, [...allYearlyLessons, createdLesson]);
+            } catch (syncError) {
+              console.warn('Failed to sync created lesson to weekly timetable:', syncError);
             }
           })
         );
@@ -310,6 +374,11 @@ function InnerYearlyOverviewPage() {
     // Entferne pendingSharedLessons aus localStorage nach erfolgreicher Zuweisung
     if (pendingShared && pendingShared.topicId === assignTopicId) {
       localStorage.removeItem('pendingSharedLessons');
+    }
+
+    // Entferne pendingArchivedLessons aus localStorage nach erfolgreicher Zuweisung (Reassign-Mode)
+    if (pendingArchived && pendingArchived.topicId === assignTopicId) {
+      localStorage.removeItem('pendingArchivedLessons');
     }
 
     // Draft-Status entfernen falls vorhanden
@@ -394,9 +463,17 @@ function InnerYearlyOverviewPage() {
         console.error('No subject found for assignSubject:', assignSubject);
       }
     }
-
-    setSchoolYearStartWeek(35);
   }, [assignSubject, subjectsData]);
+
+  // Schuljahr und schoolYearStartWeek aus Settings laden
+  useEffect(() => {
+    if (settings?.schoolYearStartWeek) {
+      setSchoolYearStartWeek(settings.schoolYearStartWeek);
+      // Korrigiere das Schuljahr basierend auf den Settings
+      const correctYear = getCurrentSchoolYear(settings.schoolYearStartWeek);
+      setCurrentYear(correctYear);
+    }
+  }, [settings?.schoolYearStartWeek]);
 
   useEffect(() => {
     const handleDataRefresh = () => queryClientLocal.invalidateQueries(['yearlyData', currentYear]);
@@ -453,7 +530,7 @@ function InnerYearlyOverviewPage() {
   }, [subjects, activeClassId]);
 
   const displayedSubjects = useMemo(() => {
-    if (isAssignMode && assignSubject) {
+    if (isAnyAssignMode && assignSubject) {
       const subj = subjects.find(
         (s) => s.name.toLowerCase() === assignSubject.toLowerCase()
       );
@@ -476,7 +553,7 @@ function InnerYearlyOverviewPage() {
     return subjects
       .filter((s) => s.class_id === activeClassId)
       .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
-  }, [isAssignMode, assignSubject, subjects, activeClassId, classes]);
+  }, [isAnyAssignMode, assignSubject, subjects, activeClassId, classes]);
 
   const activeClassName = useMemo(() => classes.find(c => c.id === activeClassId)?.name || '', [classes, activeClassId]);
 
@@ -507,7 +584,7 @@ function InnerYearlyOverviewPage() {
 
   const handleLessonClick = useCallback(
     async (lesson, slot) => {
-      if (isAssignMode) {
+      if (isAnyAssignMode) {
         if (lesson?.topic_id) {
           toast.error("Diese Lektion ist bereits einem anderen Thema zugewiesen");
           return;
@@ -772,7 +849,7 @@ function InnerYearlyOverviewPage() {
       }
     },
     [
-      isAssignMode,
+      isAnyAssignMode,
       handleSelectLesson,
       toast,
       activeTopicId,
@@ -866,14 +943,6 @@ function InnerYearlyOverviewPage() {
               is_half_class: updatePayload.is_half_class || false
             });
           }
-          console.log(`Synced is_exam/is_half_class to ${linkedLessons.length} weekly lessons`);
-
-          // Sofortige UI-Aktualisierung: Auch den lokalen allLessons State updaten
-          setAllLessons(prev => prev.map(l =>
-            l.yearly_lesson_id === primaryId
-              ? { ...l, is_exam: updatePayload.is_exam || false, is_half_class: updatePayload.is_half_class || false }
-              : l
-          ));
         } catch (syncFlagsError) {
           console.warn('Failed to sync is_exam/is_half_class to weekly lessons:', syncFlagsError);
         }
@@ -986,11 +1055,12 @@ function InnerYearlyOverviewPage() {
       // setIsLessonModalOpen(false); // Entfernt: Modal wird nur in handleSubmit geschlossen
       setEditingLesson(null);
       setNewLessonSlot(null);
-      // queryClientLocal.invalidateQueries(['yearlyData', currentYear]); // Entfernt, da optimistic updates die UI aktualisieren
-      // queryClientLocal.invalidateQueries(['timetableData']);
 
-      // KEIN refetch mehr hier - optimistic updates haben den Cache bereits aktualisiert!
-      // await refetchYearly(); // ← ENTFERNT: würde optimistic updates überschreiben
+      // Invalidiere Query und warte auf Refetch um TopicLessonsModal zu aktualisieren
+      await queryClientLocal.refetchQueries({
+        queryKey: ['allYearlyLessons'],
+        type: 'active' // Nur aktive Queries neu laden
+      });
 
       toast.success('Lektion erfolgreich gespeichert');
     } catch (error) {
@@ -1152,9 +1222,9 @@ function InnerYearlyOverviewPage() {
               </div>
             ) : (
               <>
-                {isAssignMode && (
+                {isAnyAssignMode && (
                   <>
-                    {/* Assign Mode Header Banner */}
+                    {/* Assign/Reassign Mode Header Banner */}
                     <div className="fixed top-24 left-1/2 -translate-x-1/2 z-50 bg-white dark:bg-slate-800 rounded-lg shadow-2xl px-8 py-5 border border-green-500/50 max-w-lg">
                       <div className="text-center">
                         <p className="text-xl font-bold mb-2">
@@ -1226,7 +1296,7 @@ function InnerYearlyOverviewPage() {
                     onHideHover={handleHideHover}
                     allYearlyLessons={allYearlyLessons}
                     densityMode={densityMode}
-                    isAssignMode={isAssignMode}
+                    isAssignMode={isAnyAssignMode}
                     selectedLessons={selectedLessons}
                     onSelectLesson={handleSelectLesson}
                     classes={classes}
@@ -1399,7 +1469,6 @@ function InnerYearlyOverviewPage() {
       />
 
       <TopicLessonsModal
-        key={allYearlyLessons.length}
         isOpen={isTopicLessonsModalOpen}
         onClose={() => setIsTopicLessonsModalOpen(false)}
         topicLessons={selectedTopicLessons}

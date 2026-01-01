@@ -124,6 +124,14 @@ const SubjectAveragesTable = ({ performances, subjects, selectedStudents, onSubj
         }
       }
 
+      // Zähle unique Prüfungen (nach assessment_name + date)
+      const uniqueExams = new Set(
+        subjectPerfs
+          .filter(p => p.assessment_name && p.date)
+          .map(p => `${p.assessment_name}-${p.date}`)
+      );
+      const examCount = uniqueExams.size > 0 ? uniqueExams.size : subjectPerfs.length;
+
       return {
         id: subject.id,
         name: subject.name,
@@ -131,7 +139,7 @@ const SubjectAveragesTable = ({ performances, subjects, selectedStudents, onSubj
         best,
         worst,
         trend,
-        count: subjectPerfs.length
+        count: examCount
       };
     }).filter(s => s.count > 0); // Only show subjects with data
 

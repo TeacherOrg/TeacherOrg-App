@@ -25,7 +25,6 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import { LehrplanKompetenz as CurriculumCompetency } from '@/api/entities';
-import { getLehrplanData } from '@/components/curriculum/lehrplanData';
 import { deleteTopicWithLessons } from '@/api/topicService';
 import { useSubjectResolver } from './hooks';
 
@@ -197,25 +196,14 @@ export default function TopicModal({ isOpen, onClose, onSave, onDelete, topic, s
       return;
     }
 
-    // Kompetenzen für das aktuelle Fach laden
+    // ALLE Kompetenzen laden (fächerübergreifend verfügbar)
     const loadSubjectCompetencies = async () => {
       setIsLoadingCompetencies(true);
       try {
-        let allCompetencies = await CurriculumCompetency.list();
-        let subjectCompetencies = allCompetencies.filter(
-          c => c.fach_name === effectiveSubject.name || c.subject_name === effectiveSubject.name
-        );
+        const allCompetencies = await CurriculumCompetency.list();
 
-        // Fallback: Für Deutsch automatisch initialisieren, falls noch nicht vorhanden
-        if (subjectCompetencies.length === 0 && effectiveSubject.name === 'Deutsch') {
-          const lehrplan21Data = getLehrplanData();
-          await CurriculumCompetency.bulkCreate(lehrplan21Data);
-          allCompetencies = await CurriculumCompetency.list();
-          subjectCompetencies = allCompetencies.filter(c => c.fach_name === 'Deutsch');
-          toast.success('Lehrplan 21 für Deutsch wurde initialisiert!');
-        }
-
-        setLocalCompetencies(subjectCompetencies);
+        // Alle Kompetenzen verfügbar machen (Filterung erfolgt über UI)
+        setLocalCompetencies(allCompetencies);
       } catch (error) {
         console.error('Error loading competencies:', error);
         toast.error('Fehler beim Laden der Kompetenzen');
@@ -241,6 +229,17 @@ export default function TopicModal({ isOpen, onClose, onSave, onDelete, topic, s
           lehrplan_kompetenz_ids: topic.lehrplan_kompetenz_ids || []
         });
         setSelectedCompetencies(topic.lehrplan_kompetenz_ids || []);
+
+        // Materialien laden und aufteilen in common und custom
+        if (topic.materials && Array.isArray(topic.materials)) {
+          const commonMats = topic.materials.filter(m => COMMON_MATERIALS.includes(m));
+          const customMats = topic.materials.filter(m => !COMMON_MATERIALS.includes(m));
+          setSelectedCommon(commonMats);
+          setCustomMaterials(customMats);
+        } else {
+          setSelectedCommon([]);
+          setCustomMaterials([]);
+        }
         // Lektionen werden jetzt automatisch über useEffect mit allYearlyLessons geladen
       } else {
         setFormData({
@@ -253,6 +252,8 @@ export default function TopicModal({ isOpen, onClose, onSave, onDelete, topic, s
         });
         setSelectedCompetencies([]);
         setLessons([]);
+        setSelectedCommon([]);
+        setCustomMaterials([]);
       }
 
       if (effectiveSubject) {
@@ -291,6 +292,13 @@ export default function TopicModal({ isOpen, onClose, onSave, onDelete, topic, s
   // Kombiniere berechnete Lektionen mit manuell hinzugefügten
   const displayLessons = computedLessons.length > 0 ? computedLessons : lessons;
 
+  // Berechne Gesamtanzahl der Unterrichtsstunden (Doppellektionen = 2)
+  const totalLessonCount = useMemo(() => {
+    return displayLessons.reduce((sum, lesson) => {
+      return sum + (lesson.is_double_lesson ? 2 : 1);
+    }, 0);
+  }, [displayLessons]);
+
   const loadDepartments = async () => {
     try {
       const subjectDepartments = await Fachbereich.list({ subject_id: effectiveSubject?.id });
@@ -307,10 +315,12 @@ export default function TopicModal({ isOpen, onClose, onSave, onDelete, topic, s
       try {
         const newDept = await Fachbereich.create({
           name: newDepartmentName,
-          subject_id: effectiveSubject.id
+          subject_id: effectiveSubject.id,
+          class_id: effectiveSubject.class_id,
+          user_id: pb.authStore.model?.id
         });
         setDepartments([...departments, newDept]);
-        setFormData({ ...formData, department: newDept.name });
+        setFormData({ ...formData, department: newDept.id });
         setNewDepartmentName('');
         toast.success('Fachbereich erstellt');
       } catch (error) {
@@ -661,7 +671,7 @@ export default function TopicModal({ isOpen, onClose, onSave, onDelete, topic, s
                         </SelectTrigger>
                         <SelectContent>
                           {departments.map((dept) => (
-                            <SelectItem key={dept.id} value={dept.name}>{dept.name}</SelectItem>
+                            <SelectItem key={dept.id} value={dept.id}>{dept.name}</SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
@@ -885,7 +895,7 @@ export default function TopicModal({ isOpen, onClose, onSave, onDelete, topic, s
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <Label className="text-xs md:text-sm font-semibold text-slate-700 dark:text-slate-300">
-                      Zugewiesene Lektionen ({displayLessons.length})
+                      Zugewiesene Lektionen ({totalLessonCount})
                     </Label>
                   </div>
 
