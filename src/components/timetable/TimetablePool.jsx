@@ -27,8 +27,8 @@ const TimetablePool = ({
 
   // Dynamische Breite basierend auf längstem Fachnamen
   const poolWidth = useMemo(() => {
-    const MIN_WIDTH = 140;
-    const MAX_WIDTH = 250;
+    const MIN_WIDTH = 180;
+    const MAX_WIDTH = 280;
     const CHAR_WIDTH = 8;
     const PADDING = 60; // für Zahlen wie "(2/3)" und Padding
 
