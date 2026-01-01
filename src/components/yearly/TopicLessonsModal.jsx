@@ -165,10 +165,8 @@ export default function TopicLessonsModal({
       if (onSaveLesson) {
         await onSaveLesson(data, editingLesson);
       }
-      
-      setIsLessonModalOpen(false);
-      setEditingLesson(null);
-      
+      // Modal wird NICHT hier geschlossen - das macht der onClose callback vom LessonModal
+      // So funktioniert "Speichern & nächste" korrekt
     } catch (error) {
       console.error('Error in TopicLessonsModal handleSave:', error);
       setIsLessonModalOpen(false);
@@ -341,12 +339,34 @@ export default function TopicLessonsModal({
             }}
             onSave={handleSave}
             onDelete={handleDelete}
-            lesson={editingLesson} 
+            lesson={editingLesson}
             topics={Array.isArray(topics) ? topics : []}
             newLessonSlot={null}
             subjectColor={ultraSafeString(subjectColor)}
             allYearlyLessons={allYearlyLessons}
             currentWeek={safeWeek}
+            currentYear={currentYear}
+            onSaveAndNext={(nextLessonNumber) => {
+              // Finde die nächste Lektion im gleichen Topic/Woche
+              const nextLesson = safeTopicLessons.find(
+                l => Number(l.lesson_number) === nextLessonNumber
+              );
+
+              if (nextLesson) {
+                // Bereite die Lektion für das Modal vor
+                const lessonToEdit = {
+                  ...nextLesson,
+                  topic: topic || null,
+                  topic_id: nextLesson.topic_id || topic?.id || '',
+                  color: topic?.color || subjectColor || '#3b82f6'
+                };
+                setEditingLesson(lessonToEdit);
+              } else {
+                // Keine weitere Lektion in diesem Topic → Modal schließen
+                setIsLessonModalOpen(false);
+                setEditingLesson(null);
+              }
+            }}
           />
         )}
       </Dialog>

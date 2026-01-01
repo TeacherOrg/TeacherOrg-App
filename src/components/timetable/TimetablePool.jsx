@@ -104,7 +104,7 @@ const TimetablePool = ({
   const hasAnySubjects = availableYearlyLessonsForPool.some(cg => cg.subjects.length > 0);
 
   return (
-    <div ref={poolRef} className="timetable-pool-container p-4 shadow-md rounded-2xl overflow-y-auto"
+    <div ref={poolRef} className="timetable-pool-container p-4 shadow-md rounded-2xl overflow-y-auto overflow-x-hidden"
          style={{ width: `${poolWidth}px`, maxHeight: '80vh' }}>
       <h3 className="text-lg font-semibold mb-3 text-slate-800 dark:text-white">Stundenpool</h3>
       <div className="flex flex-col gap-4">

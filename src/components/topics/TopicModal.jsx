@@ -505,8 +505,10 @@ export default function TopicModal({ isOpen, onClose, onSave, onDelete, topic, s
     } catch (error) {
       console.error('Error saving lesson:', error);
       toast.error('Fehler beim Speichern der Lektion');
+      setIsLessonModalOpen(false);
     }
-    setIsLessonModalOpen(false);
+    // Modal wird NICHT hier geschlossen - das macht der onClose callback vom LessonModal
+    // So funktioniert "Speichern & nächste" korrekt
   };
 
   const handleSubmit = async (e) => {
@@ -549,6 +551,21 @@ export default function TopicModal({ isOpen, onClose, onSave, onDelete, topic, s
       // führt die eigentliche Löschung durch
       onDelete(topic.id);
       onClose();
+    }
+  };
+
+  // Handler für das Löschen einer Lektion aus dem LessonModal
+  const handleDeleteLesson = async (lessonId) => {
+    try {
+      await YearlyLesson.delete(lessonId);
+      toast.success('Lektion gelöscht');
+      setIsLessonModalOpen(false);
+      // React Query Cache invalidieren
+      queryClient.invalidateQueries({ queryKey: ['yearlyLessons'] });
+      queryClient.invalidateQueries({ queryKey: ['allYearlyLessons'] });
+    } catch (error) {
+      console.error('Error deleting lesson:', error);
+      toast.error('Fehler beim Löschen der Lektion');
     }
   };
 
@@ -1133,6 +1150,7 @@ export default function TopicModal({ isOpen, onClose, onSave, onDelete, topic, s
           isOpen={isLessonModalOpen}
           onClose={() => setIsLessonModalOpen(false)}
           onSave={handleSaveLesson}
+          onDelete={handleDeleteLesson}
           lesson={selectedLesson}
           topics={fetchedTopics}
           allYearlyLessons={allYearlyLessons}
@@ -1142,6 +1160,91 @@ export default function TopicModal({ isOpen, onClose, onSave, onDelete, topic, s
           newLessonSlot={newLessonSlot}
           autoAssignTopicId={loadedTopic?.id}
           onOpenChange={() => console.log('LessonModal opened from TopicModal with autoAssignTopicId =', loadedTopic?.id)}
+          onSaveAndNext={async (nextLessonNumber) => {
+            const currentWeek = selectedLesson?.week_number || newLessonSlot?.week_number || getCurrentWeek();
+            const currentSubjectId = selectedLesson?.subject || effectiveSubject?.id;
+
+            if (!currentWeek || !currentSubjectId) {
+              console.warn('Keine gültige Woche oder Fach-ID für nächste Lektion');
+              return;
+            }
+
+            // Finde die nächste Lektion in derselben Woche
+            const nextLesson = allYearlyLessons.find(
+              l =>
+                l.week_number === currentWeek &&
+                l.subject === currentSubjectId &&
+                Number(l.lesson_number) === nextLessonNumber
+            );
+
+            if (nextLesson) {
+              // Lade die vollständige Lektion
+              try {
+                const fullLesson = await pb.collection('yearly_lessons').getOne(nextLesson.id, {
+                  expand: 'topic'
+                });
+                setSelectedLesson(fullLesson);
+                setNewLessonSlot(null);
+              } catch (error) {
+                console.error('Fehler beim Laden der nächsten Lektion:', error);
+                setSelectedLesson(nextLesson);
+                setNewLessonSlot(null);
+              }
+              return;
+            }
+
+            // Prüfe, ob in der aktuellen Woche noch Platz ist
+            const subjectLessonsInWeek = allYearlyLessons.filter(
+              l => l.week_number === currentWeek && l.subject === currentSubjectId
+            );
+            const maxLessonNumber = subjectLessonsInWeek.length > 0
+              ? Math.max(...subjectLessonsInWeek.map(l => Number(l.lesson_number)))
+              : 0;
+
+            let targetWeek = currentWeek;
+            let targetLessonNumber = nextLessonNumber;
+
+            if (nextLessonNumber > maxLessonNumber + 1) {
+              // Keine weitere Lektion in dieser Woche → nächste Woche
+              targetWeek = currentWeek + 1;
+              if (targetWeek > 52) {
+                console.warn('Keine weitere Woche verfügbar');
+                setIsLessonModalOpen(false);
+                return;
+              }
+              targetLessonNumber = 1;
+            }
+
+            // Erstelle neue Lektion
+            try {
+              const newLessonData = {
+                subject: currentSubjectId,
+                week_number: targetWeek,
+                lesson_number: targetLessonNumber,
+                school_year: new Date().getFullYear(),
+                class_id: selectedLesson?.class_id || null,
+                name: `Lektion ${targetLessonNumber}`,
+                description: '',
+                user_id: pb.authStore.model.id,
+                topic_id: loadedTopic?.id || null,
+                steps: [],
+                notes: '',
+                is_double_lesson: false,
+                is_exam: false,
+                is_half_class: false,
+                second_yearly_lesson_id: null,
+                allerlei_subjects: []
+              };
+
+              const createdLesson = await YearlyLesson.create(newLessonData);
+              queryClient.invalidateQueries({ queryKey: ['allYearlyLessons'] });
+              setSelectedLesson(createdLesson);
+              setNewLessonSlot(null);
+            } catch (error) {
+              console.error('Fehler beim Erstellen der nächsten Lektion:', error);
+              toast.error('Fehler beim Erstellen der nächsten Lektion');
+            }
+          }}
         />
       )}
       <ShareTopicDialog

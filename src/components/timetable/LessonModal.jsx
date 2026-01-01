@@ -768,7 +768,8 @@ export default function LessonModal({
           await Lesson.update(slaveLesson.id, {
             double_master_id: null,
             is_double_lesson: false,
-            second_yearly_lesson_id: null
+            second_yearly_lesson_id: null,
+            period_span: 1
           });
 
           if (slaveLesson.yearly_lesson_id) {
@@ -777,6 +778,9 @@ export default function LessonModal({
             });
           }
         }
+
+        // Master-Lesson period_span zurücksetzen
+        await Lesson.update(lesson.id, { period_span: 1 });
       }
 
       // Handle integration
@@ -920,6 +924,7 @@ export default function LessonModal({
             yearly_lesson_id: lesson.yearly_lesson_id,
             second_yearly_lesson_id: (preparedFormData.is_double_lesson && addSecondLesson && selectedSecondLesson && !isUnifiedDouble) ? selectedSecondLesson : null,
             topic_id: preparedFormData.topic_id === 'no_topic' ? undefined : preparedFormData.topic_id,
+            period_span: (preparedFormData.is_double_lesson && addSecondLesson && !isUnifiedDouble) ? 2 : 1,
           };
           await Lesson.update(lesson.id, lessonData);
           if (lessonData.yearly_lesson_id) {
@@ -962,7 +967,8 @@ export default function LessonModal({
             yearly_lesson_id: copiedLesson?.yearly_lesson_id || null,
             second_yearly_lesson_id: (preparedFormData.is_double_lesson && addSecondLesson && selectedSecondLesson && !isUnifiedDouble) ? selectedSecondLesson : null,
             user_id: pb.authStore.model.id,
-            is_hidden: false
+            is_hidden: false,
+            period_span: (preparedFormData.is_double_lesson && addSecondLesson && !isUnifiedDouble) ? 2 : 1
           };
           if (!lessonData.yearly_lesson_id) {
             const subjectYearlyLessons = allYearlyLessons
@@ -998,10 +1004,39 @@ export default function LessonModal({
             );
 
             if (existingSecondLesson) {
+              // Existierende Lektion als Slave verknüpfen
               await Lesson.update(existingSecondLesson.id, {
                 double_master_id: newLesson.id,
                 period_slot: slotInfo.period + 1
               });
+            } else {
+              // NEUE Slave-Lesson erstellen, wenn keine existierende gefunden wurde
+              const secondYL = allYearlyLessons.find(yl => yl.id === selectedSecondLesson);
+              if (secondYL) {
+                const nextPeriod = slotInfo.period + 1;
+                const nextTimeSlot = timeSlots.find(ts => ts.period === nextPeriod);
+
+                const slaveData = {
+                  subject: lessonData.subject,
+                  day_of_week: lessonData.day_of_week,
+                  period_slot: nextPeriod,
+                  week_number: currentWeek,
+                  yearly_lesson_id: secondYL.id,
+                  topic_id: secondYL.topic_id || null,
+                  is_double_lesson: true,
+                  second_yearly_lesson_id: lessonData.yearly_lesson_id,
+                  double_master_id: newLesson.id,
+                  start_time: nextTimeSlot?.start,
+                  end_time: nextTimeSlot?.end,
+                  is_exam: secondYL.is_exam || false,
+                  is_half_class: secondYL.is_half_class || false,
+                  is_hidden: false,
+                  user_id: pb.authStore.model.id,
+                  class_id: activeClassId
+                };
+
+                await Lesson.create(slaveData);
+              }
             }
           }
         }

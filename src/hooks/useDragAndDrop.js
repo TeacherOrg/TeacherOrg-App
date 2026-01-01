@@ -223,8 +223,33 @@ const useDragAndDrop = (lessonsForCurrentWeek, allLessons, allerleiLessons, curr
               day_of_week: finalTarget.day,
               period_span: 1,  // explizit
             });
+          } else {
+            // Slave-Lesson erstellen falls nicht vorhanden
+            const secondTimeSlot = timeSlots.find(ts => ts.period === finalTarget.period + 1);
+            const slaveData = {
+              subject: subject.id,
+              day_of_week: finalTarget.day,
+              period_slot: finalTarget.period + 1,
+              week_number: currentWeek,
+              week_year: getWeekYear(currentWeek, currentYear),
+              school_year: currentYear,
+              yearly_lesson_id: slaveYL.id,
+              topic_id: slaveYL.topic_id || null,
+              is_double_lesson: true,
+              second_yearly_lesson_id: masterYL.id,
+              double_master_id: newLesson.id,
+              start_time: secondTimeSlot?.start || '08:45',
+              end_time: secondTimeSlot?.end || '09:30',
+              period_span: 1,
+              is_exam: slaveYL.is_exam || false,
+              is_half_class: slaveYL.is_half_class || false,
+              is_hidden: false,
+              user_id: pb.authStore.model.id,
+              class_id: activeClassId,
+            };
+            const newSlave = await Lesson.create(slaveData);
+            optimisticUpdateAllLessons(newSlave, true);
           }
-          // Falls keine existiert → einfach ignorieren (wird später beim Auflösen sichtbar)
         }
 
         // Reassign and update order for the affected subject

@@ -276,7 +276,7 @@ class PbEntity {
 
     const params = {
       filter: finalFilter || '',
-      perPage: 500,
+      perPage: 2000,  // Erhöht von 500, um alle Lehrplan-Kompetenzen (~1000+) zu laden
       expand: this.expandFields,
       $cancelKey: cancelKey,  // ← DAS HINZUFÜGEN – das ist alles!
       // Sortierung nach sort_order für Subjects

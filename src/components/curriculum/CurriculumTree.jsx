@@ -300,10 +300,11 @@ let __CurriculumTreeError = null;
 let CurriculumTreeMain = null;
 
 // Fach-Kurzformen für Filter-Buttons
+// WICHTIG: Keys müssen mit fach_name in lehrplanData.js übereinstimmen
 const SUBJECT_SHORTCUTS = {
   'Deutsch': 'De',
   'Mathematik': 'Ma',
-  'Natur, Mensch, Gesellschaft': 'NMG',
+  'NMG': 'NMG',  // fach_name in lehrplanData.js ist 'NMG', nicht 'Natur, Mensch, Gesellschaft'
   'Bewegung und Sport': 'BuS',
   'Musik': 'Mu',
   'Bildnerisches Gestalten': 'BG',

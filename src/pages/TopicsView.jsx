@@ -950,17 +950,12 @@ const TopicsView = () => {
 
       setCurriculumCompetencies(competenciesData || []);
 
-      // Initialisiere den GESAMTEN Lehrplan 21 (alle 12 Fächer, unabhängig von User-Fächern)
-      const loadedSubjects = [...new Set(competenciesData.map(c => c.fach_name))];
-      const missingSubjects = SUPPORTED_LEHRPLAN_SUBJECTS.filter(s => !loadedSubjects.includes(s));
-
-      if (missingSubjects.length > 0) {
-        console.log('[TopicsView] Fehlende Lehrplan-Fächer:', missingSubjects);
-        const initialized = await initializeFullLehrplan21(competenciesData);
-        if (initialized > 0) {
-          const updatedCompetencies = await CurriculumCompetency.list();
-          setCurriculumCompetencies(updatedCompetencies || []);
-        }
+      // Initialisiere/Vervollständige den GESAMTEN Lehrplan 21 (alle 12 Fächer, unabhängig von User-Fächern)
+      // Prüft IMMER auf fehlende einzelne Kompetenzen (nicht nur fehlende Fächer)
+      const initialized = await initializeFullLehrplan21(competenciesData);
+      if (initialized > 0) {
+        const updatedCompetencies = await CurriculumCompetency.list();
+        setCurriculumCompetencies(updatedCompetencies || []);
       }
     } catch (error) {
       console.error('Error loading data:', error);
@@ -971,27 +966,41 @@ const TopicsView = () => {
   };
 
   // Initialisiert den GESAMTEN Lehrplan 21 (alle 12 Fächer)
+  // Prüft auch auf fehlende Kompetenzen und lädt diese nach
   const initializeFullLehrplan21 = async (existingCompetencies) => {
     let initialized = 0;
+    let totalAdded = 0;
 
     for (const subjectName of SUPPORTED_LEHRPLAN_SUBJECTS) {
-      // Prüfe ob bereits Kompetenzen für dieses Fach existieren
-      const hasExisting = existingCompetencies.some(c => c.fach_name === subjectName);
-      if (!hasExisting) {
-        const lehrplanData = getLehrplanData(subjectName);
-        if (lehrplanData.length > 0) {
-          try {
-            await CurriculumCompetency.bulkCreate(lehrplanData);
-            console.log(`[TopicsView] Lehrplan für ${subjectName} initialisiert (${lehrplanData.length} Kompetenzen)`);
-            initialized++;
-          } catch (error) {
-            console.error(`Error initializing Lehrplan for ${subjectName}:`, error);
-          }
+      const lehrplanData = getLehrplanData(subjectName);
+      if (lehrplanData.length === 0) continue;
+
+      // Hole existierende Kompetenz-IDs für dieses Fach
+      const existingForSubject = existingCompetencies.filter(c => c.fach_name === subjectName);
+      const existingIds = new Set(existingForSubject.map(c => c.kompetenz_id));
+
+      // Finde fehlende Kompetenzen (die in lehrplanData sind, aber nicht in der DB)
+      // Setze Fallback für leere beschreibung, da PocketBase dies erfordert
+      const missingCompetencies = lehrplanData
+        .filter(c => !existingIds.has(c.kompetenz_id))
+        .map(c => ({
+          ...c,
+          beschreibung: c.beschreibung || '-'
+        }));
+
+      if (missingCompetencies.length > 0) {
+        try {
+          await CurriculumCompetency.bulkCreate(missingCompetencies);
+          console.log(`[TopicsView] Lehrplan für ${subjectName}: ${missingCompetencies.length} fehlende Kompetenzen nachgeladen (${existingForSubject.length} existierten bereits)`);
+          initialized++;
+          totalAdded += missingCompetencies.length;
+        } catch (error) {
+          console.error(`Error initializing Lehrplan for ${subjectName}:`, error);
         }
       }
     }
     if (initialized > 0) {
-      toast.success(`Lehrplan 21 für ${initialized} Fach/Fächer geladen!`);
+      toast.success(`${totalAdded} Lehrplan-Kompetenzen für ${initialized} Fach/Fächer nachgeladen!`);
     }
     return initialized;
   };

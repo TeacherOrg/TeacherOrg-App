@@ -63,6 +63,8 @@ export function LessonModalFooter({
             className="bg-emerald-600 hover:bg-emerald-700 text-white"
             disabled={isSubmitting || !isFormValid}
             onClick={(e) => {
+              // Call the onSaveAndNext callback to set the state
+              onSaveAndNext?.();
               // Set flag for save and next before form submission
               e.currentTarget.form?.setAttribute('data-save-and-next', 'true');
             }}

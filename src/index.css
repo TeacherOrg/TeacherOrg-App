@@ -730,6 +730,7 @@ html, body, #root {
     border: 1px solid #e2e8f0;
     border-radius: 1rem;
     overflow-y: auto;
+    overflow-x: hidden;
     padding: 0.75rem;
     z-index: 10;
     flex-shrink: 0; /* Verhindert Schrumpfen */
