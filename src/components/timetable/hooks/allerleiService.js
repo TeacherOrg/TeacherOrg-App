@@ -215,6 +215,56 @@ export const allerleiService = {
     }
   },
 
+  async unlinkAndDelete(allerleiId, allLessons, currentWeek) {
+    try {
+      const allerlei = await AllerleiLesson.findById(allerleiId);
+      if (!allerlei) {
+        console.warn(`Allerlei lesson not found for ID ${allerleiId}. Skipping unlinkAndDelete.`);
+        return;
+      }
+
+      // 1. Alle YearlyLesson-IDs sammeln
+      const allYlIds = [
+        allerlei.primary_yearly_lesson_id,
+        ...(Array.isArray(allerlei.added_yearly_lesson_ids) ? allerlei.added_yearly_lesson_ids : [])
+      ].filter(Boolean);
+
+      console.log('Debug: unlinkAndDelete - Allerlei ID:', allerleiId, 'YL IDs:', allYlIds);
+
+      // 2. YearlyLessons zurücksetzen (is_allerlei: false, Namen bereinigen)
+      for (const ylId of allYlIds) {
+        const yl = await YearlyLesson.findById(ylId);
+        if (yl) {
+          await YearlyLesson.update(ylId, {
+            name: (yl.name || '').replace(' (Allerlei)', ''),
+            notes: (yl.notes || '').replace(' (in Allerlei)', ''),
+            is_allerlei: false
+          });
+        }
+      }
+
+      // 3. Alle versteckten Lektionen dieser YearlyLessons LÖSCHEN
+      for (const ylId of allYlIds) {
+        const hiddenLessons = allLessons.filter(l =>
+          l.yearly_lesson_id === ylId &&
+          l.is_hidden &&
+          l.week_number === currentWeek
+        );
+        for (const lesson of hiddenLessons) {
+          console.log('Debug: Deleting hidden lesson:', lesson.id);
+          await Lesson.delete(lesson.id);
+        }
+      }
+
+      // 4. AllerleiLesson löschen
+      await AllerleiLesson.delete(allerleiId);
+      console.log(`Debug: unlinkAndDelete completed for Allerlei ID ${allerleiId}`);
+    } catch (error) {
+      console.error('Error in unlinkAndDelete:', error);
+      throw error;
+    }
+  },
+
   async convertToAllerlei(lessonId, data) {
     const prepared = prepareAllerleiForPersist(data);
     const newAllerlei = await AllerleiLesson.create(prepared);

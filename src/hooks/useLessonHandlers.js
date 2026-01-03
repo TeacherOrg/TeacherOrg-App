@@ -558,10 +558,31 @@ const useLessonHandlers = (editingLesson, currentYear, allLessons, yearlyLessons
     }
     try {
       if (lessonToDelete.collectionName === 'allerlei_lessons') {
-        await allerleiService.unlink(lessonToDelete.id, allLessons, timeSlots, currentWeek);
+        // Bei Allerleilektionen: unlinkAndDelete löscht alles (versteckte Lektionen + AllerleiLesson)
+        await allerleiService.unlinkAndDelete(lessonToDelete.id, allLessons, currentWeek);
+        removeAllLesson(lessonId);
+        // Auch die versteckten Lektionen aus dem State entfernen
+        const allerleiYlIds = [
+          lessonToDelete.primary_yearly_lesson_id,
+          ...(lessonToDelete.added_yearly_lesson_ids || [])
+        ].filter(Boolean);
+        let finalLessons = allLessons.filter(l => {
+          // AllerleiLesson selbst entfernen
+          if (l.id === lessonId) return false;
+          // Versteckte Lektionen der Allerlei entfernen
+          if (l.is_hidden && l.week_number === currentWeek && allerleiYlIds.includes(l.yearly_lesson_id)) return false;
+          return true;
+        });
+        for (const sub of subjectsToReassign) {
+          if (sub) {
+            finalLessons = await reassignYearlyLessonLinks(sub, finalLessons);
+          }
+        }
+        setAllLessons(finalLessons);
+        await refetch();
         queryClientLocal.invalidateQueries({ queryKey: ['timetableData'] });
         queryClientLocal.invalidateQueries(['yearlyData', currentYear]);
-        await refetch();
+        return; // Früh zurückkehren - alles erledigt
       }
       await Lesson.delete(lessonId);
       removeAllLesson(lessonId);

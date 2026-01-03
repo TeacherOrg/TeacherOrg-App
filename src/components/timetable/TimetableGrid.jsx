@@ -1,5 +1,5 @@
 import React from "react";
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Plus } from "lucide-react";
 import { useDroppable } from "@dnd-kit/core";
@@ -65,16 +65,45 @@ const getHolidayDisplay = (holiday) => {
 
 const DraggableItem = ({ id, data, children, onClick }) => {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useDraggable({ id, data });
+  const clickTimeRef = useRef(0);
+
   const style = {
     transform: transform ? `translate3d(${transform.x}px, ${transform.y}px, 0)` : undefined,
     transition,
     opacity: isDragging ? 0 : 1, // Hide original during drag - DragOverlay shows the preview
   };
-  return <div ref={setNodeRef} style={style} {...listeners} {...attributes} className="h-full w-full select-none lesson-card" onClick={onClick}>{children}</div>;
+
+  const handlePointerDown = (e) => {
+    clickTimeRef.current = Date.now();
+    listeners?.onPointerDown?.(e);
+  };
+
+  const handleClick = (e) => {
+    const elapsed = Date.now() - clickTimeRef.current;
+    // Wenn der Klick schnell war (< 150ms) und kein Drag stattfand
+    if (elapsed < 150 && !isDragging) {
+      e.stopPropagation();
+      onClick?.();
+    }
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      {...listeners}
+      {...attributes}
+      onPointerDown={handlePointerDown}
+      onClick={handleClick}
+      className="h-full w-full select-none lesson-card"
+    >
+      {children}
+    </div>
+  );
 };
 
 const TimetableGrid = React.forwardRef(
-  ({ lessons, onCreateLesson, onEditLesson, timeSlots, currentWeek, holidays, weekInfo, onShowHover, onHideHover, subjects, mergePreview, isSelectingMerge }, ref) => {
+  ({ lessons, onCreateLesson, onEditLesson, timeSlots, currentWeek, holidays, weekInfo, onShowHover, onHideHover, subjects, mergePreview, isSelectingMerge, readOnly = false }, ref) => {
     const [isAltPressed, setIsAltPressed] = useState(false);
 
     useEffect(() => {
@@ -209,15 +238,16 @@ const TimetableGrid = React.forwardRef(
                 isOccupied={false} // Da wir überdeckte Zellen nicht rendern, ist isOccupied hier immer false
                 lesson={lesson}
                 droppableId={droppableId}
-                onCreateLesson={onCreateLesson}
+                onCreateLesson={readOnly ? null : onCreateLesson}
                 day={day}
                 slot={slot}
-                onEditLesson={onEditLesson}
+                onEditLesson={readOnly ? null : onEditLesson}
                 onShowHover={onShowHover}
                 onHideHover={onHideHover}
                 isLastRow={isLastRow}
                 subjects={subjects}
-                isAltPressed={isAltPressed} // Pass isAltPressed to SlotCell
+                isAltPressed={isAltPressed}
+                readOnly={readOnly}
               />
             );
           })}
@@ -225,16 +255,16 @@ const TimetableGrid = React.forwardRef(
       );
     };
 
-    const SlotCell = ({ dayIndex, rowNum, holiday, isOccupied, lesson, droppableId, onCreateLesson, day, slot, onEditLesson, onShowHover, onHideHover, isLastRow, subjects, isAltPressed }) => {
+    const SlotCell = ({ dayIndex, rowNum, holiday, isOccupied, lesson, droppableId, onCreateLesson, day, slot, onEditLesson, onShowHover, onHideHover, isLastRow, subjects, isAltPressed, readOnly = false }) => {
       const validDays = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
       if (!validDays.includes(day.key)) {
         console.error(`Invalid day.key in SlotCell: ${day.key} for slot ${slot.period}`);
         return null; // Oder rendern eines leeren Slots
       }
 
-      const { setNodeRef: dropRef, isOver } = useDroppable({ 
-        id: droppableId, 
-        disabled: !!lesson || !!holiday || isOccupied 
+      const { setNodeRef: dropRef, isOver } = useDroppable({
+        id: droppableId,
+        disabled: readOnly || !!lesson || !!holiday || isOccupied
       });
 
       if (isOccupied) {
@@ -329,16 +359,18 @@ const TimetableGrid = React.forwardRef(
                 </div>
               );
             })() : (
-              <div className="absolute inset-0">
-                <div className="absolute inset-1 rounded-lg border-2 border-transparent border-dashed opacity-0 group-hover:opacity-100 group-hover:border-blue-400 group-hover:bg-blue-900/20 transition-all duration-200" />
-                <Button
-                  variant="ghost"
-                  className="w-full h-full text-blue-400 opacity-0 group-hover:opacity-100 transition-all duration-200 flex items-center justify-center relative hover:bg-transparent"
-                  onClick={() => onCreateLesson(day.key, slot.period)}
-                >
-                  <Plus className="w-5 h-5 z-10" />
-                </Button>
-              </div>
+              !readOnly && onCreateLesson && (
+                <div className="absolute inset-0">
+                  <div className="absolute inset-1 rounded-lg border-2 border-transparent border-dashed opacity-0 group-hover:opacity-100 group-hover:border-blue-400 group-hover:bg-blue-900/20 transition-all duration-200" />
+                  <Button
+                    variant="ghost"
+                    className="w-full h-full text-blue-400 opacity-0 group-hover:opacity-100 transition-all duration-200 flex items-center justify-center relative hover:bg-transparent"
+                    onClick={() => onCreateLesson(day.key, slot.period)}
+                  >
+                    <Plus className="w-5 h-5 z-10" />
+                  </Button>
+                </div>
+              )
             )}
           </div>
         </div>

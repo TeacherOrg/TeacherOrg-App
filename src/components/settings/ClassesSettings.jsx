@@ -1,12 +1,13 @@
 import React, { useState, useRef } from 'react';
-import { Class, Student, Subject, Lesson, YearlyLesson, Performance, UeberfachlichKompetenz, Topic, Fachbereich, AllerleiLesson, Competency, Chore, ChoreAssignment, Group, UserPreferences, LehrplanKompetenz } from '@/api/entities';
+import { Class, Student, Subject, Lesson, YearlyLesson, Performance, UeberfachlichKompetenz, Topic, Fachbereich, AllerleiLesson, Competency, Chore, ChoreAssignment, Group, UserPreferences, LehrplanKompetenz, User } from '@/api/entities';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { Plus, Trash2, ChevronDown, ChevronUp, FileText, Loader2 } from 'lucide-react';
+import { Plus, Trash2, ChevronDown, ChevronUp, FileText, Loader2, UserPlus, KeyRound, Printer, Mail, Check, X } from 'lucide-react';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import pb from '@/api/pb';
+import toast from 'react-hot-toast';
 
 // Utility functions for cascading deletes with rate limiting
 const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
@@ -40,6 +41,12 @@ export default function ClassesSettings({ classes, refreshData, setActiveClassId
   const [showImportDialog, setShowImportDialog] = useState(false);
   const [expandedClasses, setExpandedClasses] = useState(new Set());
   const [isDeletingClass, setIsDeletingClass] = useState(false);
+
+  // Account Management State
+  const [isCreatingAccounts, setIsCreatingAccounts] = useState(false);
+  const [showAccountsModal, setShowAccountsModal] = useState(false);
+  const [createdAccounts, setCreatedAccounts] = useState([]); // [{name, email, password}]
+  const [editingEmail, setEditingEmail] = useState({}); // {studentId: email}
 
   React.useEffect(() => {
     if (activeClassId) {
@@ -542,6 +549,145 @@ export default function ClassesSettings({ classes, refreshData, setActiveClassId
     });
   };
 
+  // === Account Management Functions ===
+
+  const handleEmailChange = async (studentId, newEmail) => {
+    try {
+      await Student.update(studentId, { email: newEmail });
+      setStudents(prev => prev.map(s =>
+        s.id === studentId ? { ...s, email: newEmail } : s
+      ));
+      setEditingEmail(prev => {
+        const updated = { ...prev };
+        delete updated[studentId];
+        return updated;
+      });
+      toast.success('E-Mail aktualisiert');
+    } catch (error) {
+      console.error('Error updating email:', error);
+      toast.error('Fehler beim Aktualisieren der E-Mail');
+    }
+  };
+
+  const handleCreateAccounts = async () => {
+    // Finde alle Schüler ohne Account und mit gültiger E-Mail
+    const studentsWithoutAccount = students.filter(s => !s.account_id && s.email && !s.email.includes('@school.example.com'));
+
+    if (studentsWithoutAccount.length === 0) {
+      toast.error('Keine Schüler mit gültiger E-Mail ohne Account gefunden. Bitte fügen Sie zuerst E-Mail-Adressen hinzu.');
+      return;
+    }
+
+    setIsCreatingAccounts(true);
+    const newAccounts = [];
+
+    for (const student of studentsWithoutAccount) {
+      const result = await User.createStudentAccount({
+        studentId: student.id,
+        email: student.email,
+        name: student.name
+      });
+
+      if (result.success) {
+        newAccounts.push({
+          name: student.name,
+          email: student.email,
+          password: result.password
+        });
+      } else {
+        toast.error(`Fehler bei ${student.name}: ${result.error}`);
+      }
+
+      await delay(200); // Rate limiting
+    }
+
+    setIsCreatingAccounts(false);
+
+    if (newAccounts.length > 0) {
+      setCreatedAccounts(newAccounts);
+      setShowAccountsModal(true);
+      toast.success(`${newAccounts.length} Account(s) erstellt!`);
+      await loadStudents(); // Refresh to show account status
+    }
+  };
+
+  const handleResetPassword = async (student) => {
+    if (!student.account_id) {
+      toast.error('Dieser Schüler hat noch keinen Account');
+      return;
+    }
+
+    const result = await User.resetStudentPassword(student.account_id);
+
+    if (result.success) {
+      setCreatedAccounts([{
+        name: student.name,
+        email: student.email,
+        password: result.password
+      }]);
+      setShowAccountsModal(true);
+      toast.success('Passwort zurückgesetzt');
+    } else {
+      toast.error(result.error);
+    }
+  };
+
+  const printAccountsList = () => {
+    const printWindow = window.open('', '_blank');
+    const html = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Schüler-Zugangsdaten</title>
+        <style>
+          body { font-family: Arial, sans-serif; padding: 20px; }
+          h1 { color: #1e40af; margin-bottom: 20px; }
+          table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+          th, td { border: 1px solid #ddd; padding: 12px; text-align: left; }
+          th { background-color: #f3f4f6; }
+          .password { font-family: monospace; background: #fef3c7; padding: 4px 8px; border-radius: 4px; }
+          .footer { margin-top: 30px; font-size: 12px; color: #666; }
+          @media print { .no-print { display: none; } }
+        </style>
+      </head>
+      <body>
+        <h1>Schüler-Zugangsdaten</h1>
+        <p>Klasse: ${classes.find(c => c.id === activeClassId)?.name || 'Unbekannt'}</p>
+        <p>Erstellt am: ${new Date().toLocaleDateString('de-DE')}</p>
+        <table>
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>E-Mail</th>
+              <th>Passwort</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${createdAccounts.map(acc => `
+              <tr>
+                <td>${acc.name}</td>
+                <td>${acc.email}</td>
+                <td class="password">${acc.password}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+        <div class="footer">
+          <p>Wichtig: Dieses Dokument enthält vertrauliche Zugangsdaten. Bitte sicher aufbewahren und nach Verteilung vernichten.</p>
+        </div>
+        <button class="no-print" onclick="window.print()" style="margin-top: 20px; padding: 10px 20px; cursor: pointer;">
+          Drucken
+        </button>
+      </body>
+      </html>
+    `;
+    printWindow.document.write(html);
+    printWindow.document.close();
+  };
+
+  const studentsWithoutAccount = students.filter(s => !s.account_id);
+  const studentsWithValidEmail = students.filter(s => s.email && !s.email.includes('@school.example.com'));
+
   return (
     <div className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">
       <h3 className="text-xl font-bold mb-6 text-slate-900 dark:text-white">Klassenverwaltung</h3>
@@ -582,21 +728,94 @@ export default function ClassesSettings({ classes, refreshData, setActiveClassId
                     <CollapsibleContent className="mt-3">
                       {activeClassId === cls.id && (
                         <div className="space-y-3 pl-4 border-l-2 border-slate-300 dark:border-slate-600">
-                          {/* Students list */}
-                          <div className="max-h-32 overflow-y-auto">
+                          {/* Students list with email and account status */}
+                          <div className="max-h-64 overflow-y-auto">
                             {students.length > 0 ? (
-                              <div className="grid grid-cols-2 gap-2">
+                              <div className="space-y-2">
                                 {students.map(student => (
-                                  <div key={student.id} className="flex justify-between items-center p-2 bg-white dark:bg-slate-700 rounded text-sm">
-                                    <span>{student.name}</span>
-                                    <Button 
-                                      variant="ghost" 
-                                      size="icon" 
-                                      className="h-6 w-6 text-red-500 hover:bg-red-100 dark:hover:bg-red-900/30" 
-                                      onClick={() => handleDeleteStudent(student.id)}
-                                    >
-                                      <Trash2 className="w-3 h-3"/>
-                                    </Button>
+                                  <div key={student.id} className="flex items-center gap-2 p-2 bg-white dark:bg-slate-700 rounded text-sm">
+                                    {/* Account Status Icon */}
+                                    <div className={`w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 ${
+                                      student.account_id
+                                        ? 'bg-green-100 dark:bg-green-900/30 text-green-600'
+                                        : 'bg-slate-100 dark:bg-slate-600 text-slate-400'
+                                    }`}>
+                                      {student.account_id ? <Check className="w-3 h-3" /> : <X className="w-3 h-3" />}
+                                    </div>
+
+                                    {/* Name */}
+                                    <span className="font-medium min-w-[120px]">{student.name}</span>
+
+                                    {/* Email Field */}
+                                    {editingEmail[student.id] !== undefined ? (
+                                      <div className="flex-1 flex gap-1">
+                                        <Input
+                                          value={editingEmail[student.id]}
+                                          onChange={e => setEditingEmail(prev => ({...prev, [student.id]: e.target.value}))}
+                                          placeholder="email@example.com"
+                                          className="h-7 text-xs flex-1"
+                                          onKeyDown={e => e.key === 'Enter' && handleEmailChange(student.id, editingEmail[student.id])}
+                                        />
+                                        <Button
+                                          variant="ghost"
+                                          size="icon"
+                                          className="h-7 w-7 text-green-600"
+                                          onClick={() => handleEmailChange(student.id, editingEmail[student.id])}
+                                        >
+                                          <Check className="w-3 h-3" />
+                                        </Button>
+                                        <Button
+                                          variant="ghost"
+                                          size="icon"
+                                          className="h-7 w-7 text-slate-400"
+                                          onClick={() => setEditingEmail(prev => {
+                                            const updated = {...prev};
+                                            delete updated[student.id];
+                                            return updated;
+                                          })}
+                                        >
+                                          <X className="w-3 h-3" />
+                                        </Button>
+                                      </div>
+                                    ) : (
+                                      <button
+                                        className={`flex-1 text-left text-xs px-2 py-1 rounded hover:bg-slate-100 dark:hover:bg-slate-600 truncate ${
+                                          student.email?.includes('@school.example.com')
+                                            ? 'text-orange-500 italic'
+                                            : 'text-slate-600 dark:text-slate-300'
+                                        }`}
+                                        onClick={() => setEditingEmail(prev => ({...prev, [student.id]: student.email || ''}))}
+                                        title={student.email || 'Klicken zum Bearbeiten'}
+                                      >
+                                        {student.email?.includes('@school.example.com')
+                                          ? '⚠️ E-Mail eingeben...'
+                                          : (student.email || '📧 E-Mail eingeben...')}
+                                      </button>
+                                    )}
+
+                                    {/* Actions */}
+                                    <div className="flex gap-1 flex-shrink-0">
+                                      {student.account_id && (
+                                        <Button
+                                          variant="ghost"
+                                          size="icon"
+                                          className="h-6 w-6 text-amber-500 hover:bg-amber-100 dark:hover:bg-amber-900/30"
+                                          onClick={() => handleResetPassword(student)}
+                                          title="Passwort zurücksetzen"
+                                        >
+                                          <KeyRound className="w-3 h-3" />
+                                        </Button>
+                                      )}
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-6 w-6 text-red-500 hover:bg-red-100 dark:hover:bg-red-900/30"
+                                        onClick={() => handleDeleteStudent(student.id)}
+                                        title="Schüler löschen"
+                                      >
+                                        <Trash2 className="w-3 h-3"/>
+                                      </Button>
+                                    </div>
                                   </div>
                                 ))}
                               </div>
@@ -604,6 +823,43 @@ export default function ClassesSettings({ classes, refreshData, setActiveClassId
                               <p className="text-slate-500 dark:text-slate-400 text-sm">Keine Schüler in dieser Klasse</p>
                             )}
                           </div>
+
+                          {/* Account Creation Section */}
+                          {students.length > 0 && (
+                            <div className="mt-3 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
+                              <div className="flex items-center justify-between gap-2 flex-wrap">
+                                <div className="text-xs text-blue-700 dark:text-blue-300">
+                                  <span className="font-medium">{students.filter(s => s.account_id).length}</span>/{students.length} mit Account
+                                  {studentsWithoutAccount.length > 0 && studentsWithValidEmail.filter(s => !s.account_id).length > 0 && (
+                                    <span className="ml-2">• {studentsWithValidEmail.filter(s => !s.account_id).length} bereit</span>
+                                  )}
+                                </div>
+                                <Button
+                                  onClick={handleCreateAccounts}
+                                  disabled={isCreatingAccounts || studentsWithValidEmail.filter(s => !s.account_id).length === 0}
+                                  size="sm"
+                                  className="bg-blue-600 hover:bg-blue-700 text-xs h-7"
+                                >
+                                  {isCreatingAccounts ? (
+                                    <>
+                                      <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                                      Erstelle...
+                                    </>
+                                  ) : (
+                                    <>
+                                      <UserPlus className="w-3 h-3 mr-1" />
+                                      Accounts erstellen
+                                    </>
+                                  )}
+                                </Button>
+                              </div>
+                              {studentsWithoutAccount.length > 0 && studentsWithValidEmail.filter(s => !s.account_id).length === 0 && (
+                                <p className="text-xs text-orange-600 dark:text-orange-400 mt-2">
+                                  ⚠️ Bitte fügen Sie gültige E-Mail-Adressen hinzu, bevor Sie Accounts erstellen.
+                                </p>
+                              )}
+                            </div>
+                          )}
                           
                           {/* Add student form */}
                           <div className="space-y-2">
@@ -688,7 +944,7 @@ export default function ClassesSettings({ classes, refreshData, setActiveClassId
             <div className="space-y-4">
               <div>
                 <Label className="text-sm">Namen einfügen (einen pro Zeile):</Label>
-                <Textarea 
+                <Textarea
                   value={studentList}
                   onChange={e => setStudentList(e.target.value)}
                   placeholder="Max Mustermann&#10;Anna Schmidt&#10;..."
@@ -696,8 +952,8 @@ export default function ClassesSettings({ classes, refreshData, setActiveClassId
                 />
               </div>
               <div className="flex gap-2 justify-end">
-                <Button 
-                  variant="outline" 
+                <Button
+                  variant="outline"
                   onClick={() => {
                     setShowImportDialog(false);
                     setStudentList('');
@@ -705,7 +961,7 @@ export default function ClassesSettings({ classes, refreshData, setActiveClassId
                 >
                   Abbrechen
                 </Button>
-                <Button 
+                <Button
                   onClick={handlePasteStudents}
                   className="bg-green-600 hover:bg-green-700"
                   disabled={!studentList.trim()}
@@ -713,6 +969,80 @@ export default function ClassesSettings({ classes, refreshData, setActiveClassId
                   Importieren
                 </Button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Created Accounts Modal */}
+      {showAccountsModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white dark:bg-slate-800 rounded-lg p-6 w-[500px] max-w-[95vw] max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="flex items-center justify-between mb-4">
+              <h4 className="text-lg font-semibold flex items-center gap-2">
+                <UserPlus className="w-5 h-5 text-green-600" />
+                Zugangsdaten erstellt
+              </h4>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setShowAccountsModal(false)}
+              >
+                <X className="w-4 h-4" />
+              </Button>
+            </div>
+
+            <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-3 mb-4">
+              <p className="text-sm text-amber-800 dark:text-amber-200">
+                ⚠️ <strong>Wichtig:</strong> Diese Passwörter werden nur einmal angezeigt!
+                Bitte drucken oder kopieren Sie sie jetzt.
+              </p>
+            </div>
+
+            <div className="flex-1 overflow-y-auto mb-4">
+              <table className="w-full text-sm">
+                <thead className="bg-slate-100 dark:bg-slate-700">
+                  <tr>
+                    <th className="text-left p-2 rounded-tl">Name</th>
+                    <th className="text-left p-2">E-Mail</th>
+                    <th className="text-left p-2 rounded-tr">Passwort</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {createdAccounts.map((acc, idx) => (
+                    <tr key={idx} className="border-b border-slate-200 dark:border-slate-600">
+                      <td className="p-2 font-medium">{acc.name}</td>
+                      <td className="p-2 text-slate-600 dark:text-slate-300">{acc.email}</td>
+                      <td className="p-2">
+                        <code className="bg-yellow-100 dark:bg-yellow-900/30 px-2 py-1 rounded text-yellow-800 dark:text-yellow-200 font-mono">
+                          {acc.password}
+                        </code>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="flex gap-2 justify-end pt-4 border-t border-slate-200 dark:border-slate-700">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  const text = createdAccounts.map(a => `${a.name}\t${a.email}\t${a.password}`).join('\n');
+                  navigator.clipboard.writeText(text);
+                  toast.success('In Zwischenablage kopiert');
+                }}
+              >
+                <Mail className="w-4 h-4 mr-2" />
+                Kopieren
+              </Button>
+              <Button
+                onClick={printAccountsList}
+                className="bg-blue-600 hover:bg-blue-700"
+              >
+                <Printer className="w-4 h-4 mr-2" />
+                Drucken
+              </Button>
             </div>
           </div>
         </div>

@@ -108,7 +108,7 @@ const KPICards = ({ performances, students, subjects, selectedSubject = 'all', s
         average: avg,
         count: perfs.length
       };
-    }).filter(s => s.count > 0);
+    }).filter(s => s.count > 0 && s.average > 0); // Fächer mit nur 0-Noten ausschließen
 
     subjectStats.sort((a, b) => b.average - a.average);
 
@@ -124,13 +124,17 @@ const KPICards = ({ performances, students, subjects, selectedSubject = 'all', s
             if (!fachbereicheMap[fachbereich]) {
               fachbereicheMap[fachbereich] = { grades: [], count: 0 };
             }
-            fachbereicheMap[fachbereich].grades.push(p.grade);
-            fachbereicheMap[fachbereich].count++;
+            // Noten mit 0 ausschließen (0 = nicht erledigt)
+            if (p.grade > 0) {
+              fachbereicheMap[fachbereich].grades.push(p.grade);
+              fachbereicheMap[fachbereich].count++;
+            }
           });
         }
       });
 
       return Object.entries(fachbereicheMap)
+        .filter(([_, data]) => data.grades.length > 0) // Nur Fachbereiche mit gültigen Noten
         .map(([name, data]) => ({
           name,
           average: parseFloat((data.grades.reduce((sum, g) => sum + g, 0) / data.grades.length).toFixed(2)),
@@ -161,7 +165,10 @@ const KPICards = ({ performances, students, subjects, selectedSubject = 'all', s
             if (!fachbereicheMap[fachbereich]) {
               fachbereicheMap[fachbereich] = { grades: [], subjects: new Set() };
             }
-            fachbereicheMap[fachbereich].grades.push(p.grade);
+            // Noten mit 0 ausschließen (0 = nicht erledigt)
+            if (p.grade > 0) {
+              fachbereicheMap[fachbereich].grades.push(p.grade);
+            }
             if (p.subject) {
               const subjectName = subjects.find(s => s.id === p.subject)?.name || p.subject;
               fachbereicheMap[fachbereich].subjects.add(subjectName);
@@ -170,12 +177,14 @@ const KPICards = ({ performances, students, subjects, selectedSubject = 'all', s
         }
       });
 
-      const allFachbereiche = Object.entries(fachbereicheMap).map(([name, data]) => ({
-        name,
-        average: parseFloat((data.grades.reduce((sum, g) => sum + g, 0) / data.grades.length).toFixed(2)),
-        count: data.grades.length,
-        subjects: Array.from(data.subjects).sort()
-      })).sort((a, b) => b.average - a.average);
+      const allFachbereiche = Object.entries(fachbereicheMap)
+        .filter(([_, data]) => data.grades.length > 0) // Nur Fachbereiche mit gültigen Noten
+        .map(([name, data]) => ({
+          name,
+          average: parseFloat((data.grades.reduce((sum, g) => sum + g, 0) / data.grades.length).toFixed(2)),
+          count: data.grades.length,
+          subjects: Array.from(data.subjects).sort()
+        })).sort((a, b) => b.average - a.average);
 
       const weakFachbereiche = allFachbereiche
         .filter(fb => fb.average < 4.0)
@@ -207,7 +216,10 @@ const KPICards = ({ performances, students, subjects, selectedSubject = 'all', s
             if (!fachbereicheMap[fachbereich]) {
               fachbereicheMap[fachbereich] = { grades: [], subjects: new Set() };
             }
-            fachbereicheMap[fachbereich].grades.push(p.grade);
+            // Noten mit 0 ausschließen (0 = nicht erledigt)
+            if (p.grade > 0) {
+              fachbereicheMap[fachbereich].grades.push(p.grade);
+            }
             const subjectName = subjects.find(s => s.id === p.subject)?.name || p.subject;
             fachbereicheMap[fachbereich].subjects.add(subjectName);
           });
@@ -215,6 +227,7 @@ const KPICards = ({ performances, students, subjects, selectedSubject = 'all', s
       });
 
       criticalFachbereiche = Object.entries(fachbereicheMap)
+        .filter(([_, data]) => data.grades.length > 0) // Nur Fachbereiche mit gültigen Noten
         .map(([name, data]) => ({
           name,
           average: parseFloat((data.grades.reduce((sum, g) => sum + g, 0) / data.grades.length).toFixed(2)),

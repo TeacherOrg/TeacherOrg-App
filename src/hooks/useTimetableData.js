@@ -29,6 +29,11 @@ const useTimetableData = (currentYear, currentWeek) => {
 
   const userId = pb.authStore.model?.id;
 
+  // Reset activeClassId wenn sich der User ändert (Login/Logout)
+  useEffect(() => {
+    setActiveClassId(null);
+  }, [userId]);
+
   const { data, isLoading: queryLoading, error: queryError, refetch } = useQuery({
     queryKey: ['timetableData', userId, currentYear, currentWeek],
     queryFn: async () => {

@@ -18,10 +18,12 @@ class PbEntity {
       setting: 'user_id',
       classe: 'user_id',
       holiday: 'user_id',
-      student: 'class_id,user_id',
+      student: 'class_id,user_id,account_id',
       performance: 'student_id,class_id,subject',
       ueberfachliche_kompetenz: 'student_id,class_id,competency_id',
       competencie: 'user_id,class_id',
+      student_self_assessment: 'student_id,competency_id',
+      competency_goal: 'student_id,competency_id,created_by,completed_by',
       fachbereich: '',
       daily_note: '',
       announcement: '',
@@ -233,6 +235,26 @@ class PbEntity {
       if (!normalizedItem.name || typeof normalizedItem.name !== 'string') {
         normalizedItem.name = 'Unbenannte Klasse';
       }
+    }
+
+    // Student Self Assessment normalization
+    if (this.name === 'student_self_assessment') {
+      normalizedItem.student_name = normalizedItem.expand?.student_id?.name || '';
+      normalizedItem.competency_name = normalizedItem.expand?.competency_id?.name || '';
+    }
+
+    // Competency Goal normalization
+    if (this.name === 'competency_goal') {
+      normalizedItem.student_name = normalizedItem.expand?.student_id?.name || '';
+      normalizedItem.competency_name = normalizedItem.expand?.competency_id?.name || '';
+      normalizedItem.creator_name = normalizedItem.expand?.created_by?.name || '';
+      normalizedItem.completer_name = normalizedItem.expand?.completed_by?.name || '';
+    }
+
+    // Student - include account info if expanded
+    if (this.name === 'student') {
+      normalizedItem.has_account = !!normalizedItem.account_id;
+      normalizedItem.account_email = normalizedItem.expand?.account_id?.email || null;
     }
 
     if (this.name === 'subject') {
@@ -600,6 +622,10 @@ export const SharedTopic = new PbEntity('shared_topic');
 SharedTopic.collectionName = 'shared_topics';
 SharedTopic.collection = pb.collection('shared_topics');
 
+// Student Dashboard Entities
+export const StudentSelfAssessment = new PbEntity('Student_self_assessment');
+export const CompetencyGoal = new PbEntity('Competency_goal');
+
 export const User = {
   current: () => pb.authStore.model || null,
 
@@ -653,5 +679,70 @@ export const User = {
       toast.success('Erfolgreich abgemeldet.');
     });
     return { success: true };
+  },
+
+  /**
+   * Erstellt einen Schüler-Account und verknüpft ihn mit dem Student-Record
+   * @param {Object} params - { studentId, email, name }
+   * @returns {Object} { success, user, password } oder { success: false, error }
+   */
+  createStudentAccount: async ({ studentId, email, name }) => {
+    try {
+      // Generiere sicheres Passwort (ohne verwechselbare Zeichen)
+      const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
+      const password = Array.from({ length: 8 }, () =>
+        chars[Math.floor(Math.random() * chars.length)]
+      ).join('');
+
+      // Erstelle User-Account mit Rolle 'student'
+      const username = email.split('@')[0].replace(/[^a-zA-Z0-9]/g, '') + '_' + Date.now().toString(36);
+      const userData = {
+        username,
+        email,
+        password,
+        passwordConfirm: password,
+        role: 'student',
+        name: name,
+        emailVisibility: true,
+      };
+
+      const newUser = await pb.collection('users').create(userData);
+
+      // Verknüpfe Student-Record mit dem neuen Account
+      await Student.update(studentId, { account_id: newUser.id });
+
+      return { success: true, user: newUser, password };
+    } catch (error) {
+      console.error('Error creating student account:', error);
+      let errorMessage = 'Fehler beim Erstellen des Accounts.';
+      if (error.status === 400 && error.data?.data?.email) {
+        errorMessage = 'Diese E-Mail-Adresse ist bereits registriert.';
+      }
+      return { success: false, error: errorMessage };
+    }
+  },
+
+  /**
+   * Setzt das Passwort eines Schülers zurück
+   * @param {string} userId - Die User-ID des Schüler-Accounts
+   * @returns {Object} { success, password } oder { success: false, error }
+   */
+  resetStudentPassword: async (userId) => {
+    try {
+      const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
+      const newPassword = Array.from({ length: 8 }, () =>
+        chars[Math.floor(Math.random() * chars.length)]
+      ).join('');
+
+      await pb.collection('users').update(userId, {
+        password: newPassword,
+        passwordConfirm: newPassword,
+      });
+
+      return { success: true, password: newPassword };
+    } catch (error) {
+      console.error('Error resetting student password:', error);
+      return { success: false, error: 'Fehler beim Zurücksetzen des Passworts.' };
+    }
   },
 };

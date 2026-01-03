@@ -1335,33 +1335,19 @@ export default function LessonModal({
               />
             </div>
             <div className="space-y-3 p-4 border rounded-lg bg-slate-100/50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700">
-              {primarySteps.length === 0 && topicMaterials.length > 0 ? (
+              {primarySteps.map((step, index) => (
                 <StepRow
-                  key={`dummy-materials-${topicMaterials.length}`}
-                  step={{ id: 'dummy', time: null, workForm: '', activity: '', material: '' }}
-                  onUpdate={() => {}}
-                  onRemove={() => {}}
+                  key={`primary-${index}-${step.id}`}
+                  step={step}
+                  onUpdate={(field, value) => handleUpdatePrimaryStep(step.id, field, value)}
+                  onRemove={() => handleRemovePrimaryStep(step.id)}
                   topicMaterials={topicMaterials}
                   topicColor={topicColor}
-                  isLast={true}
+                  isLast={index === primarySteps.length - 1}
                   isUnifiedDouble={isUnifiedDouble}
                   lessonDuration={settings?.lessonDuration || 45}
                 />
-              ) : (
-                primarySteps.map((step, index) => (
-                  <StepRow
-                    key={`primary-${index}-${step.id}`}
-                    step={step}
-                    onUpdate={(field, value) => handleUpdatePrimaryStep(step.id, field, value)}
-                    onRemove={() => handleRemovePrimaryStep(step.id)}
-                    topicMaterials={topicMaterials}
-                    topicColor={topicColor}
-                    isLast={index === primarySteps.length - 1}
-                    isUnifiedDouble={isUnifiedDouble}
-                    lessonDuration={settings?.lessonDuration || 45}
-                  />
-                ))
-              )}
+              ))}
               <div className="flex gap-2 mt-2">
                 <Button type="button" variant="outline" onClick={handleAddPrimaryStep} className="w-full border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white bg-white dark:bg-slate-700 hover:bg-slate-100 dark:hover:bg-slate-600">
                   <PlusCircle className="w-4 h-4 mr-2" />

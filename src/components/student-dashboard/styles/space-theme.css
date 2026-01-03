@@ -1,0 +1,435 @@
+/* Space Theme CSS for Student Dashboard */
+
+/* === Color Variables === */
+:root {
+  /* Primary Space Colors */
+  --space-void: #0a0a1a;
+  --space-deep: #0d1025;
+  --space-mid: #141b3d;
+  --space-surface: #1e2755;
+  --space-light: #2a3566;
+
+  /* Nebula Accents */
+  --nebula-purple: #7c3aed;
+  --nebula-purple-glow: rgba(124, 58, 237, 0.4);
+  --nebula-blue: #3b82f6;
+  --nebula-blue-glow: rgba(59, 130, 246, 0.4);
+  --nebula-pink: #ec4899;
+  --nebula-cyan: #06b6d4;
+
+  /* Star Colors */
+  --star-white: #ffffff;
+  --star-yellow: #fbbf24;
+  --star-blue: #60a5fa;
+  --star-red: #f87171;
+
+  /* Planet Gradients (for strengths) */
+  --planet-gold: linear-gradient(135deg, #fbbf24 0%, #f59e0b 50%, #d97706 100%);
+  --planet-silver: linear-gradient(135deg, #94a3b8 0%, #64748b 50%, #475569 100%);
+  --planet-bronze: linear-gradient(135deg, #ea580c 0%, #c2410c 50%, #9a3412 100%);
+
+  /* Asteroid Colors (for weaknesses) */
+  --asteroid-dark: linear-gradient(135deg, #374151 0%, #1f2937 50%, #111827 100%);
+  --asteroid-glow: rgba(239, 68, 68, 0.3);
+
+  /* Rocket Gradient */
+  --rocket-body: linear-gradient(180deg, #e2e8f0 0%, #94a3b8 100%);
+  --rocket-flame: linear-gradient(180deg, #fbbf24 0%, #f97316 50%, #dc2626 100%);
+
+  /* UI Elements */
+  --space-card-bg: rgba(30, 39, 85, 0.6);
+  --space-card-border: rgba(124, 58, 237, 0.3);
+  --space-text-primary: #f1f5f9;
+  --space-text-secondary: #94a3b8;
+  --space-text-accent: #a78bfa;
+}
+
+/* === Base Styles for Space Theme === */
+.space-theme {
+  background: var(--space-void);
+  color: var(--space-text-primary);
+  min-height: 100vh;
+  position: relative;
+  overflow-x: hidden;
+}
+
+/* === Starfield Background === */
+.starfield {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.starfield-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 200%;
+  height: 200%;
+}
+
+.starfield-far {
+  background-image:
+    radial-gradient(1px 1px at 10% 10%, var(--star-white) 50%, transparent 50%),
+    radial-gradient(1px 1px at 20% 40%, var(--star-white) 50%, transparent 50%),
+    radial-gradient(1px 1px at 30% 20%, var(--star-blue) 50%, transparent 50%),
+    radial-gradient(1px 1px at 40% 60%, var(--star-white) 50%, transparent 50%),
+    radial-gradient(1px 1px at 50% 30%, var(--star-white) 50%, transparent 50%),
+    radial-gradient(1px 1px at 60% 80%, var(--star-yellow) 50%, transparent 50%),
+    radial-gradient(1px 1px at 70% 50%, var(--star-white) 50%, transparent 50%),
+    radial-gradient(1px 1px at 80% 10%, var(--star-white) 50%, transparent 50%),
+    radial-gradient(1px 1px at 90% 70%, var(--star-blue) 50%, transparent 50%),
+    radial-gradient(1px 1px at 15% 85%, var(--star-white) 50%, transparent 50%);
+  background-size: 300px 300px;
+  animation: drift-slow 120s linear infinite;
+  opacity: 0.6;
+}
+
+.starfield-mid {
+  background-image:
+    radial-gradient(2px 2px at 5% 25%, var(--star-white) 50%, transparent 50%),
+    radial-gradient(2px 2px at 25% 55%, var(--star-yellow) 50%, transparent 50%),
+    radial-gradient(2px 2px at 45% 15%, var(--star-white) 50%, transparent 50%),
+    radial-gradient(2px 2px at 65% 75%, var(--star-white) 50%, transparent 50%),
+    radial-gradient(2px 2px at 85% 45%, var(--star-blue) 50%, transparent 50%),
+    radial-gradient(2px 2px at 35% 95%, var(--star-white) 50%, transparent 50%);
+  background-size: 400px 400px;
+  animation: drift-medium 80s linear infinite;
+  opacity: 0.8;
+}
+
+.starfield-near {
+  background-image:
+    radial-gradient(3px 3px at 15% 35%, var(--star-white) 50%, transparent 50%),
+    radial-gradient(2px 2px at 55% 65%, var(--star-yellow) 50%, transparent 50%),
+    radial-gradient(3px 3px at 75% 25%, var(--star-white) 50%, transparent 50%);
+  background-size: 500px 500px;
+  animation: drift-fast 40s linear infinite, twinkle 4s ease-in-out infinite;
+}
+
+/* === Animations === */
+@keyframes drift-slow {
+  from { transform: translate(0, 0); }
+  to { transform: translate(-150px, -150px); }
+}
+
+@keyframes drift-medium {
+  from { transform: translate(0, 0); }
+  to { transform: translate(-200px, -200px); }
+}
+
+@keyframes drift-fast {
+  from { transform: translate(0, 0); }
+  to { transform: translate(-250px, -250px); }
+}
+
+@keyframes twinkle {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-8px); }
+}
+
+@keyframes glow-pulse {
+  0%, 100% {
+    box-shadow: 0 0 10px var(--nebula-purple-glow),
+                0 0 20px var(--nebula-purple-glow);
+  }
+  50% {
+    box-shadow: 0 0 20px var(--nebula-purple-glow),
+                0 0 40px var(--nebula-blue-glow),
+                0 0 60px var(--nebula-purple-glow);
+  }
+}
+
+@keyframes flame {
+  0%, 100% { transform: scaleY(1); opacity: 1; }
+  25% { transform: scaleY(1.15); opacity: 0.9; }
+  50% { transform: scaleY(0.9); opacity: 1; }
+  75% { transform: scaleY(1.1); opacity: 0.95; }
+}
+
+@keyframes orbit {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes pulse-ring {
+  0% { transform: scale(1); opacity: 0.5; }
+  100% { transform: scale(1.5); opacity: 0; }
+}
+
+@keyframes achievement-unlock {
+  0% { transform: scale(0) rotate(-180deg); opacity: 0; }
+  50% { transform: scale(1.2) rotate(10deg); }
+  100% { transform: scale(1) rotate(0deg); opacity: 1; }
+}
+
+@keyframes star-collect {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.3); filter: brightness(1.5); }
+  100% { transform: scale(1); }
+}
+
+/* === Space Cards === */
+.space-card {
+  background: var(--space-card-bg);
+  border: 1px solid var(--space-card-border);
+  border-radius: 16px;
+  backdrop-filter: blur(10px);
+  padding: 1.5rem;
+  position: relative;
+  overflow: hidden;
+  transition: all 0.3s ease;
+}
+
+.space-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--nebula-purple), var(--nebula-blue), transparent);
+  opacity: 0.5;
+}
+
+.space-card:hover {
+  border-color: var(--nebula-purple);
+  transform: translateY(-2px);
+  box-shadow: 0 10px 40px rgba(124, 58, 237, 0.2);
+}
+
+/* === Planet (Strength) Styles === */
+.planet {
+  border-radius: 50%;
+  position: relative;
+  animation: float 6s ease-in-out infinite;
+}
+
+.planet-ring {
+  position: absolute;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-radius: 50%;
+  transform: rotateX(75deg);
+  animation: orbit 20s linear infinite;
+}
+
+.planet-glow {
+  position: absolute;
+  inset: -10px;
+  border-radius: 50%;
+  background: radial-gradient(circle, var(--nebula-purple-glow), transparent 70%);
+  animation: glow-pulse 4s ease-in-out infinite;
+}
+
+/* === Asteroid (Weakness) Styles === */
+.asteroid {
+  background: var(--asteroid-dark);
+  border-radius: 30% 70% 70% 30% / 30% 30% 70% 70%;
+  position: relative;
+  animation: float 8s ease-in-out infinite reverse;
+}
+
+.asteroid::after {
+  content: '';
+  position: absolute;
+  inset: -5px;
+  border-radius: inherit;
+  background: var(--asteroid-glow);
+  filter: blur(10px);
+  z-index: -1;
+}
+
+/* === Rocket Progress === */
+.rocket-container {
+  position: relative;
+  height: 300px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.rocket {
+  position: relative;
+  transition: transform 0.5s ease-out;
+}
+
+.rocket-flame {
+  background: var(--rocket-flame);
+  animation: flame 0.3s ease-in-out infinite;
+  transform-origin: top center;
+}
+
+/* === Star Rating === */
+.space-star {
+  color: var(--star-yellow);
+  filter: drop-shadow(0 0 3px var(--star-yellow));
+  transition: all 0.2s ease;
+}
+
+.space-star:hover {
+  transform: scale(1.2);
+  filter: drop-shadow(0 0 8px var(--star-yellow));
+}
+
+.space-star.filled {
+  animation: star-collect 0.3s ease-out;
+}
+
+.space-star.empty {
+  color: var(--space-light);
+  filter: none;
+}
+
+/* === Goal Items === */
+.goal-item {
+  background: var(--space-card-bg);
+  border: 1px solid var(--space-card-border);
+  border-radius: 12px;
+  padding: 1rem;
+  transition: all 0.3s ease;
+}
+
+.goal-item.completed {
+  border-color: rgba(34, 197, 94, 0.5);
+  background: rgba(34, 197, 94, 0.1);
+}
+
+.goal-item.completed .goal-check {
+  animation: achievement-unlock 0.5s ease-out;
+}
+
+/* === Comparison Gauge === */
+.comparison-gauge {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem;
+  background: var(--space-card-bg);
+  border-radius: 12px;
+}
+
+.gauge-bar {
+  height: 8px;
+  border-radius: 4px;
+  background: var(--space-light);
+  position: relative;
+  overflow: hidden;
+}
+
+.gauge-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.5s ease-out;
+}
+
+.gauge-fill.teacher {
+  background: var(--nebula-blue);
+}
+
+.gauge-fill.self {
+  background: var(--nebula-purple);
+}
+
+/* === Navigation Tabs (Space Style) === */
+.space-tabs {
+  display: flex;
+  gap: 0.5rem;
+  padding: 0.5rem;
+  background: var(--space-surface);
+  border-radius: 12px;
+  border: 1px solid var(--space-card-border);
+}
+
+.space-tab {
+  padding: 0.75rem 1.5rem;
+  border-radius: 8px;
+  color: var(--space-text-secondary);
+  transition: all 0.2s ease;
+  cursor: pointer;
+  border: none;
+  background: transparent;
+}
+
+.space-tab:hover {
+  color: var(--space-text-primary);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.space-tab.active {
+  background: var(--nebula-purple);
+  color: white;
+  box-shadow: 0 0 20px var(--nebula-purple-glow);
+}
+
+/* === Achievement Wall === */
+.achievement-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+  gap: 1rem;
+}
+
+.achievement-star {
+  aspect-ratio: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--space-card-bg);
+  border: 1px solid var(--space-card-border);
+  border-radius: 50%;
+  transition: all 0.3s ease;
+}
+
+.achievement-star.earned {
+  border-color: var(--star-yellow);
+  background: linear-gradient(135deg, rgba(251, 191, 36, 0.2), rgba(251, 191, 36, 0.05));
+  animation: glow-pulse 3s ease-in-out infinite;
+}
+
+/* === Responsive Adjustments === */
+@media (max-width: 768px) {
+  .space-card {
+    padding: 1rem;
+  }
+
+  .space-tabs {
+    flex-wrap: wrap;
+  }
+
+  .space-tab {
+    flex: 1;
+    min-width: 80px;
+    text-align: center;
+    padding: 0.5rem 1rem;
+  }
+}
+
+/* === Utility Classes === */
+.text-glow {
+  text-shadow: 0 0 10px currentColor;
+}
+
+.border-glow {
+  box-shadow: 0 0 10px var(--nebula-purple-glow);
+}
+
+.animate-float {
+  animation: float 6s ease-in-out infinite;
+}
+
+.animate-glow {
+  animation: glow-pulse 4s ease-in-out infinite;
+}
+
+.animate-twinkle {
+  animation: twinkle 2s ease-in-out infinite;
+}

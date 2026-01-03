@@ -115,9 +115,9 @@ export default function Login({ onLogin }) {
                   <SelectValue placeholder="Rolle wählen" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="admin">Admin</SelectItem>
-                  <SelectItem value="teacher">Teacher</SelectItem>
-                  <SelectItem value="student">Student</SelectItem>
+                  <SelectItem value="admin">Administrator</SelectItem>
+                  <SelectItem value="teacher">Lehrer/in</SelectItem>
+                  <SelectItem value="student">Schüler/in</SelectItem>
                 </SelectContent>
               </Select>
             </div>

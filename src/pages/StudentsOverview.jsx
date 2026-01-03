@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { Student, Performance, UeberfachlichKompetenz, Class } from "@/api/entities";
-import { Users, TrendingDown, Award, AlertCircle, ChevronRight, Search, Star } from "lucide-react";
+import { Users, TrendingDown, Award, AlertCircle, ChevronRight, Search, Star, LayoutDashboard } from "lucide-react";
 import { motion } from "framer-motion";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -457,9 +457,22 @@ export default function StudentsOverview() {
                       </div>
 
                       {/* Call to Action */}
-                      <div className="pt-2 flex items-center justify-end text-xs text-slate-500 dark:text-slate-400 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
-                        <span className="font-medium">Details anzeigen</span>
-                        <ChevronRight className="w-3.5 h-3.5 ml-1 group-hover:translate-x-1 transition-transform" />
+                      <div className="pt-2 flex items-center justify-between text-xs">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            navigate(`/student-dashboard?studentId=${card.student.id}`);
+                          }}
+                          className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 hover:bg-purple-200 dark:hover:bg-purple-900/50 transition-colors"
+                          title="Schüler-Dashboard ansehen"
+                        >
+                          <LayoutDashboard className="w-3.5 h-3.5" />
+                          <span className="font-medium">Dashboard</span>
+                        </button>
+                        <div className="flex items-center text-slate-500 dark:text-slate-400 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+                          <span className="font-medium">Details</span>
+                          <ChevronRight className="w-3.5 h-3.5 ml-1 group-hover:translate-x-1 transition-transform" />
+                        </div>
                       </div>
                     </CardContent>
                   </Card>

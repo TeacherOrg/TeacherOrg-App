@@ -57,33 +57,19 @@ export function StepsSection({
       </div>
 
       <div className="space-y-3 p-4 border rounded-lg bg-slate-100/50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700">
-        {steps.length === 0 && topicMaterials.length > 0 ? (
+        {steps.map((step, index) => (
           <StepRow
-            key="dummy-materials"
-            step={{ id: 'dummy', time: null, workForm: '', activity: '', material: '' }}
-            onUpdate={() => {}}
-            onRemove={() => {}}
+            key={`step-${index}-${step.id}`}
+            step={step}
+            onUpdate={(field, value) => onUpdateStep(step.id, field, value)}
+            onRemove={() => onRemoveStep(step.id)}
             topicMaterials={topicMaterials}
             topicColor={topicColor}
-            isLast={true}
+            isLast={index === steps.length - 1}
             isUnifiedDouble={isUnifiedDouble}
             lessonDuration={lessonDuration}
           />
-        ) : (
-          steps.map((step, index) => (
-            <StepRow
-              key={`step-${index}-${step.id}`}
-              step={step}
-              onUpdate={(field, value) => onUpdateStep(step.id, field, value)}
-              onRemove={() => onRemoveStep(step.id)}
-              topicMaterials={topicMaterials}
-              topicColor={topicColor}
-              isLast={index === steps.length - 1}
-              isUnifiedDouble={isUnifiedDouble}
-              lessonDuration={lessonDuration}
-            />
-          ))
-        )}
+        ))}
 
         <div className="flex gap-2 mt-2">
           <Button
