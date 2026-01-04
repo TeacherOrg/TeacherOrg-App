@@ -274,19 +274,27 @@ export default function DailyView({ currentDate, onDateChange }) {
   const loadAllData = async () => {
     setIsLoading(true);
     try {
+      // User-ID für Filterung - nur eigene Daten laden
+      const userId = pb.authStore.model?.id;
+      if (!userId) {
+        console.error("[DailyView] Kein authentifizierter User gefunden");
+        setIsLoading(false);
+        return;
+      }
+
       const [lessonsData, yearlyLessonsData, subjectsData, holidaysData, settingsData, classesData, choresData, assignmentsData, announcementsData, studentsData, topicsData, allerleiLessonsData] = await Promise.all([
-        Lesson.list(),
-        YearlyLesson.list(),
-        Subject.list(),
-        Holiday.list(),
-        Setting.list(),
-        Class.list(),
-        Chore.list(),
-        ChoreAssignment.list(),
-        Announcement.list(),
-        Student.list(),
-        Topic.list(),
-        AllerleiLesson.list()
+        Lesson.list({ user_id: userId }),
+        YearlyLesson.list({ user_id: userId }),
+        Subject.list(),  // Hat bereits internen User-Filter in entities.js
+        Holiday.list({ user_id: userId }),
+        Setting.list({ user_id: userId }),
+        Class.list({ user_id: userId }),
+        Chore.list({ user_id: userId }),
+        ChoreAssignment.list({ user_id: userId }),
+        Announcement.list({ user_id: userId }),
+        Student.list({ user_id: userId }),
+        Topic.list({ user_id: userId }),
+        AllerleiLesson.list({ user_id: userId })
       ]);
       
       setAllLessons(lessonsData || []);
@@ -344,10 +352,11 @@ export default function DailyView({ currentDate, onDateChange }) {
   const lessonsForDate = useMemo(() => {
     if (!dayOfWeek || dayOfWeek === 'sunday' || dayOfWeek === 'saturday') return [];
     
-    // Normale Lektionen
-    const normalLessons = allLessons.filter(lesson => 
-      lesson.day_of_week === dayOfWeek && 
-      lesson.week_number === currentWeek
+    // Normale Lektionen - OHNE Slave-Lektionen (bei Doppellektionen)
+    const normalLessons = allLessons.filter(lesson =>
+      lesson.day_of_week === dayOfWeek &&
+      lesson.week_number === currentWeek &&
+      !lesson.double_master_id  // Slave-Lessons ausblenden (Master zeigt beide)
     );
 
     // Allerlei-Lektionen (separat gespeichert)
@@ -400,8 +409,17 @@ export default function DailyView({ currentDate, onDateChange }) {
         topicName = yearlyLesson.topic_name;
       }
 
-      // 2. Steps
-      if (yearlyLesson?.steps?.length > 0) {
+      // 2. Steps - Bei Doppellektionen BEIDE kombinieren
+      if (lesson.is_double_lesson && yearlyLesson?.steps?.length > 0 && secondYearlyLesson?.steps?.length > 0) {
+        // Beide Steps zusammenführen
+        steps = [...yearlyLesson.steps, ...secondYearlyLesson.steps];
+      } else if (lesson.is_double_lesson && yearlyLesson?.steps?.length > 0) {
+        // Nur erste YearlyLesson hat Steps
+        steps = yearlyLesson.steps;
+      } else if (lesson.is_double_lesson && secondYearlyLesson?.steps?.length > 0) {
+        // Nur zweite YearlyLesson hat Steps
+        steps = secondYearlyLesson.steps;
+      } else if (yearlyLesson?.steps?.length > 0) {
         steps = yearlyLesson.steps;
       } else if (secondYearlyLesson?.steps?.length > 0) {
         steps = secondYearlyLesson.steps;

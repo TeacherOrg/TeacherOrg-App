@@ -21,12 +21,12 @@ export function useCompetencyGoals(studentId, onUpdate) {
   const creatorRole = isStudent ? 'student' : 'teacher';
 
   /**
-   * Create a new goal for a competency
-   * @param {string} competencyId - The competency this goal is for
+   * Create a new goal (optionally linked to a competency)
+   * @param {string|null} competencyId - The competency this goal is for (null for independent goals)
    * @param {string} goalText - The goal description
    */
   const createGoal = useCallback(async (competencyId, goalText) => {
-    if (!studentId || !competencyId || !goalText?.trim()) {
+    if (!studentId || !goalText?.trim()) {
       toast.error('Bitte Zieltext eingeben');
       return { success: false };
     }
@@ -42,7 +42,7 @@ export function useCompetencyGoals(studentId, onUpdate) {
     try {
       await CompetencyGoal.create({
         student_id: studentId,
-        competency_id: competencyId,
+        competency_id: competencyId || null, // Kann null sein für unabhängige Ziele
         goal_text: goalText.trim(),
         created_by: currentUser.id,
         creator_role: creatorRole,

@@ -5,6 +5,7 @@ import toast from 'react-hot-toast';
 /**
  * Hook for managing student self-assessments
  * Provides CRUD operations for self-assessment ratings
+ * Includes weekly rating limit functionality
  *
  * @param {string} studentId - The student ID
  * @param {Function} onUpdate - Callback after successful update
@@ -13,6 +14,7 @@ import toast from 'react-hot-toast';
 export function useSelfAssessments(studentId, onUpdate) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [selfAssessments, setSelfAssessments] = useState([]);
 
   /**
    * Create or update a self-assessment for a competency
@@ -136,13 +138,60 @@ export function useSelfAssessments(studentId, onUpdate) {
       .sort((a, b) => new Date(b.date) - new Date(a.date));
   }, []);
 
+  /**
+   * Check if student can rate this competency this week
+   * Students can only self-assess once per week per competency
+   * @param {Array} allAssessments - All self-assessments
+   * @param {string} competencyId - The competency to check
+   * @returns {boolean} True if rating is allowed
+   */
+  const canRateThisWeek = useCallback((allAssessments, competencyId) => {
+    const history = getHistoryForCompetency(allAssessments, competencyId);
+    if (history.length === 0) return true;
+
+    const lastRating = history[0];
+    const lastDate = new Date(lastRating.date);
+    const now = new Date();
+
+    // Get start of current week (Monday)
+    const weekStart = new Date(now);
+    const day = weekStart.getDay();
+    const diff = weekStart.getDate() - day + (day === 0 ? -6 : 1); // Adjust for Monday
+    weekStart.setDate(diff);
+    weekStart.setHours(0, 0, 0, 0);
+
+    return lastDate < weekStart;
+  }, [getHistoryForCompetency]);
+
+  /**
+   * Get the date when next rating is possible
+   * @param {Array} allAssessments - All self-assessments
+   * @param {string} competencyId - The competency to check
+   * @returns {Date|null} Next possible rating date or null if can rate now
+   */
+  const getNextRatingDate = useCallback((allAssessments, competencyId) => {
+    if (canRateThisWeek(allAssessments, competencyId)) return null;
+
+    // Calculate next Monday
+    const now = new Date();
+    const day = now.getDay();
+    const daysUntilMonday = day === 0 ? 1 : 8 - day;
+    const nextMonday = new Date(now);
+    nextMonday.setDate(now.getDate() + daysUntilMonday);
+    nextMonday.setHours(0, 0, 0, 0);
+
+    return nextMonday;
+  }, [canRateThisWeek]);
+
   return {
     loading,
     error,
     rateSelf,
     updateAssessment,
     deleteAssessment,
-    getHistoryForCompetency
+    getHistoryForCompetency,
+    canRateThisWeek,
+    getNextRatingDate
   };
 }
 

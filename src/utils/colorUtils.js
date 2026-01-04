@@ -176,3 +176,120 @@ export const adjustBrightness = (color, amount) => {
 
   return `#${r.toString(16).padStart(2, "0")}${g.toString(16).padStart(2, "0")}${b.toString(16).padStart(2, "0")}`;
 };
+
+/**
+ * Fachbereich-Farben für das Schülerdashboard
+ * Statische Zuordnung von Fachbereich-Namen zu Hex-Farben
+ */
+export const FACHBEREICH_COLORS = {
+  // Sprachen
+  'Deutsch': '#3b82f6',      // Blau
+  'D': '#3b82f6',
+  'DE': '#3b82f6',
+  'Französisch': '#a855f7',  // Lila
+  'Franz': '#a855f7',
+  'F': '#a855f7',
+  'FR': '#a855f7',
+  'Englisch': '#f97316',     // Orange
+  'E': '#f97316',
+  'EN': '#f97316',
+
+  // Mathematik
+  'Mathematik': '#ef4444',   // Rot
+  'Mathe': '#ef4444',
+  'Math': '#ef4444',
+  'M': '#ef4444',
+  'MA': '#ef4444',
+
+  // Natur, Mensch, Gesellschaft
+  'NMG': '#22c55e',          // Grün
+  'NMM': '#22c55e',
+  'Natur, Mensch, Gesellschaft': '#22c55e',
+  'Mensch und Umwelt': '#22c55e',
+  'M+U': '#22c55e',
+
+  // Sport
+  'Sport': '#06b6d4',        // Cyan
+  'SP': '#06b6d4',
+  'Turnen': '#06b6d4',
+  'BSP': '#06b6d4',
+
+  // Musische Fächer
+  'Musik': '#ec4899',        // Pink
+  'MU': '#ec4899',
+  'BG': '#eab308',           // Gelb (Bildnerisches Gestalten)
+  'Bildnerisches Gestalten': '#eab308',
+  'Zeichnen': '#eab308',
+  'TTG': '#14b8a6',          // Teal (Textiles und Technisches Gestalten)
+  'Textiles Gestalten': '#14b8a6',
+  'Werken': '#14b8a6',
+  'TG': '#14b8a6',
+
+  // Weitere Fächer
+  'RZG': '#6366f1',          // Indigo (Räume, Zeiten, Gesellschaften)
+  'Geschichte': '#6366f1',
+  'Geo': '#6366f1',
+  'Geografie': '#6366f1',
+  'WAH': '#f43f5e',          // Rose (Wirtschaft, Arbeit, Haushalt)
+  'Hauswirtschaft': '#f43f5e',
+  'HW': '#f43f5e',
+  'MI': '#8b5cf6',           // Violet (Medien und Informatik)
+  'Informatik': '#8b5cf6',
+  'ICT': '#8b5cf6',
+  'ERG': '#0ea5e9',          // Sky (Ethik, Religionen, Gemeinschaft)
+  'Religion': '#0ea5e9',
+  'Ethik': '#0ea5e9',
+
+  // Allerlei / Gemischt
+  'Allerlei': '#64748b',
+  'Diverses': '#64748b',
+  'Sonstiges': '#64748b',
+};
+
+/**
+ * Normalisiert einen Fachbereich-Namen für das Farb-Mapping
+ * Entfernt Leerzeichen, konvertiert zu Uppercase für Vergleich
+ * @param {string} name - Fachbereich-Name
+ * @returns {string} Normalisierter Name
+ */
+const normalizeFachbereichName = (name) => {
+  if (!name) return '';
+  // Trimmen und erste Buchstaben groß
+  return name.trim();
+};
+
+/**
+ * Gibt die Farbe für einen Fachbereich zurück
+ * Unterstützt verschiedene Schreibweisen und Abkürzungen
+ * @param {string} name - Fachbereich-Name
+ * @returns {string} Hex-Farbe
+ */
+export const getFachbereichColor = (name) => {
+  if (!name) return '#64748b';
+
+  const normalized = normalizeFachbereichName(name);
+
+  // Direkte Übereinstimmung
+  if (FACHBEREICH_COLORS[normalized]) {
+    return FACHBEREICH_COLORS[normalized];
+  }
+
+  // Case-insensitive Suche
+  const lowerName = normalized.toLowerCase();
+  for (const [key, color] of Object.entries(FACHBEREICH_COLORS)) {
+    if (key.toLowerCase() === lowerName) {
+      return color;
+    }
+  }
+
+  // Teilstring-Suche für längere Namen
+  for (const [key, color] of Object.entries(FACHBEREICH_COLORS)) {
+    if (lowerName.includes(key.toLowerCase()) || key.toLowerCase().includes(lowerName)) {
+      return color;
+    }
+  }
+
+  // Fallback: Slate
+  console.warn(`⚠️ Fachbereich "${name}" nicht in FACHBEREICH_COLORS gefunden. Verwende Fallback-Farbe.`);
+  return '#64748b';
+};

@@ -27,32 +27,57 @@ export default function ComparisonGauge({ teacherScore, selfScore, compact = fal
   const gap = teacherScore && selfScore ? Math.abs(teacherScore - selfScore) : null;
 
   if (compact) {
+    // RPG-Style horizontale Balken
     return (
-      <div className="flex items-center gap-4">
-        {/* Teacher */}
-        <div className="flex items-center gap-1">
-          <GraduationCap className="w-4 h-4 text-blue-400" />
-          <span className="text-sm text-slate-300">
-            {teacherScore ? `${teacherScore}/5` : '-'}
+      <div className="space-y-2 w-full">
+        {/* Lehrer-Balken */}
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1 w-16 flex-shrink-0">
+            <GraduationCap className="w-3 h-3 text-blue-400" />
+            <span className="text-xs text-slate-400">LP</span>
+          </div>
+          <div className="flex-1 h-2.5 bg-slate-700/80 rounded-full overflow-hidden border border-slate-600">
+            <div
+              className="h-full rounded-full transition-all duration-700 ease-out"
+              style={{
+                width: teacherScore ? `${(teacherScore / 5) * 100}%` : '0%',
+                background: 'linear-gradient(90deg, #3b82f6 0%, #60a5fa 50%, #93c5fd 100%)',
+                boxShadow: teacherScore ? '0 0 8px rgba(59, 130, 246, 0.6)' : 'none'
+              }}
+            />
+          </div>
+          <span className="text-xs font-bold text-blue-400 w-6 text-right">
+            {teacherScore || '-'}
           </span>
         </div>
 
-        {/* Divider */}
-        <div className="h-4 w-px bg-slate-600" />
-
-        {/* Self */}
-        <div className="flex items-center gap-1">
-          <User className="w-4 h-4 text-purple-400" />
-          <span className="text-sm text-slate-300">
-            {selfScore ? `${selfScore}/5` : '-'}
+        {/* Selbst-Balken */}
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1 w-16 flex-shrink-0">
+            <User className="w-3 h-3 text-purple-400" />
+            <span className="text-xs text-slate-400">Ich</span>
+          </div>
+          <div className="flex-1 h-2.5 bg-slate-700/80 rounded-full overflow-hidden border border-slate-600">
+            <div
+              className="h-full rounded-full transition-all duration-700 ease-out"
+              style={{
+                width: selfScore ? `${(selfScore / 5) * 100}%` : '0%',
+                background: 'linear-gradient(90deg, #8b5cf6 0%, #a78bfa 50%, #c4b5fd 100%)',
+                boxShadow: selfScore ? '0 0 8px rgba(139, 92, 246, 0.6)' : 'none'
+              }}
+            />
+          </div>
+          <span className="text-xs font-bold text-purple-400 w-6 text-right">
+            {selfScore || '-'}
           </span>
         </div>
 
-        {/* Gap indicator */}
+        {/* Gap indicator - nur wenn beide Werte vorhanden */}
         {gap !== null && (
-          <span className={`text-xs ${getGapColor(gap)}`}>
-            {getGapText(gap)}
-          </span>
+          <div className={`flex items-center justify-center gap-1 text-xs ${getGapColor(gap)} mt-1`}>
+            {gap === 0 && <span className="animate-pulse">✨</span>}
+            <span>{getGapText(gap)}</span>
+          </div>
         )}
       </div>
     );

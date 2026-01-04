@@ -66,6 +66,7 @@ const getHolidayDisplay = (holiday) => {
 const DraggableItem = ({ id, data, children, onClick }) => {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useDraggable({ id, data });
   const clickTimeRef = useRef(0);
+  const startPosRef = useRef({ x: 0, y: 0 });
 
   const style = {
     transform: transform ? `translate3d(${transform.x}px, ${transform.y}px, 0)` : undefined,
@@ -75,13 +76,24 @@ const DraggableItem = ({ id, data, children, onClick }) => {
 
   const handlePointerDown = (e) => {
     clickTimeRef.current = Date.now();
+    startPosRef.current = { x: e.clientX, y: e.clientY };
     listeners?.onPointerDown?.(e);
   };
 
   const handleClick = (e) => {
     const elapsed = Date.now() - clickTimeRef.current;
-    // Wenn der Klick schnell war (< 150ms) und kein Drag stattfand
-    if (elapsed < 150 && !isDragging) {
+
+    // Bewegung berechnen
+    const deltaX = Math.abs(e.clientX - startPosRef.current.x);
+    const deltaY = Math.abs(e.clientY - startPosRef.current.y);
+    const moved = Math.max(deltaX, deltaY);
+
+    // Click erkannt wenn:
+    // - Wenig bewegt (< 5px) - auch bei längerer Haltezeit
+    // - ODER schnell geklickt (< 200ms)
+    const isClick = (moved < 5) || (elapsed < 200);
+
+    if (isClick && !isDragging) {
       e.stopPropagation();
       onClick?.();
     }

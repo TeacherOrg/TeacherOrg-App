@@ -130,6 +130,13 @@ const useTimetableStates = (settings, currentYear, currentWeek) => {
     return () => document.removeEventListener('click', handleClick);
   }, [handleHideHover]);
 
+  // Overlay schließen wenn Modal geöffnet wird
+  useEffect(() => {
+    if (isModalOpen) {
+      handleHideHover();
+    }
+  }, [isModalOpen, handleHideHover]);
+
   return {
     renderKey, setRenderKey,
     viewMode, setViewMode,

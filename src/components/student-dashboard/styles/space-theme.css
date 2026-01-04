@@ -232,21 +232,13 @@
 
 /* === Asteroid (Weakness) Styles === */
 .asteroid {
-  background: var(--asteroid-dark);
+  /* background wird inline gesetzt für Fachbereich-Farben */
   border-radius: 30% 70% 70% 30% / 30% 30% 70% 70%;
   position: relative;
   animation: float 8s ease-in-out infinite reverse;
 }
 
-.asteroid::after {
-  content: '';
-  position: absolute;
-  inset: -5px;
-  border-radius: inherit;
-  background: var(--asteroid-glow);
-  filter: blur(10px);
-  z-index: -1;
-}
+/* Glow-Effekt wird jetzt via inline boxShadow gesetzt */
 
 /* === Rocket Progress === */
 .rocket-container {
@@ -379,13 +371,10 @@
 }
 
 .achievement-star {
-  aspect-ratio: 1;
   display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: center;
-  background: var(--space-card-bg);
-  border: 1px solid var(--space-card-border);
-  border-radius: 50%;
+  justify-content: flex-start;
   transition: all 0.3s ease;
 }
 

@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Student, Performance, UeberfachlichKompetenz, Competency, StudentSelfAssessment, CompetencyGoal, Class } from '@/api/entities';
 import { calculateWeightedGrade } from '@/components/grades/utils/calculateWeightedGrade';
+import { getFachbereichColor } from '@/utils/colorUtils';
 import pb from '@/api/pb';
 
 /**
@@ -104,51 +105,111 @@ export function useStudentData(studentId = null) {
     return calculateWeightedGrade(performances);
   }, [performances]);
 
-  // Analyze strengths and weaknesses by fachbereiche
-  const { strengths, weaknesses } = useMemo(() => {
+  // Analyze strengths and weaknesses by fachbereiche with improvement tracking
+  const { strengths, weaknesses, conqueredCount } = useMemo(() => {
     if (performances.length === 0) {
-      return { strengths: [], weaknesses: [] };
+      return { strengths: [], weaknesses: [], conqueredCount: 0 };
     }
 
-    // Group by fachbereiche
+    // Zeitraum für "neuere" Noten: letzte 30 Tage
+    const now = new Date();
+    const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+    // Group by fachbereiche mit Datum-Tracking
     const fachbereicheMap = {};
 
     performances.forEach(p => {
+      // Grade 0 ignorieren - bedeutet "nicht geschrieben"
+      if (!p.grade || p.grade === 0) return;
+
+      const performanceDate = p.date ? new Date(p.date) : null;
+
       if (Array.isArray(p.fachbereiche)) {
         p.fachbereiche.forEach(fb => {
           if (!fachbereicheMap[fb]) {
-            fachbereicheMap[fb] = { grades: [], count: 0 };
+            fachbereicheMap[fb] = {
+              allGrades: [],
+              recentGrades: [],  // Letzte 30 Tage
+              olderGrades: [],   // Älter als 30 Tage
+              count: 0
+            };
           }
-          fachbereicheMap[fb].grades.push(p.grade);
+
+          fachbereicheMap[fb].allGrades.push(p.grade);
           fachbereicheMap[fb].count++;
+
+          // Kategorisiere nach Datum
+          if (performanceDate) {
+            if (performanceDate >= thirtyDaysAgo) {
+              fachbereicheMap[fb].recentGrades.push(p.grade);
+            } else {
+              fachbereicheMap[fb].olderGrades.push(p.grade);
+            }
+          }
         });
       }
     });
 
-    // Calculate averages and sort
+    // Calculate averages, improvement and sort
     const fachbereicheArray = Object.entries(fachbereicheMap)
-      .map(([name, data]) => ({
-        name,
-        average: data.grades.reduce((a, b) => a + b, 0) / data.grades.length,
-        count: data.count
-      }))
+      .map(([name, data]) => {
+        const average = data.allGrades.reduce((a, b) => a + b, 0) / data.allGrades.length;
+
+        // Berechne Verbesserung
+        let improvement = 0;
+        let conquered = false;
+
+        if (data.recentGrades.length > 0 && data.olderGrades.length > 0) {
+          const recentAvg = data.recentGrades.reduce((a, b) => a + b, 0) / data.recentGrades.length;
+          const olderAvg = data.olderGrades.reduce((a, b) => a + b, 0) / data.olderGrades.length;
+          improvement = recentAvg - olderAvg;
+
+          // "Erobert" wenn Verbesserung >= 0.5
+          conquered = improvement >= 0.5;
+        }
+
+        return {
+          name,
+          average,
+          count: data.count,
+          color: getFachbereichColor(name),
+          improvement: Math.round(improvement * 10) / 10, // Auf 1 Dezimalstelle runden
+          conquered,
+          recentCount: data.recentGrades.length,
+          olderCount: data.olderGrades.length
+        };
+      })
       .filter(fb => fb.count >= 2) // At least 2 grades for significance
       .sort((a, b) => b.average - a.average);
 
+    // Zähle eroberte Fachbereiche (nur aus den Schwächen)
+    const weaknessesRaw = fachbereicheArray.slice(-3).reverse();
+    const conqueredTotal = fachbereicheArray.filter(fb => fb.conquered).length;
+
     return {
       strengths: fachbereicheArray.slice(0, 3),
-      weaknesses: fachbereicheArray.slice(-3).reverse()
+      weaknesses: weaknessesRaw,
+      conqueredCount: conqueredTotal
     };
   }, [performances]);
+
+  // Helper: Rundet auf 0.5
+  const roundToHalf = (num) => Math.round(num * 2) / 2;
 
   // Get competency data with both teacher and self assessments
   const competencyData = useMemo(() => {
     return competencies.map(comp => {
       // Teacher assessments for this competency
       const teacherData = teacherAssessments.find(ta => ta.competency_id === comp.id);
-      const teacherLatest = teacherData?.assessments?.sort((a, b) =>
+      const teacherAllScores = teacherData?.assessments || [];
+      const teacherLatest = teacherAllScores.sort((a, b) =>
         new Date(b.date) - new Date(a.date)
       )[0];
+
+      // Durchschnitt aller Lehrer-Bewertungen (auf 0.5 gerundet)
+      const teacherAverage = teacherAllScores.length > 0
+        ? roundToHalf(teacherAllScores.reduce((sum, a) => sum + a.score, 0) / teacherAllScores.length)
+        : null;
 
       // Self assessments for this competency
       const selfData = selfAssessments.filter(sa => sa.competency_id === comp.id);
@@ -156,22 +217,29 @@ export function useStudentData(studentId = null) {
         new Date(b.date) - new Date(a.date)
       )[0];
 
+      // Durchschnitt aller Selbsteinschätzungen (auf 0.5 gerundet)
+      const selfAverage = selfData.length > 0
+        ? roundToHalf(selfData.reduce((sum, a) => sum + a.self_score, 0) / selfData.length)
+        : null;
+
       // Goals for this competency
       const compGoals = goals.filter(g => g.competency_id === comp.id);
 
       return {
         ...comp,
-        teacherScore: teacherLatest?.score || null,
+        teacherScore: teacherAverage,
         teacherDate: teacherLatest?.date || null,
-        teacherHistory: teacherData?.assessments || [],
-        selfScore: selfLatest?.self_score || null,
+        teacherHistory: teacherAllScores,
+        teacherAssessmentCount: teacherAllScores.length,
+        selfScore: selfAverage,
         selfDate: selfLatest?.date || null,
         selfHistory: selfData,
+        selfAssessmentCount: selfData.length,
         goals: compGoals,
         completedGoals: compGoals.filter(g => g.is_completed).length,
         totalGoals: compGoals.length,
-        gap: teacherLatest?.score && selfLatest?.self_score
-          ? Math.abs(teacherLatest.score - selfLatest.self_score)
+        gap: teacherAverage && selfAverage
+          ? Math.abs(teacherAverage - selfAverage)
           : null
       };
     });
@@ -210,6 +278,7 @@ export function useStudentData(studentId = null) {
     gradeAverage,
     strengths,
     weaknesses,
+    conqueredCount,
     competencyData,
     stats,
 

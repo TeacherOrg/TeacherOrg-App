@@ -35,10 +35,20 @@ function _getCurrentPage(url) {
 export default function Pages() {
     const location = useLocation();
     const currentPage = _getCurrentPage(location.pathname);
-    
+
+    // Landing hat eigenes Layout (ohne Sidebar)
+    if (location.pathname === '/landing') {
+        return (
+            <Routes>
+                <Route path="/landing" element={<Landing />} />
+            </Routes>
+        );
+    }
+
+    // Alle anderen Seiten mit Sidebar-Layout
     return (
         <Layout currentPageName={currentPage}>
-            <Routes>            
+            <Routes>
                 <Route path="/" element={<Timetable />} />
                 <Route path="/Timetable" element={<Timetable />} /> {/* Entspricht "Stundenplan" */}
                 <Route path="/Grades" element={<Grades />} /> {/* Entspricht "Leistung" */}
@@ -49,7 +59,6 @@ export default function Pages() {
                 <Route path="/studentsoverview" element={<StudentsOverview />} /> {/* Neue Route für "Studentsoverview" */}
                 <Route path="/students" element={<StudentsOverview />} /> {/* Neue Route für "Students" */}
                 <Route path="/student-dashboard" element={<StudentDashboardPage />} /> {/* Student Dashboard */}
-                <Route path="/landing" element={<Landing />} />
             </Routes>
         </Layout>
     );

@@ -26,6 +26,7 @@ export default function StudentDashboard({ studentId = null }) {
     gradeAverage,
     strengths,
     weaknesses,
+    conqueredCount,
     competencyData,
     stats,
     goals,
@@ -138,6 +139,7 @@ export default function StudentDashboard({ studentId = null }) {
               <CompetenciesTab
                 competencyData={competencyData}
                 selfAssessmentOps={selfAssessmentOps}
+                selfAssessments={competencyData.flatMap(c => c.selfHistory || [])}
                 goalOps={goalOps}
                 isStudent={isStudent}
               />
@@ -157,6 +159,7 @@ export default function StudentDashboard({ studentId = null }) {
                 goals={goals}
                 stats={stats}
                 competencyData={competencyData}
+                conqueredCount={conqueredCount}
               />
             )}
           </main>
@@ -180,7 +183,6 @@ function OverviewTab({ gradeAverage, strengths, weaknesses, stats }) {
         <RocketProgress
           progress={gradeAverage || 0}
           maxProgress={6}
-          label="Notendurchschnitt"
         />
       </SpaceCard>
 
@@ -222,7 +224,12 @@ function OverviewTab({ gradeAverage, strengths, weaknesses, stats }) {
           {weaknesses.length > 0 ? (
             weaknesses.map((w, i) => (
               <div key={w.name} className="text-center">
-                <Asteroid size={50}>
+                <Asteroid
+                  size={50}
+                  color={w.color}
+                  conquered={w.conquered}
+                  improvement={w.improvement}
+                >
                   <span className="text-xs">{w.average.toFixed(1)}</span>
                 </Asteroid>
                 <p className="mt-2 text-sm text-slate-300 truncate max-w-[80px]" title={w.name}>
@@ -266,49 +273,61 @@ function StatItem({ label, value, color }) {
   );
 }
 
-function CompetenciesTab({ competencyData, selfAssessmentOps, goalOps, isStudent }) {
+function CompetenciesTab({ competencyData, selfAssessmentOps, goalOps, isStudent, selfAssessments = [] }) {
   const [selectedCompetency, setSelectedCompetency] = useState(null);
 
+  // Helper to format next rating date
+  const formatNextRatingDate = (date) => {
+    if (!date) return '';
+    return `Ab ${date.toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'short' })}`;
+  };
+
   return (
-    <div className="space-y-4">
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
       {competencyData.length === 0 ? (
-        <SpaceCard>
+        <SpaceCard className="md:col-span-2">
           <p className="text-slate-400 text-center py-8">
             Noch keine Kompetenzen definiert.
           </p>
         </SpaceCard>
       ) : (
-        competencyData.map(comp => (
-          <SpaceCard
-            key={comp.id}
-            className={selectedCompetency === comp.id ? 'border-purple-500' : ''}
-            onClick={() => setSelectedCompetency(selectedCompetency === comp.id ? null : comp.id)}
-          >
-            <div className="flex items-start justify-between gap-4">
-              <div className="flex-1">
-                <h4 className="font-semibold text-white">{comp.name}</h4>
+        competencyData.map(comp => {
+          const canRate = selfAssessmentOps.canRateThisWeek(selfAssessments, comp.id);
+          const nextRatingDate = selfAssessmentOps.getNextRatingDate(selfAssessments, comp.id);
 
-                {/* Comparison Gauge */}
-                <div className="mt-3">
-                  <ComparisonGauge
-                    teacherScore={comp.teacherScore}
-                    selfScore={comp.selfScore}
-                    compact
-                  />
-                </div>
-              </div>
+          return (
+            <SpaceCard
+              key={comp.id}
+              className={selectedCompetency === comp.id ? 'border-purple-500' : ''}
+              onClick={() => setSelectedCompetency(selectedCompetency === comp.id ? null : comp.id)}
+            >
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex-1">
+                  <h4 className="font-semibold text-white">{comp.name}</h4>
 
-              {/* Self Assessment */}
-              {isStudent && (
-                <div className="text-center">
-                  <p className="text-xs text-slate-400 mb-1">Meine Einschätzung</p>
-                  <SelfAssessmentStars
-                    currentRating={comp.selfScore}
-                    onRate={(score) => selfAssessmentOps.rateSelf(comp.id, score)}
-                    loading={selfAssessmentOps.loading}
-                  />
+                  {/* Comparison Gauge */}
+                  <div className="mt-3">
+                    <ComparisonGauge
+                      teacherScore={comp.teacherScore}
+                      selfScore={comp.selfScore}
+                      compact
+                    />
+                  </div>
                 </div>
-              )}
+
+                {/* Self Assessment */}
+                {isStudent && (
+                  <div className="text-center">
+                    <p className="text-xs text-slate-400 mb-1">Meine Einschätzung</p>
+                    <SelfAssessmentStars
+                      currentRating={comp.selfScore}
+                      onRate={(score) => selfAssessmentOps.rateSelf(comp.id, score)}
+                      loading={selfAssessmentOps.loading}
+                      disabled={!canRate}
+                      disabledMessage={formatNextRatingDate(nextRatingDate)}
+                    />
+                  </div>
+                )}
             </div>
 
             {/* Expanded details */}
@@ -338,7 +357,8 @@ function CompetenciesTab({ competencyData, selfAssessmentOps, goalOps, isStudent
               </div>
             )}
           </SpaceCard>
-        ))
+          );
+        })
       )}
     </div>
   );
@@ -378,7 +398,7 @@ function GoalsTab({ competencyData, goals, goalOps, isStudent }) {
   );
 }
 
-function AchievementsTab({ goals, stats, competencyData }) {
+function AchievementsTab({ goals, stats, competencyData, conqueredCount }) {
   return (
     <div>
       <SpaceCard>
@@ -390,6 +410,7 @@ function AchievementsTab({ goals, stats, competencyData }) {
           completedGoals={goals.filter(g => g.is_completed)}
           competencies={competencyData}
           stats={stats}
+          conqueredCount={conqueredCount}
         />
       </SpaceCard>
     </div>

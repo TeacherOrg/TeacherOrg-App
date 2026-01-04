@@ -26,14 +26,17 @@ export default function GoalsList({
   const [editText, setEditText] = useState('');
 
   const getCompetencyName = (compId) => {
+    if (!compId) return 'Allgemein';
     const comp = competencies.find(c => c.id === compId);
     return comp?.name || 'Unbekannt';
   };
 
   const handleAddGoal = async () => {
-    if (!newGoalText.trim() || !selectedCompetency) return;
+    if (!newGoalText.trim()) return;
 
-    const result = await goalOps.createGoal(selectedCompetency, newGoalText);
+    // selectedCompetency kann leer sein für allgemeine Ziele
+    const compId = selectedCompetency === '__general__' ? null : selectedCompetency;
+    const result = await goalOps.createGoal(compId, newGoalText);
     if (result.success) {
       setNewGoalText('');
       setSelectedCompetency('');
@@ -119,20 +122,22 @@ export default function GoalsList({
                 <p className={`text-sm ${goal.is_completed ? 'text-slate-400 line-through' : 'text-white'}`}>
                   {goal.goal_text}
                 </p>
-                <div className="flex items-center gap-2 mt-1">
+                <div className="flex items-center gap-2 mt-1 flex-wrap">
                   {/* Competency label */}
-                  <span className="text-xs text-purple-400">
+                  <span className={`text-xs ${goal.competency_id ? 'text-purple-400' : 'text-emerald-400'}`}>
                     {getCompetencyName(goal.competency_id)}
                   </span>
 
-                  {/* Creator indicator */}
-                  <span className={`text-xs flex items-center gap-1 ${
-                    goal.creator_role === 'teacher' ? 'text-blue-400' : 'text-slate-400'
+                  {/* Creator indicator - als Badge */}
+                  <span className={`text-xs px-1.5 py-0.5 rounded flex items-center gap-1 ${
+                    goal.creator_role === 'teacher'
+                      ? 'bg-blue-500/20 text-blue-400'
+                      : 'bg-slate-600/40 text-slate-400'
                   }`}>
                     {goal.creator_role === 'teacher' ? (
-                      <><GraduationCap className="w-3 h-3" /> Lehrer</>
+                      <><GraduationCap className="w-3 h-3" /> Lehrerziel</>
                     ) : (
-                      <><User className="w-3 h-3" /> Selbst</>
+                      <><User className="w-3 h-3" /> Mein Ziel</>
                     )}
                   </span>
 
@@ -184,7 +189,8 @@ export default function GoalsList({
                 onChange={e => setSelectedCompetency(e.target.value)}
                 className="w-full p-2 rounded bg-slate-800 border border-slate-600 text-white text-sm"
               >
-                <option value="">Kompetenz auswählen...</option>
+                <option value="">Kategorie auswählen...</option>
+                <option value="__general__">🎯 Allgemeines Ziel</option>
                 {competencies.map(comp => (
                   <option key={comp.id} value={comp.id}>
                     {comp.name}
@@ -203,7 +209,7 @@ export default function GoalsList({
               <div className="flex gap-2">
                 <Button
                   onClick={handleAddGoal}
-                  disabled={!newGoalText.trim() || !selectedCompetency || goalOps.loading}
+                  disabled={!newGoalText.trim() || goalOps.loading}
                   className="bg-purple-600 hover:bg-purple-700"
                   size="sm"
                 >
