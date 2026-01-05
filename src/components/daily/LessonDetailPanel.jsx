@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { motion } from "framer-motion";
 import {
-  Clock,
   User,
   Users2,
   Users,
@@ -12,11 +11,8 @@ import {
   Coffee,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import TopicProgressBar from "./TopicProgressBar";
 import { useTopicProgress } from "@/hooks/useTopicProgress";
 import { useAllerleiTopicProgress } from "@/hooks/useAllerleiTopicProgress";
-import AlltopicsProgressOverview from "./AlltopicsProgressOverview";
-import { useAllActiveTopicsProgress } from "@/hooks/useAllActiveTopicsProgress";
 import { createMixedSubjectGradient, createGradient } from "@/utils/colorUtils";
 
 const WORK_FORM_ICONS = {
@@ -36,6 +32,7 @@ const WORK_FORMS = {
 export default function LessonDetailPanel({
   lesson,
   currentItem,
+  nextLesson,
   customization,
   currentTime,
   selectedDate,
@@ -51,7 +48,27 @@ export default function LessonDetailPanel({
 
   const { topic, planned, completed } = useTopicProgress(displayLesson);
   const allerleiProgresses = useAllerleiTopicProgress(displayLesson);
-  const allProgress = useAllActiveTopicsProgress();
+
+  // Lokaler State für manuell abgehakte Steps (nur Session, kein DB-Speichern)
+  const [manuallyCompletedSteps, setManuallyCompletedSteps] = useState(new Set());
+
+  // Reset bei Lektionswechsel
+  useEffect(() => {
+    setManuallyCompletedSteps(new Set());
+  }, [displayLesson?.id]);
+
+  // Toggle-Funktion für manuelles Abhaken
+  const toggleStepComplete = (index) => {
+    setManuallyCompletedSteps(prev => {
+      const next = new Set(prev);
+      if (next.has(index)) {
+        next.delete(index);
+      } else {
+        next.add(index);
+      }
+      return next;
+    });
+  };
 
   // Fachfarbe + Name + Emoji ermitteln (inkl. Allerlei)
   const getLessonDisplay = (lesson) => {
@@ -152,17 +169,66 @@ export default function LessonDetailPanel({
     return progresses;
   }, [displayLesson, currentTime, selectedDate]);
 
-  // Pause-Ansicht
+  // Pause-Ansicht mit Live-Countdown
   if (isPause) {
+    // Berechne verbleibende Zeit bis Pausenende
+    const pauseEnd = new Date(`${new Date().toDateString()} ${currentItem.timeSlot?.end}`);
+    const remainingMs = Math.max(0, pauseEnd - currentTime);
+    const remainingMinutes = Math.floor(remainingMs / 60000);
+    const remainingSeconds = Math.floor((remainingMs % 60000) / 1000);
+
+    // Sammle Materialien der nächsten Lektion (nur wenn mindestens eines vorhanden)
+    const nextLessonMaterials = nextLesson?.steps
+      ?.map(step => step.material)
+      .filter(m => m && m.trim() !== '' && m !== '–')
+      || [];
+
     return (
       <div className="rounded-2xl shadow-2xl bg-white/95 dark:bg-slate-900/95 overflow-hidden h-full flex flex-col items-center justify-center p-8">
-        <Coffee className="w-24 h-24 text-orange-500 mb-8 animate-pulse" />
-        <h2 className="text-4xl font-bold text-slate-800 dark:text-slate-200 mb-12">
+        {/* Kaffeetasse */}
+        <Coffee className="w-20 h-20 text-orange-500 mb-4 animate-pulse" />
+
+        {/* Pause Text */}
+        <h2 className="text-3xl font-bold text-slate-800 dark:text-slate-200 mb-2">
           {currentItem.name}
         </h2>
-        <div className="w-full max-w-2xl">
-          <AlltopicsProgressOverview progresses={allProgress} />
+
+        {/* Live Countdown */}
+        <div className="text-5xl font-bold text-orange-500 tabular-nums mb-8">
+          {String(remainingMinutes).padStart(2, '0')}:{String(remainingSeconds).padStart(2, '0')}
         </div>
+
+        {/* Nächste Lektion */}
+        {nextLesson && (
+          <div className="w-full max-w-md bg-slate-100 dark:bg-slate-800 rounded-xl p-6">
+            <h3 className="text-lg font-semibold text-slate-700 dark:text-slate-300 mb-2">
+              Nächste Lektion
+            </h3>
+            <div className="flex items-center gap-2 mb-4">
+              <span className="text-2xl">{nextLesson.displayEmoji || nextLesson.subject?.emoji || '📚'}</span>
+              <span className="text-xl font-bold text-slate-800 dark:text-slate-200">
+                {nextLesson.displayName || nextLesson.subject?.name || 'Unbekannt'}
+              </span>
+            </div>
+
+            {/* Materialien */}
+            {nextLessonMaterials.length > 0 && (
+              <div className="mt-4">
+                <h4 className="text-sm font-semibold text-slate-600 dark:text-slate-400 mb-2">
+                  Materialien bereitstellen:
+                </h4>
+                <ul className="space-y-1">
+                  {nextLessonMaterials.map((material, idx) => (
+                    <li key={idx} className="flex items-center gap-2 text-slate-700 dark:text-slate-300">
+                      <span className="w-2 h-2 bg-orange-500 rounded-full"></span>
+                      {material}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     );
   }
@@ -200,12 +266,29 @@ export default function LessonDetailPanel({
           <div>
             <h2 className={`${customization.fontSize.title} font-bold text-white flex items-center gap-3 flex-wrap`}>
               {emoji} {name}
-              
+
               {/* Symbole direkt im Titel */}
               {displayLesson.is_exam && <span className="text-red-300 font-bold text-4xl leading-none">!</span>}
               {displayLesson.is_half_class && <span className="text-blue-300 font-bold text-3xl">½</span>}
               {displayLesson.is_double_lesson && <span className="text-yellow-300 font-bold text-3xl">×2</span>}
             </h2>
+
+            {/* Themenzeile mit Progression als Bruch */}
+            {displayLesson?.is_allerlei && allerleiProgresses.length > 0 ? (
+              <div className="flex flex-wrap gap-3 mt-1">
+                {allerleiProgresses.map(({ topic: t, planned: p, completed: c }) => (
+                  <span key={t.id} className="text-white/80 text-sm">
+                    {t.name} ({c}/{p})
+                  </span>
+                ))}
+              </div>
+            ) : topic ? (
+              <div className="flex items-center gap-2 mt-1">
+                <span className="text-white/80">{topic.name}</span>
+                <span className="text-white/60 text-sm">({completed}/{planned})</span>
+              </div>
+            ) : null}
+
             <p className={`mt-2 text-white/90 ${customization.fontSize.content}`}>
               {displayLesson.description}
             </p>
@@ -218,33 +301,6 @@ export default function LessonDetailPanel({
         </div>
       </div>
 
-      {/* Themenfortschrittsbalken */}
-      <div className="space-y-3">
-        {displayLesson?.is_allerlei ? (
-          <>
-            {allerleiProgresses.length > 0 ? (
-              allerleiProgresses.map(({ topic, planned, completed }) => (
-                <TopicProgressBar
-                  key={topic.id}
-                  topic={topic}
-                  planned={planned}
-                  completed={completed}
-                />
-              ))
-            ) : (
-              <div className="text-sm text-slate-500 dark:text-slate-400 italic">
-                Keine Themen zugeordnet
-              </div>
-            )}
-          </>
-        ) : topic ? (
-          <TopicProgressBar topic={topic} planned={planned} completed={completed} />
-        ) : (
-          <div className="text-sm text-slate-500 dark:text-slate-400 italic">
-            Kein Thema zugeordnet
-          </div>
-        )}
-      </div>
 
       {/* Inhaltsbereich */}
       <div className="flex-1 overflow-y-auto bg-white/95 dark:bg-slate-900/95">
@@ -286,19 +342,26 @@ export default function LessonDetailPanel({
                 >
                   <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center gap-3">
-                      <svg className="h-10 w-10 -rotate-90">
+                      <svg
+                        className="h-10 w-10 -rotate-90 cursor-pointer hover:scale-110 transition-transform"
+                        onClick={(e) => { e.stopPropagation(); toggleStepComplete(index); }}
+                        title="Klicken um Schritt als erledigt zu markieren"
+                      >
                         <circle cx="20" cy="20" r="16" stroke="#e5e7eb" strokeWidth="4" fill="none" />
                         <circle
                           cx="20"
                           cy="20"
                           r="16"
-                          stroke={isCompleted ? "#22c55e" : "#3b82f6"}
+                          stroke={manuallyCompletedSteps.has(index) ? "#22c55e" : (isCompleted ? "#22c55e" : "#3b82f6")}
                           strokeWidth="4"
                           fill="none"
                           strokeDasharray="100"
-                          strokeDashoffset={100 * (1 - progress / 100)}
+                          strokeDashoffset={manuallyCompletedSteps.has(index) ? 0 : 100 * (1 - progress / 100)}
                           className="transition-all duration-500"
                         />
+                        {manuallyCompletedSteps.has(index) && (
+                          <text x="20" y="24" textAnchor="middle" fill="#22c55e" fontSize="14" className="rotate-90" style={{ transformOrigin: '20px 20px' }}>✓</text>
+                        )}
                       </svg>
                       <span className="font-semibold text-lg">{step.time} Min</span>
                     </div>
@@ -345,19 +408,26 @@ export default function LessonDetailPanel({
                     }`}
                   >
                     <div className="flex items-center">
-                      <svg className="h-10 w-10 -rotate-90">
+                      <svg
+                        className="h-10 w-10 -rotate-90 cursor-pointer hover:scale-110 transition-transform"
+                        onClick={(e) => { e.stopPropagation(); toggleStepComplete(index); }}
+                        title="Klicken um Schritt als erledigt zu markieren"
+                      >
                         <circle cx="20" cy="20" r="16" stroke="#e5e7eb" strokeWidth="4" fill="none" />
                         <circle
                           cx="20"
                           cy="20"
                           r="16"
-                          stroke={isCompleted ? "#22c55e" : "#3b82f6"}
+                          stroke={manuallyCompletedSteps.has(index) ? "#22c55e" : (isCompleted ? "#22c55e" : "#3b82f6")}
                           strokeWidth="4"
                           fill="none"
                           strokeDasharray="100"
-                          strokeDashoffset={100 * (1 - progress / 100)}
+                          strokeDashoffset={manuallyCompletedSteps.has(index) ? 0 : 100 * (1 - progress / 100)}
                           className="transition-all duration-500"
                         />
+                        {manuallyCompletedSteps.has(index) && (
+                          <text x="20" y="24" textAnchor="middle" fill="#22c55e" fontSize="14" className="rotate-90" style={{ transformOrigin: '20px 20px' }}>✓</text>
+                        )}
                       </svg>
                     </div>
                     <div className="flex items-center text-sm">{step.time ? `${step.time} Min` : "–"}</div>

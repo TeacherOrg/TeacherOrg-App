@@ -1,21 +1,18 @@
 // src/hooks/useAllActiveTopicsProgress.js
 import { useMemo } from "react";
-import { useLessonStore } from "@/store";
-
-function getCurrentWeek(date = new Date()) {
-  const d = new Date(date);
-  d.setHours(0, 0, 0, 0);
-  d.setDate(d.getDate() + 3 - ((d.getDay() + 6) % 7));
-  const yearStart = new Date(d.getFullYear(), 0, 1);
-  return Math.ceil(((d - yearStart) / 86400000 + 1) / 7);
-}
+import { useLessonStore, useSettings } from "@/store";
+import { getCurrentWeek, generateTimeSlots, hasLessonEnded } from "@/utils/lessonTimeUtils";
 
 export function useAllActiveTopicsProgress() {
   const { allYearlyLessons, allLessons, topics } = useLessonStore();
+  const settings = useSettings();
 
   const today = new Date();
   const realCurrentYear = today.getFullYear();
   const realCurrentWeek = getCurrentWeek(today);
+
+  // TimeSlots aus Settings generieren fuer Endzeitpruefung
+  const timeSlots = useMemo(() => generateTimeSlots(settings), [settings]);
 
   return useMemo(() => {
     const topicMap = new Map();
@@ -71,14 +68,10 @@ export function useAllActiveTopicsProgress() {
       const entry = topicMap.get(yl.topic_id);
       if (!entry) return;
 
-      const lessonWeek = lesson.week_number;
-      const lessonYear = lesson.week_year || realCurrentYear;
+      // Pruefe ob die Lektion bereits beendet ist (Jahr, Woche, Tag UND Endzeit)
+      const isCompleted = hasLessonEnded(lesson, timeSlots, today);
 
-      const isPastOrToday =
-        lessonYear < realCurrentYear ||
-        (lessonYear === realCurrentYear && lessonWeek <= realCurrentWeek);
-
-      if (isPastOrToday) {
+      if (isCompleted) {
         // Finde Index dieser Lektion in der sortierten Liste
         const index = entry.sortedLessons.findIndex(l => l.id === ylId);
         if (index >= 0) {
@@ -154,8 +147,8 @@ export function useAllActiveTopicsProgress() {
         planned: entry.planned,
       }));
 
-    return activeTopics.sort((a, b) => 
+    return activeTopics.sort((a, b) =>
       (b.completed / b.planned) - (a.completed / a.planned)
     );
-  }, [allYearlyLessons, allLessons, topics, realCurrentYear, realCurrentWeek]);
+  }, [allYearlyLessons, allLessons, topics, realCurrentYear, realCurrentWeek, timeSlots]);
 }

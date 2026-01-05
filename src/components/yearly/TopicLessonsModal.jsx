@@ -10,6 +10,8 @@ import { Button } from "@/components/ui/button";
 import { X, BookOpen } from "lucide-react";
 import YearLessonCell from "./YearLessonCell";
 import LessonModal from "./LessonModal";
+import TopicProgressBar from "../daily/TopicProgressBar";
+import { useTopicProgress } from "@/hooks/useTopicProgress";
 
 // Ultra-safe string conversion
 const ultraSafeString = (value) => {
@@ -132,6 +134,15 @@ export default function TopicLessonsModal({
       return sum + (lesson.is_double_lesson ? 2 : 1);
     }, 0);
   }, [safeTopicLessons]);
+
+  // Nutze useTopicProgress Hook für konsistente Berechnung mit DailyView
+  // Erstelle ein "fake" lesson-Objekt für den Hook
+  const fakeLesson = useMemo(() => ({
+    topic_id: topic?.id,
+    subject: subject
+  }), [topic?.id, subject]);
+
+  const { planned: hookPlanned, completed: completedLessonCount } = useTopicProgress(fakeLesson);
 
   // Early return with error boundary
   try {
@@ -304,7 +315,18 @@ export default function TopicLessonsModal({
               Woche {safeWeek} • {totalLessonCount} Lektion{totalLessonCount !== 1 ? 'en' : ''}
             </div>
           </DialogHeader>
-          
+
+          {/* Themenfortschritt */}
+          {topic && (
+            <div className="py-3 border-b border-slate-200 dark:border-slate-700">
+              <TopicProgressBar
+                topic={topic}
+                planned={hookPlanned}
+                completed={completedLessonCount}
+              />
+            </div>
+          )}
+
           <div className="pt-4">
             <div 
               className="grid gap-2"

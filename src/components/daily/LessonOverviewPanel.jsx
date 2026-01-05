@@ -1,6 +1,7 @@
 import React from "react";
 import { motion } from "framer-motion";
-import { Clock, BookOpen } from "lucide-react";
+import { Clock, BookOpen, Settings, Maximize, Minimize, Coffee, ClipboardList } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { createMixedSubjectGradient, createGradient } from "@/utils/colorUtils";
 import HolidayDecorations from "@/components/timetable/HolidayDecorations";
 
@@ -11,6 +12,14 @@ export default function LessonOverviewPanel({
   currentHoliday,
   customization,
   currentItem,
+  // Button Props
+  onSettingsClick,
+  onFullscreenToggle,
+  isFullscreen,
+  forcePauseView,
+  onPauseToggle,
+  showChoresView,
+  onChoresToggle,
 }) {
   const getHolidayDisplay = (holiday) => {
     if (!holiday) return { emoji: '📅', gradient: 'linear-gradient(135deg, #64748b 0%, #475569 100%)' };
@@ -97,11 +106,39 @@ export default function LessonOverviewPanel({
       animate={{ opacity: 1, x: 0 }}
     >
       <div className="bg-slate-100 dark:bg-slate-700 p-3 border-b border-slate-200 dark:border-slate-600">
-        <div className="flex items-center gap-2">
-          <BookOpen className="w-5 h-5 text-slate-600 dark:text-slate-400" />
-          <h3 className={`${customization.fontSize.content} font-bold text-slate-800 dark:text-slate-200 font-[Poppins]`}>
-            Tagesübersicht
-          </h3>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <BookOpen className="w-5 h-5 text-slate-600 dark:text-slate-400" />
+            <h3 className={`${customization.fontSize.content} font-bold text-slate-800 dark:text-slate-200 font-[Poppins]`}>
+              Tagesübersicht
+            </h3>
+          </div>
+          <div className="flex gap-1">
+            <Button variant="ghost" size="icon" onClick={onSettingsClick} className="h-7 w-7 rounded-lg" title="Einstellungen">
+              <Settings className="w-4 h-4" />
+            </Button>
+            <Button variant="ghost" size="icon" onClick={onFullscreenToggle} className="h-7 w-7 rounded-lg" title="Vollbild">
+              {isFullscreen ? <Minimize className="w-4 h-4" /> : <Maximize className="w-4 h-4" />}
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={onPauseToggle}
+              className={`h-7 w-7 rounded-lg ${forcePauseView ? 'bg-orange-500 text-white hover:bg-orange-600' : ''}`}
+              title="Pause"
+            >
+              <Coffee className="w-4 h-4" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={onChoresToggle}
+              className={`h-7 w-7 rounded-lg ${showChoresView ? 'bg-blue-500 text-white hover:bg-blue-600' : ''}`}
+              title="Ämtli"
+            >
+              <ClipboardList className="w-4 h-4" />
+            </Button>
+          </div>
         </div>
       </div>
 

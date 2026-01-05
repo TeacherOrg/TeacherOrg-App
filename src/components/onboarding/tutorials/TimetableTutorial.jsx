@@ -62,6 +62,7 @@ export function TimetableTutorial() {
   const isOpen = activeTutorial === TUTORIAL_IDS.TIMETABLE;
 
   const handleComplete = () => {
+    console.log('[TimetableTutorial] handleComplete called');
     completeTutorial(TUTORIAL_IDS.TIMETABLE);
   };
 

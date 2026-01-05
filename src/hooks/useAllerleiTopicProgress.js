@@ -1,23 +1,20 @@
 // src/hooks/useAllerleiTopicProgress.js
 import { useMemo } from "react";
-import { useLessonStore } from "@/store";
-
-function getCurrentWeek(date = new Date()) {
-  const d = new Date(date);
-  d.setHours(0, 0, 0, 0);
-  d.setDate(d.getDate() + 3 - ((d.getDay() + 6) % 7));
-  const yearStart = new Date(d.getFullYear(), 0, 1);
-  return Math.ceil(((d - yearStart) / 86400000 + 1) / 7);
-}
+import { useLessonStore, useSettings } from "@/store";
+import { getCurrentWeek, generateTimeSlots, hasLessonEnded } from "@/utils/lessonTimeUtils";
 
 export function useAllerleiTopicProgress(lesson) {
   const { topics, allYearlyLessons, allLessons } = useLessonStore();
+  const settings = useSettings();
 
   const today = new Date();
   const realCurrentYear = today.getFullYear();
   const realCurrentWeek = getCurrentWeek(today);
 
-  // Verwende die gleiche Logik wie useTopicProgress, aber für mehrere topic_ids
+  // TimeSlots aus Settings generieren fuer Endzeitpruefung
+  const timeSlots = useMemo(() => generateTimeSlots(settings), [settings]);
+
+  // Verwende die gleiche Logik wie useTopicProgress, aber fuer mehrere topic_ids
   return useMemo(() => {
     if (!lesson?.is_allerlei || !lesson.allerleiTopicIds || lesson.allerleiTopicIds.length === 0) {
       return [];
@@ -44,14 +41,10 @@ export function useAllerleiTopicProgress(lesson) {
         if (yl?.topic_id === topicId) {
           const index = plannedLessons.findIndex(p => p.id === ylId);
           if (index !== -1) {
-            const lessonWeek = l.week_number;
-            const lessonYear = l.week_year || realCurrentYear;
+            // Pruefe ob die Lektion bereits beendet ist (Jahr, Woche, Tag UND Endzeit)
+            const isCompleted = hasLessonEnded(l, timeSlots, today);
 
-            const isPastOrToday =
-              lessonYear < realCurrentYear ||
-              (lessonYear === realCurrentYear && lessonWeek <= realCurrentWeek);
-
-            if (isPastOrToday) {
+            if (isCompleted) {
               const yl = plannedLessons[index];
 
               if (yl.is_half_class) {
@@ -77,5 +70,5 @@ export function useAllerleiTopicProgress(lesson) {
     }).filter(Boolean);
 
     return progresses;
-  }, [lesson, topics, allYearlyLessons, allLessons, realCurrentYear, realCurrentWeek]);
+  }, [lesson, topics, allYearlyLessons, allLessons, realCurrentYear, realCurrentWeek, timeSlots]);
 }

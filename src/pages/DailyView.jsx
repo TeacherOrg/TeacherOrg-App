@@ -2,21 +2,18 @@ import React, { useState, useEffect, useMemo, useCallback, useRef } from "react"
 import { useNavigate } from "react-router-dom";
 import { Lesson, YearlyLesson, Subject, Holiday, Setting, Class, Announcement, Chore, ChoreAssignment, Student, Topic, AllerleiLesson } from "@/api/entities";
 import { Button } from "@/components/ui/button";
-import { ChevronLeft, ChevronRight, Maximize, Settings, Calendar, Users, Home, Zap, Coffee } from "lucide-react";
+import { ChevronLeft, ChevronRight, Calendar, Users, Home, Zap, Coffee } from "lucide-react";
 import { motion } from "framer-motion";
 import CalendarLoader from "../components/ui/CalendarLoader";
 import LessonOverviewPanel from "../components/daily/LessonOverviewPanel";
 import LessonDetailPanel from "../components/daily/LessonDetailPanel";
-import CustomizationPanel from "../components/daily/CustomizationPanel";
 import ChoresDisplay from "../components/daily/ChoresDisplay";
-import AlltopicsProgressOverview from "../components/daily/AlltopicsProgressOverview";
 import { createPageUrl } from "@/utils";
 import { getThemeGradient } from "@/utils/colorDailyUtils";
 import { normalizeAllerleiData } from "@/components/timetable/allerlei/AllerleiUtils";
 import { CustomizationSettings } from "@/api/entities";
 import pb from "@/api/pb";
 import { useLessonStore, useAllerleiLessons } from "@/store";
-import { useAllActiveTopicsProgress } from "@/hooks/useAllActiveTopicsProgress";
 
 // Utility functions
 function getCurrentWeek(date) {
@@ -112,7 +109,6 @@ export default function DailyView({ currentDate, onDateChange }) {
   const navigate = useNavigate();
   const [selectedItem, setSelectedItem] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [showCustomization, setShowCustomization] = useState(false);
   const audioRef = useRef(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   
@@ -136,6 +132,7 @@ export default function DailyView({ currentDate, onDateChange }) {
   // New feature states
   const [manualStepIndex, setManualStepIndex] = useState(null);
   const [showChoresView, setShowChoresView] = useState(false);
+  const [manualChoresView, setManualChoresView] = useState(false);
   // Temporärer Pausen-Button-State
   const [forcePauseView, setForcePauseView] = useState(false);
   
@@ -650,28 +647,38 @@ export default function DailyView({ currentDate, onDateChange }) {
     });
   }, [holidays, currentDate]);
 
-  // Hook für Themenübersicht
-  const allActiveTopicsProgress = useAllActiveTopicsProgress();
-
   // Get current item (lesson or break) based on time
+  // WICHTIG: Pausen haben Prioritaet ueber Doppellektionen waehrend der Pausenzeit
   const currentItem = useMemo(() => {
     if (!combinedSchedule.length) return null;
-    
+
     const now = new Date();
     const todayDate = new Date().toDateString();
     const selectedDateString = currentDate.toDateString();
-    
+
     if (todayDate !== selectedDateString) return null;
-    
+
+    // PRIORITAET 1: Pausen zuerst pruefen (wichtig fuer Doppellektionen!)
+    const currentBreak = breaks.find(breakItem => {
+      const breakStart = new Date(`${now.toDateString()} ${breakItem.timeSlot.start}`);
+      const breakEnd = new Date(`${now.toDateString()} ${breakItem.timeSlot.end}`);
+      return now >= breakStart && now <= breakEnd;
+    });
+
+    if (currentBreak) {
+      return { ...currentBreak, type: 'break' };
+    }
+
+    // PRIORITAET 2: Dann Lektionen pruefen
     return combinedSchedule.find(item => {
-      if (!item.timeSlot) return false;
-      
+      if (!item.timeSlot || item.type === 'break') return false;
+
       const itemStart = new Date(`${now.toDateString()} ${item.timeSlot.start}`);
       const itemEnd = new Date(`${now.toDateString()} ${item.timeSlot.end}`);
-      
+
       return now >= itemStart && now <= itemEnd;
     });
-  }, [combinedSchedule, currentDate, currentTime]);
+  }, [combinedSchedule, breaks, currentDate, currentTime]);
 
   // Find the next lesson that comes after the current break
   const nextLessonAfterPause = useMemo(() => {
@@ -731,6 +738,18 @@ export default function DailyView({ currentDate, onDateChange }) {
       setSelectedItem(currentItem);
     }
   }, [currentItem, selectedItem]);
+
+  // Auto-switch aus forcePauseView wenn nächste Lektion beginnt
+  useEffect(() => {
+    if (!forcePauseView || !nextLessonAfterPause?.timeSlot?.start) return;
+
+    const nextStart = new Date(`${new Date().toDateString()} ${nextLessonAfterPause.timeSlot.start}`);
+
+    // Wenn aktuelle Zeit >= Start der nächsten Lektion → zurück zur Lektionsansicht
+    if (currentTime >= nextStart) {
+      setForcePauseView(false);
+    }
+  }, [forcePauseView, nextLessonAfterPause, currentTime]);
   
   const handleItemSelect = useCallback((item) => {
       if(item.type === 'lesson') {
@@ -816,36 +835,7 @@ export default function DailyView({ currentDate, onDateChange }) {
       animate={{ opacity: 1 }}
       transition={{ duration: 1 }}
     >
-      {/* Temporary top-right buttons for settings and fullscreen */}
-      <div className="absolute top-4 right-4 z-50 flex gap-2 pointer-events-auto">
-        <Button
-          variant="outline"
-          size="icon"
-          onClick={() => setShowCustomization(true)}
-          className="rounded-xl"
-        >
-          <Settings className="w-4 h-4" />
-        </Button>
-        <Button
-          variant="outline"
-          size="icon"
-          onClick={toggleFullscreen}
-          className="rounded-xl"
-        >
-          <Maximize className="w-4 h-4" />
-        </Button>
-        <Button
-          variant="outline"
-          size="icon"
-          onClick={() => setForcePauseView(prev => !prev)}
-          className={`rounded-xl ${forcePauseView ? 'bg-orange-500 text-white border-orange-600' : ''}`}
-          title="Temporäre Pausenansicht anzeigen"
-        >
-          <Coffee className="w-4 h-4" />
-        </Button>
-      </div>
-      
-      <audio ref={audioRef} src="/audio/end_of_lesson.ogg" preload="auto" />
+<audio ref={audioRef} src="/audio/end_of_lesson.ogg" preload="auto" />
       
       {/* Main Content Area */}
       <div 
@@ -867,26 +857,99 @@ export default function DailyView({ currentDate, onDateChange }) {
               currentItem={currentItem}
               theme={customization.theme || 'default'}
               isDark={isDark}
+              // Button Props
+              onSettingsClick={() => { /* Deaktiviert - wird später neu implementiert */ }}
+              onFullscreenToggle={toggleFullscreen}
+              isFullscreen={isFullscreen}
+              forcePauseView={forcePauseView}
+              onPauseToggle={() => setForcePauseView(prev => !prev)}
+              showChoresView={manualChoresView}
+              onChoresToggle={() => setManualChoresView(prev => !prev)}
             />
           </motion.div>
         )}
 
         {/* Main Central Panel */}
         <div className="h-full overflow-y-auto overflow-x-hidden p-1 md:p-2 min-w-0 flex flex-col" style={{ maxWidth: '100%' }}> {/* Entferne overflowX: 'auto', um Scrollen zu vermeiden; Panel passt sich an */}
-          {forcePauseView ? (
+          {manualChoresView ? (
+            <ChoresDisplay
+              assignments={todaysAssignments}
+              chores={chores}
+              students={students}
+              customization={customization}
+              isDark={isDark}
+            />
+          ) : forcePauseView ? (
             <div className="rounded-2xl shadow-2xl bg-white/95 dark:bg-slate-900/95 overflow-hidden h-full flex flex-col items-center justify-center p-8">
-              <Coffee className="w-24 h-24 text-orange-500 mb-8 animate-pulse" />
-              <h2 className="text-4xl font-bold text-slate-800 dark:text-slate-200 mb-12">
-                Pause – Themenübersicht (Testmodus)
+              {/* Kaffeetasse */}
+              <Coffee className="w-20 h-20 text-orange-500 mb-4 animate-pulse" />
+
+              {/* Pause Text */}
+              <h2 className="text-3xl font-bold text-slate-800 dark:text-slate-200 mb-2">
+                Pause
               </h2>
 
-              <div className="w-full max-w-3xl px-4">
-                <AlltopicsProgressOverview progresses={allActiveTopicsProgress} />
-              </div>
+              {/* Timer bis zur nächsten Lektion */}
+              {nextLessonAfterPause?.timeSlot?.start && (() => {
+                const nextStart = new Date(`${new Date().toDateString()} ${nextLessonAfterPause.timeSlot.start}`);
+                const remainingMs = Math.max(0, nextStart - currentTime);
+                const remainingMinutes = Math.floor(remainingMs / 60000);
+                const remainingSeconds = Math.floor((remainingMs % 60000) / 1000);
 
-              <div className="mt-12 text-sm text-slate-600 dark:text-slate-400 italic">
-                Temporär per ☕-Button oben rechts aktiviert
-              </div>
+                return (
+                  <div className="text-5xl font-bold text-orange-500 tabular-nums mb-8">
+                    {String(remainingMinutes).padStart(2, '0')}:{String(remainingSeconds).padStart(2, '0')}
+                  </div>
+                );
+              })()}
+
+              {/* Nächste Lektion (falls vorhanden) */}
+              {nextLessonAfterPause && (
+                <div className="w-full max-w-md bg-slate-100 dark:bg-slate-800 rounded-xl p-6 mb-8">
+                  <h3 className="text-lg font-semibold text-slate-700 dark:text-slate-300 mb-2">
+                    Nächste Lektion
+                  </h3>
+                  <div className="flex items-center gap-2 mb-4">
+                    <span className="text-2xl">{nextLessonAfterPause.displayEmoji || nextLessonAfterPause.subject?.emoji || '📚'}</span>
+                    <span className="text-xl font-bold text-slate-800 dark:text-slate-200">
+                      {nextLessonAfterPause.displayName || nextLessonAfterPause.subject?.name || 'Unbekannt'}
+                    </span>
+                  </div>
+
+                  {/* Materialien der nächsten Lektion */}
+                  {(() => {
+                    const materials = nextLessonAfterPause.steps
+                      ?.map(step => step.material)
+                      .filter(m => m && m.trim() !== '' && m !== '–')
+                      || [];
+
+                    if (materials.length === 0) return null;
+
+                    return (
+                      <div className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-700">
+                        <h4 className="text-sm font-semibold text-slate-600 dark:text-slate-400 mb-2">
+                          Materialien bereitstellen:
+                        </h4>
+                        <ul className="space-y-1">
+                          {materials.map((material, idx) => (
+                            <li key={idx} className="flex items-center gap-2 text-slate-700 dark:text-slate-300">
+                              <span className="w-2 h-2 bg-orange-500 rounded-full"></span>
+                              {material}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
+
+              <Button
+                onClick={() => setForcePauseView(false)}
+                className="mt-4 px-6 py-3"
+              >
+                Zurück zur Lektion
+              </Button>
             </div>
           ) : showChoresView ? (
             <ChoresDisplay
@@ -924,25 +987,6 @@ export default function DailyView({ currentDate, onDateChange }) {
           )}
         </div>
       </div>
-
-      {/* Customization Panel */}
-      {showCustomization && (
-        <motion.div 
-          className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100]"
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          exit={{ opacity: 0, scale: 0.95 }}
-          transition={{ duration: 0.3 }}
-        >
-          <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-2xl h-[80vh] overflow-hidden">
-            <CustomizationPanel
-              customization={customization}
-              onCustomizationChange={setCustomization}
-              onClose={() => setShowCustomization(false)}
-            />
-          </div>
-        </motion.div>
-      )}
 
       {/* Empty State */}
       {!currentHoliday && lessonsForDate.length === 0 && !isLoading && !showChoresView && (

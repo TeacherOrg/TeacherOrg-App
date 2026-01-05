@@ -21,6 +21,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import SettingsModal from "../components/settings/SettingsModal";
 import CalendarLoader from "../components/ui/CalendarLoader";
 import pb from '@/api/pb';
+import { useTutorial } from '@/hooks/useTutorial';
 
 const navigationItems = [
   { title: "Stundenplan", url: createPageUrl("Timetable"), icon: Calendar },
@@ -63,12 +64,18 @@ export default function Layout({ children }) {
   const [sidebarError, setSidebarError] = useState(null);
   const [theme, setTheme] = useState(localStorage.getItem('theme') || 'dark');
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const { triggerTutorialForRoute } = useTutorial();
 
   useEffect(() => {
     const handleFullscreenChange = () => setIsFullscreen(!!document.fullscreenElement);
     document.addEventListener('fullscreenchange', handleFullscreenChange);
     return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
   }, []);
+
+  // Auto-trigger tutorials when navigating to pages
+  useEffect(() => {
+    triggerTutorialForRoute(location.pathname);
+  }, [location.pathname, triggerTutorialForRoute]);
 
   useEffect(() => {
     const checkAuth = async () => {

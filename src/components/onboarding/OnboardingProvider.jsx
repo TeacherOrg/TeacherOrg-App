@@ -38,13 +38,16 @@ export function OnboardingProvider({ children }) {
   useEffect(() => {
     const loadTutorialStatus = async () => {
       try {
-        const user = pb.authStore.model;
-        if (!user) {
+        const cachedUser = pb.authStore.model;
+        if (!cachedUser) {
           setIsLoading(false);
           return;
         }
 
-        // Lade completed_tutorials aus User-Record
+        // Aktuelle User-Daten vom Server laden (nicht aus Cache)
+        const user = await pb.collection('users').getOne(cachedUser.id);
+
+        // Lade completed_tutorials aus aktuellem User-Record
         const completed = user.completed_tutorials || [];
         setCompletedTutorials(Array.isArray(completed) ? completed : []);
 
@@ -79,12 +82,26 @@ export function OnboardingProvider({ children }) {
 
   // Tutorial als abgeschlossen markieren
   const completeTutorial = useCallback(async (tutorialId) => {
-    if (completedTutorials.includes(tutorialId)) return;
+    console.log('[Tutorial] completeTutorial called with:', tutorialId);
+    console.log('[Tutorial] Current completedTutorials:', completedTutorials);
+
+    if (completedTutorials.includes(tutorialId)) {
+      console.log('[Tutorial] Already completed, skipping');
+      setActiveTutorial(null);
+      return;
+    }
 
     const newCompleted = [...completedTutorials, tutorialId];
+    console.log('[Tutorial] Setting new completed tutorials:', newCompleted);
     setCompletedTutorials(newCompleted);
     setActiveTutorial(null);
-    await saveTutorialStatus(newCompleted);
+
+    try {
+      await saveTutorialStatus(newCompleted);
+      console.log('[Tutorial] Status saved successfully');
+    } catch (error) {
+      console.error('[Tutorial] Error saving status:', error);
+    }
   }, [completedTutorials, saveTutorialStatus]);
 
   // Prüfen ob Tutorial abgeschlossen ist
@@ -150,6 +167,9 @@ export function OnboardingProvider({ children }) {
 
   // Automatischer Trigger für Feature-Tutorials
   const triggerTutorialForRoute = useCallback((pathname) => {
+    // Warte bis Daten geladen sind
+    if (isLoading) return;
+
     const tutorialId = ROUTE_TUTORIAL_MAP[pathname];
     if (tutorialId && !isCompleted(tutorialId) && !showSetupWizard) {
       // Kleiner Delay damit die Seite erst laden kann
@@ -157,7 +177,7 @@ export function OnboardingProvider({ children }) {
         showTutorial(tutorialId);
       }, 500);
     }
-  }, [isCompleted, showSetupWizard, showTutorial]);
+  }, [isLoading, isCompleted, showSetupWizard, showTutorial]);
 
   // Fortschritt berechnen
   const progress = {

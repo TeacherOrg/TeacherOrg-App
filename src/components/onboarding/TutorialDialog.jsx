@@ -37,7 +37,9 @@ export function TutorialDialog({
   const isFirstSlide = currentSlide === 0;
 
   const handleNext = () => {
+    console.log('[TutorialDialog] handleNext called, isLastSlide:', isLastSlide);
     if (isLastSlide) {
+      console.log('[TutorialDialog] Calling onComplete');
       onComplete();
     } else {
       setCurrentSlide(prev => prev + 1);
@@ -51,6 +53,7 @@ export function TutorialDialog({
   };
 
   const handleSkip = () => {
+    console.log('[TutorialDialog] handleSkip called, calling onComplete');
     onComplete();
   };
 
@@ -76,7 +79,10 @@ export function TutorialDialog({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-2xl bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 p-0">
+      <DialogContent
+        className="max-w-2xl bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 p-0"
+        aria-describedby={undefined}
+      >
         <DialogHeader className="p-6 pb-4 border-b border-slate-200 dark:border-slate-700">
           <DialogTitle className="text-xl font-bold text-slate-900 dark:text-white">
             {title}

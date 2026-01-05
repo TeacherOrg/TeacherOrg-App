@@ -36,8 +36,8 @@ export function HelpButton({ variant = 'floating' }) {
     }
   };
 
-  // Only show on pages that have tutorials
-  if (!currentTutorialId) {
+  // Only show on pages that have tutorials AND tutorial not yet completed
+  if (!currentTutorialId || isCompleted(currentTutorialId)) {
     return null;
   }
 

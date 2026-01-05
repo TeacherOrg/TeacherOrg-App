@@ -1,21 +1,18 @@
 // src/hooks/useTopicProgress.js
 import { useMemo } from "react";
-import { useLessonStore } from "@/store";
-
-function getCurrentWeek(date = new Date()) {
-  const d = new Date(date);
-  d.setHours(0, 0, 0, 0);
-  d.setDate(d.getDate() + 3 - ((d.getDay() + 6) % 7));
-  const yearStart = new Date(d.getFullYear(), 0, 1);
-  return Math.ceil(((d - yearStart) / 86400000 + 1) / 7);
-}
+import { useLessonStore, useSettings } from "@/store";
+import { getCurrentWeek, generateTimeSlots, hasLessonEnded } from "@/utils/lessonTimeUtils";
 
 export function useTopicProgress(currentLesson) {
   const { allYearlyLessons, allLessons, topics } = useLessonStore();
+  const settings = useSettings();
 
   const today = new Date();
   const realCurrentYear = today.getFullYear();
   const realCurrentWeek = getCurrentWeek(today);
+
+  // TimeSlots aus Settings generieren fuer Endzeitpruefung
+  const timeSlots = useMemo(() => generateTimeSlots(settings), [settings]);
 
   return useMemo(() => {
     let topicId = null;
@@ -26,6 +23,11 @@ export function useTopicProgress(currentLesson) {
     } else if (currentLesson?.second_yearly_lesson_id) {
       const yl = allYearlyLessons.find(yl => yl.id === currentLesson.second_yearly_lesson_id);
       topicId = yl?.topic_id;
+    }
+
+    // Fallback auf direktes topic_id (für TopicLessonsModal)
+    if (!topicId && currentLesson?.topic_id) {
+      topicId = currentLesson.topic_id;
     }
 
     if (!topicId) {
@@ -54,14 +56,10 @@ export function useTopicProgress(currentLesson) {
       const index = plannedLessons.findIndex(yl => yl.id === ylId);
       if (index === -1) return; // nicht in diesem Thema
 
-      const lessonWeek = lesson.week_number;
-      const lessonYear = lesson.week_year || realCurrentYear;
+      // Pruefe ob die Lektion bereits beendet ist (Jahr, Woche, Tag UND Endzeit)
+      const isCompleted = hasLessonEnded(lesson, timeSlots, today);
 
-      const isPastOrToday =
-        lessonYear < realCurrentYear ||
-        (lessonYear === realCurrentYear && lessonWeek <= realCurrentWeek);
-
-      if (isPastOrToday) {
+      if (isCompleted) {
         // Jede vergangene Lektion zählt – auch wenn dazwischen Lücken sind
         const yl = plannedLessons[index];
 
@@ -85,5 +83,5 @@ export function useTopicProgress(currentLesson) {
     console.log("TopicProgress Debug Final:", { planned, completedCount, topicId });
 
     return { topic, planned, completed: completedCount };
-  }, [currentLesson, allYearlyLessons, allLessons, topics, realCurrentYear, realCurrentWeek]);
+  }, [currentLesson, allYearlyLessons, allLessons, topics, realCurrentYear, realCurrentWeek, timeSlots]);
 }
