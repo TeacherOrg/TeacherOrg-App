@@ -38,6 +38,7 @@ export default function LessonDetailPanel({
   selectedDate,
   manualStepIndex,
   onManualStepChange,
+  onEndBreakEarly,
 }) {
   const [currentStepIndex, setCurrentStepIndex] = useState(-1);
   const [manualStepControl, setManualStepControl] = useState(false);
@@ -228,6 +229,16 @@ export default function LessonDetailPanel({
               </div>
             )}
           </div>
+        )}
+
+        {/* Pause frühzeitig beenden Button */}
+        {onEndBreakEarly && nextLesson && (
+          <Button
+            onClick={onEndBreakEarly}
+            className="mt-6 px-6 py-3 bg-orange-500 hover:bg-orange-600 text-white"
+          >
+            Pause frühzeitig beenden
+          </Button>
         )}
       </div>
     );

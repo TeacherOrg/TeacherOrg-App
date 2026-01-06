@@ -684,7 +684,9 @@ export default function DailyView({ currentDate, onDateChange }) {
   const nextLessonAfterPause = useMemo(() => {
     if (currentItem?.type !== 'break') return null;
 
-    const currentBreakIndex = combinedSchedule.findIndex(item => item === currentItem);
+    const currentBreakIndex = combinedSchedule.findIndex(item =>
+      item.type === 'break' && item.timeSlot?.start === currentItem.timeSlot?.start
+    );
     return combinedSchedule.find((item, index) => index > currentBreakIndex && item.type === 'lesson');
   }, [currentItem, combinedSchedule]);
 
@@ -971,6 +973,11 @@ export default function DailyView({ currentDate, onDateChange }) {
               onManualStepChange={handleManualStepChange}
               theme={customization.theme || 'default'}
               isDark={isDark}
+              onEndBreakEarly={() => {
+                if (nextLessonAfterPause) {
+                  setSelectedItem(nextLessonAfterPause);
+                }
+              }}
             />
           ) : (
             <div className="flex items-center justify-center h-full text-center bg-white/50 dark:bg-slate-800/50 rounded-2xl">
