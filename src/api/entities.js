@@ -171,12 +171,16 @@ class PbEntity {
       normalizedItem.student_name = normalizedItem.expand?.student_id?.name || 'Unknown Student';
       normalizedItem.chore_name = normalizedItem.expand?.chore_id?.name || normalizedItem.expand?.chore_id?.description || 'Unknown Chore';
       normalizedItem.class_name = normalizedItem.expand?.class_id?.name || 'Unknown Class';
-     
-      // NEU: assignment_date auf ISO-Datum normalisieren
+
+      // assignment_date auf ISO-Datum normalisieren
       if (normalizedItem.assignment_date) {
         const date = new Date(normalizedItem.assignment_date);
         normalizedItem.assignment_date = date.toISOString().split('T')[0];
       }
+
+      // Completion-Tracking Felder
+      normalizedItem.is_completed = normalizedItem.is_completed || false;
+      normalizedItem.completed_at = normalizedItem.completed_at || null;
     }
 
     if (this.name === 'lehrplan_kompetenz') {
@@ -615,7 +619,7 @@ export const Chore = new PbEntity('Chore');
 export const ChoreAssignment = new PbEntity('Chore_assignment');
 export const Group = new PbEntity('Group');
 export const UserPreferences = new PbEntity('User_preference');
-export const CustomizationSettings = new PbEntity('Customization_setting');
+export const CustomizationSettings = new PbEntity('customization_setting');
 export const AllerleiLesson = new PbEntity('Allerlei_lesson');  // Neu: Entity für neue Collection
 export const LehrplanKompetenz = new PbEntity('lehrplan_kompetenz');
 export const SharedTopic = new PbEntity('shared_topic');

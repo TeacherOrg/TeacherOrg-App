@@ -3,17 +3,19 @@ import { useNavigate } from "react-router-dom";
 import { Lesson, YearlyLesson, Subject, Holiday, Setting, Class, Announcement, Chore, ChoreAssignment, Student, Topic, AllerleiLesson } from "@/api/entities";
 import { Button } from "@/components/ui/button";
 import { ChevronLeft, ChevronRight, Calendar, Users, Home, Zap, Coffee } from "lucide-react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import CalendarLoader from "../components/ui/CalendarLoader";
 import LessonOverviewPanel from "../components/daily/LessonOverviewPanel";
 import LessonDetailPanel from "../components/daily/LessonDetailPanel";
 import ChoresDisplay from "../components/daily/ChoresDisplay";
+import CustomizationPanel from "../components/daily/CustomizationPanel";
 import { createPageUrl } from "@/utils";
-import { getThemeGradient } from "@/utils/colorDailyUtils";
 import { normalizeAllerleiData } from "@/components/timetable/allerlei/AllerleiUtils";
 import { CustomizationSettings } from "@/api/entities";
 import pb from "@/api/pb";
 import { useLessonStore, useAllerleiLessons } from "@/store";
+import toast from "react-hot-toast";
+import { playSound } from "@/utils/audioSounds";
 
 // Utility functions
 function getCurrentWeek(date) {
@@ -105,11 +107,10 @@ function generateTimeSlotsWithBreaks(settings) {
   return { timeSlots: slots, breaks };
 }
 
-export default function DailyView({ currentDate, onDateChange }) {
+export default function DailyView({ currentDate, onDateChange, onThemeChange }) {
   const navigate = useNavigate();
   const [selectedItem, setSelectedItem] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
-  const audioRef = useRef(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   
   // Data states
@@ -135,18 +136,22 @@ export default function DailyView({ currentDate, onDateChange }) {
   const [manualChoresView, setManualChoresView] = useState(false);
   // Temporärer Pausen-Button-State
   const [forcePauseView, setForcePauseView] = useState(false);
-  
+
+  // Customization Panel State
+  const [showCustomization, setShowCustomization] = useState(false);
+
   // Customization settings
   const [customization, setCustomization] = useState({
-    fontSize: { title: 'text-2xl', content: 'text-lg' /* removed clock */ },
+    fontSize: { title: 'text-xl', content: 'text-xl', steps: 'text-base' },
     background: { type: 'gradient', value: 'from-blue-50 to-indigo-100 dark:from-slate-900 dark:to-slate-800' },
     theme: 'default', // Fallback auf 'default'
     autoFocusCurrentLesson: true,
     showOverview: true,
-    audio: { enabled: false, volume: 0.5 },
+    audio: { enabled: false, volume: 0.5, sound: 'chime' },
     transparencyMode: false,
     forceDarkText: false,
     forceLightText: false,
+    reducedMotion: false,
   });
 
   // Current time state
@@ -193,13 +198,16 @@ export default function DailyView({ currentDate, onDateChange }) {
             fontSize: {
               title: loaded.font_size_title,
               content: loaded.font_size_content,
+              steps: loaded.font_size_steps || 'text-base',
             },
             showOverview: loaded.show_overview,
             autoFocusCurrentLesson: loaded.auto_focus_current_lesson,
             compactMode: loaded.compact_mode,
+            reducedMotion: loaded.reduced_motion || false,
             audio: {
               enabled: loaded.audio_enabled,
               volume: loaded.audio_volume,
+              sound: loaded.audio_sound || 'chime',
             },
             transparencyMode: loaded.transparency_mode || false,
             forceDarkText: loaded.force_dark_text || false,
@@ -213,7 +221,7 @@ export default function DailyView({ currentDate, onDateChange }) {
     loadCustomization();
   }, []);
 
-  // Update current time every second
+  // Update current time every second for smooth timer display
   useEffect(() => {
     const timer = setInterval(() => {
       setCurrentTime(new Date());
@@ -230,43 +238,6 @@ export default function DailyView({ currentDate, onDateChange }) {
     document.addEventListener('fullscreenchange', handleFullscreenChange);
     return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
   }, []);
-
-  // Save customization settings to localStorage
-  useEffect(() => {
-    const saveCustomization = async () => {
-      try {
-        const userId = pb.authStore.model?.id;
-        if (!userId) return;
-
-        const settings = await CustomizationSettings.list({ filter: `user_id = "${userId}"` });
-        const data = {
-          user_id: userId,
-          theme: customization.theme || 'default',
-          background_type: customization.background.type,
-          background_value: customization.background.value,
-          font_size_title: customization.fontSize.title,
-          font_size_content: customization.fontSize.content,
-          show_overview: customization.showOverview,
-          auto_focus_current_lesson: customization.autoFocusCurrentLesson,
-          compact_mode: customization.compactMode,
-          audio_enabled: customization.audio.enabled,
-          audio_volume: customization.audio.volume,
-          transparency_mode: customization.transparencyMode,
-          force_dark_text: customization.forceDarkText,
-          force_light_text: customization.forceLightText,
-        };
-
-        if (settings && settings.length > 0) {
-          await CustomizationSettings.update(settings[0].id, data);
-        } else {
-          await CustomizationSettings.create(data);
-        }
-      } catch (error) {
-        console.error("Error saving customization:", error);
-      }
-    };
-    saveCustomization();
-  }, [customization]);
 
   const loadAllData = async () => {
     setIsLoading(true);
@@ -721,15 +692,18 @@ export default function DailyView({ currentDate, onDateChange }) {
   }, [currentTime, lessonsForDate, currentDate]);
 
   // Play audio at the end of a lesson
+  const lastPlayedLessonRef = useRef(null);
   useEffect(() => {
-      if (customization.audio?.enabled && audioRef.current && currentItem?.type === 'lesson') {
+      if (customization.audio?.enabled && currentItem?.type === 'lesson') {
           const now = new Date();
           const lessonEndTime = new Date(`${now.toDateString()} ${currentItem.timeSlot.end}`);
           const secondsToEnd = (lessonEndTime.getTime() - now.getTime()) / 1000;
 
-          if (secondsToEnd > 0 && secondsToEnd < 1.5) { 
-              audioRef.current.volume = customization.audio.volume || 0.5;
-              audioRef.current.play().catch(e => console.error("Audio play failed:", e));
+          // Spiele Ton wenn 0-1.5 Sekunden vor Ende und noch nicht für diese Lektion gespielt
+          const lessonKey = `${currentItem.period_slot}-${currentItem.timeSlot.end}`;
+          if (secondsToEnd > 0 && secondsToEnd < 1.5 && lastPlayedLessonRef.current !== lessonKey) {
+              lastPlayedLessonRef.current = lessonKey;
+              playSound(customization.audio.sound || 'chime', customization.audio.volume || 0.5);
           }
       }
   }, [currentTime, currentItem, customization.audio]);
@@ -764,6 +738,106 @@ export default function DailyView({ currentDate, onDateChange }) {
       setManualStepIndex(index);
   }, []);
 
+  // Handler für Ämtli-Completion
+  const handleChoreCompletion = useCallback(async (assignmentIds, isCompleted) => {
+    try {
+      const now = new Date().toISOString();
+
+      await Promise.all(assignmentIds.map(id =>
+        ChoreAssignment.update(id, {
+          is_completed: isCompleted,
+          completed_at: isCompleted ? now : null
+        })
+      ));
+
+      // Refresh assignments
+      const userId = pb.authStore.model?.id;
+      const updatedAssignments = await ChoreAssignment.list({ user_id: userId });
+      setChoreAssignments(updatedAssignments || []);
+
+      toast.success(isCompleted ? 'Ämtli als erledigt markiert!' : 'Ämtli als nicht erledigt markiert.');
+    } catch (error) {
+      console.error('Error updating chore completion:', error);
+      toast.error('Fehler beim Aktualisieren des Ämtli.');
+    }
+  }, []);
+
+  // Speicherfunktion für Customization - SOFORT speichern, nicht im useEffect
+  const saveCustomizationToDb = useCallback(async (customizationData) => {
+    try {
+      const userId = pb.authStore.model?.id;
+      if (!userId) return;
+
+      const settings = await CustomizationSettings.list({ filter: `user_id = "${userId}"` });
+      const data = {
+        user_id: userId,
+        theme: customizationData.theme || 'default',
+        background_type: customizationData.background?.type,
+        background_value: customizationData.background?.value,
+        font_size_title: customizationData.fontSize?.title,
+        font_size_content: customizationData.fontSize?.content,
+        font_size_steps: customizationData.fontSize?.steps,
+        show_overview: customizationData.showOverview,
+        auto_focus_current_lesson: customizationData.autoFocusCurrentLesson,
+        compact_mode: customizationData.compactMode,
+        reduced_motion: customizationData.reducedMotion,
+        audio_enabled: customizationData.audio?.enabled,
+        audio_volume: customizationData.audio?.volume,
+        audio_sound: customizationData.audio?.sound || 'chime',
+        transparency_mode: customizationData.transparencyMode,
+        force_dark_text: customizationData.forceDarkText,
+        force_light_text: customizationData.forceLightText,
+      };
+
+      if (settings && settings.length > 0) {
+        await CustomizationSettings.update(settings[0].id, data);
+      } else {
+        await CustomizationSettings.create(data);
+      }
+    } catch (error) {
+      console.error("Error saving customization:", error);
+    }
+  }, []);
+
+  // Ref für Theme-Tracking (verhindert stale closure)
+  const prevThemeRef = useRef(customization.theme);
+
+  // Synchronisiere Ref wenn Theme extern geändert wird (z.B. DB-Load)
+  useEffect(() => {
+    console.log('[DailyView] useEffect Theme-Sync:', {
+      prevRef: prevThemeRef.current,
+      newTheme: customization.theme
+    });
+    prevThemeRef.current = customization.theme;
+  }, [customization.theme]);
+
+  // DEBUG: Log wenn customization sich ändert
+  useEffect(() => {
+    console.log('[DailyView] customization.theme geändert:', customization.theme);
+  }, [customization.theme]);
+
+  // Handler für Customization-Änderungen mit Theme-Synchronisation
+  const handleCustomizationChange = useCallback((newCustomization) => {
+    console.log('[DailyView] handleCustomizationChange aufgerufen:', {
+      newTheme: newCustomization.theme,
+      prevRefTheme: prevThemeRef.current,
+      hasOnThemeChange: !!onThemeChange,
+      willCallOnThemeChange: onThemeChange && newCustomization.theme !== prevThemeRef.current
+    });
+
+    // Theme-Änderung nach oben melden (für Space-Theme Wrapper in Timetable)
+    if (onThemeChange && newCustomization.theme !== prevThemeRef.current) {
+      console.log('[DailyView] -> onThemeChange wird aufgerufen mit:', newCustomization.theme);
+      onThemeChange(newCustomization.theme);
+    }
+    // Ref IMMER aktualisieren
+    prevThemeRef.current = newCustomization.theme;
+    setCustomization(newCustomization);
+
+    // SOFORT in DB speichern - nicht auf useEffect warten!
+    saveCustomizationToDb(newCustomization);
+  }, [onThemeChange, saveCustomizationToDb]);
+
   const toggleFullscreen = () => {
     if (!document.fullscreenElement) {
       document.documentElement.requestFullscreen().catch(err => console.error('Fullscreen error:', err));
@@ -783,6 +857,11 @@ export default function DailyView({ currentDate, onDateChange }) {
   const getBackgroundStyle = () => {
     const { background, theme } = customization;
 
+    // Space Theme: Kein eigener Hintergrund, SpaceBackground übernimmt
+    if (theme === 'space') {
+      return { background: 'transparent' };
+    }
+
     if (background.type === 'solid') {
       return { backgroundColor: background.value || '#ffffff' };
     }
@@ -800,8 +879,8 @@ export default function DailyView({ currentDate, onDateChange }) {
       return { background: background.value };
     }
 
-    // Fallback: Theme-basiert (auch wenn kein manueller Gradient)
-    return { background: getThemeGradient(theme || 'default', '#3b82f6', undefined, isDark) };
+    // Fallback: Transparent, damit der Timetable/Layout-Gradient durchscheint
+    return { background: 'transparent' };
   };
 
   const mainGridStyle = useMemo(() => {
@@ -829,26 +908,28 @@ export default function DailyView({ currentDate, onDateChange }) {
     );
   }
 
+  // Space Theme Wrapper - jetzt in Timetable.jsx gehandhabt
+  const Wrapper = React.Fragment;
+
   return (
-    <motion.div 
+    <Wrapper>
+    <motion.div
       className="h-full w-full overflow-hidden relative font-[Poppins]"
-      style={{ background: '#ffffff', ...getBackgroundStyle() }}
+      style={{ ...getBackgroundStyle() }}
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       transition={{ duration: 1 }}
     >
-<audio ref={audioRef} src="/audio/end_of_lesson.ogg" preload="auto" />
-      
       {/* Main Content Area */}
-      <div 
-        className={`h-full w-full grid grid-cols-1 lg:grid-cols-[minmax(400px,35%)_1fr] gap-2 md:gap-3 overflow-hidden ${
+      <div
+        className={`w-full grid grid-cols-1 lg:grid-cols-[minmax(400px,35%)_1fr] gap-2 md:gap-3 items-stretch max-h-[calc(100vh-120px)] ${
           isFullscreen ? 'p-0' : 'p-4'
         }`}
       >
         {/* Lesson Overview Panel */}
         {customization.showOverview && (
-          <motion.div 
-            className="h-full overflow-hidden min-w-0"
+          <motion.div
+            className="min-w-0 self-stretch overflow-y-auto"
           >
             <LessonOverviewPanel
               items={lessonsForDate}
@@ -860,7 +941,7 @@ export default function DailyView({ currentDate, onDateChange }) {
               theme={customization.theme || 'default'}
               isDark={isDark}
               // Button Props
-              onSettingsClick={() => { /* Deaktiviert - wird später neu implementiert */ }}
+              onSettingsClick={() => setShowCustomization(true)}
               onFullscreenToggle={toggleFullscreen}
               isFullscreen={isFullscreen}
               forcePauseView={forcePauseView}
@@ -872,7 +953,7 @@ export default function DailyView({ currentDate, onDateChange }) {
         )}
 
         {/* Main Central Panel */}
-        <div className="h-full overflow-y-auto overflow-x-hidden p-1 md:p-2 min-w-0 flex flex-col" style={{ maxWidth: '100%' }}> {/* Entferne overflowX: 'auto', um Scrollen zu vermeiden; Panel passt sich an */}
+        <div className="overflow-y-auto overflow-x-hidden min-w-0 flex flex-col self-stretch" style={{ maxWidth: '100%' }}>
           {manualChoresView ? (
             <ChoresDisplay
               assignments={todaysAssignments}
@@ -880,18 +961,39 @@ export default function DailyView({ currentDate, onDateChange }) {
               students={students}
               customization={customization}
               isDark={isDark}
+              onMarkCompleted={handleChoreCompletion}
             />
           ) : forcePauseView ? (
-            <div className="rounded-2xl shadow-2xl bg-white/95 dark:bg-slate-900/95 overflow-hidden h-full flex flex-col items-center justify-center p-8">
-              {/* Kaffeetasse */}
-              <Coffee className="w-20 h-20 text-orange-500 mb-4 animate-pulse" />
+            (() => {
+              // Prüfe ob Doppellektions-Pause (gleiche Lektion nach der Pause)
+              const isDoubleLessonBreak = selectedItem?.is_double_lesson &&
+                nextLessonAfterPause?.id === selectedItem?.id;
+
+              // Farbe der nächsten Lektion (Fallback: Orange)
+              const nextSubjectColor = nextLessonAfterPause?.subject?.color || '#f97316';
+
+              // Materialien sammeln
+              const materials = nextLessonAfterPause?.steps
+                ?.map(step => step.material)
+                .filter(m => m && m.trim() !== '' && m !== '–')
+                || [];
+
+              // Theme-abhängige Transparenz für Pause-Ansicht
+              const pauseBgClass = customization.theme === 'space'
+                ? 'bg-white/30 dark:bg-slate-900/30 border border-white/20 dark:border-white/10'
+                : 'bg-white/95 dark:bg-slate-900/95';
+
+              return (
+            <div className={`rounded-2xl shadow-2xl ${pauseBgClass} overflow-hidden h-full flex flex-col items-center justify-center p-8`}>
+              {/* Kaffeetasse - Farbe des nächsten Fachs */}
+              <Coffee className="w-20 h-20 mb-4 animate-pulse" style={{ color: nextSubjectColor }} />
 
               {/* Pause Text */}
               <h2 className="text-3xl font-bold text-slate-800 dark:text-slate-200 mb-2">
                 Pause
               </h2>
 
-              {/* Timer bis zur nächsten Lektion */}
+              {/* Timer bis zur nächsten Lektion - Farbe des nächsten Fachs */}
               {nextLessonAfterPause?.timeSlot?.start && (() => {
                 const nextStart = new Date(`${new Date().toDateString()} ${nextLessonAfterPause.timeSlot.start}`);
                 const remainingMs = Math.max(0, nextStart - currentTime);
@@ -899,14 +1001,14 @@ export default function DailyView({ currentDate, onDateChange }) {
                 const remainingSeconds = Math.floor((remainingMs % 60000) / 1000);
 
                 return (
-                  <div className="text-5xl font-bold text-orange-500 tabular-nums mb-8">
+                  <div className="text-5xl font-bold tabular-nums mb-8" style={{ color: nextSubjectColor }}>
                     {String(remainingMinutes).padStart(2, '0')}:{String(remainingSeconds).padStart(2, '0')}
                   </div>
                 );
               })()}
 
-              {/* Nächste Lektion (falls vorhanden) */}
-              {nextLessonAfterPause && (
+              {/* Nächste Lektion - NICHT anzeigen bei Doppellektions-Pause */}
+              {nextLessonAfterPause && !isDoubleLessonBreak && (
                 <div className="w-full max-w-md bg-slate-100 dark:bg-slate-800 rounded-xl p-6 mb-8">
                   <h3 className="text-lg font-semibold text-slate-700 dark:text-slate-300 mb-2">
                     Nächste Lektion
@@ -918,41 +1020,50 @@ export default function DailyView({ currentDate, onDateChange }) {
                     </span>
                   </div>
 
-                  {/* Materialien der nächsten Lektion */}
-                  {(() => {
-                    const materials = nextLessonAfterPause.steps
-                      ?.map(step => step.material)
-                      .filter(m => m && m.trim() !== '' && m !== '–')
-                      || [];
-
-                    if (materials.length === 0) return null;
-
-                    return (
-                      <div className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-700">
-                        <h4 className="text-sm font-semibold text-slate-600 dark:text-slate-400 mb-2">
-                          Materialien bereitstellen:
-                        </h4>
-                        <ul className="space-y-1">
-                          {materials.map((material, idx) => (
-                            <li key={idx} className="flex items-center gap-2 text-slate-700 dark:text-slate-300">
-                              <span className="w-2 h-2 bg-orange-500 rounded-full"></span>
-                              {material}
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    );
-                  })()}
+                  {/* Materialien der nächsten Lektion - Bullet Points in Fachfarbe */}
+                  {materials.length > 0 && (
+                    <div className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-700">
+                      <h4 className="text-sm font-semibold text-slate-600 dark:text-slate-400 mb-2">
+                        Materialien bereitstellen:
+                      </h4>
+                      <ul className="space-y-1">
+                        {materials.map((material, idx) => (
+                          <li key={idx} className="flex items-center gap-2 text-slate-700 dark:text-slate-300">
+                            <span className="w-2 h-2 rounded-full" style={{ backgroundColor: nextSubjectColor }}></span>
+                            {material}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
                 </div>
               )}
 
-              <Button
-                onClick={() => setForcePauseView(false)}
-                className="mt-4 px-6 py-3"
-              >
-                Zurück zur Lektion
-              </Button>
+              {/* Buttons */}
+              <div className="flex flex-col gap-2 mt-6">
+                {nextLessonAfterPause && !isDoubleLessonBreak && (
+                  <Button
+                    onClick={() => {
+                      setSelectedItem(nextLessonAfterPause);
+                      setForcePauseView(false);
+                    }}
+                    className="px-6 py-3 text-white"
+                    style={{ backgroundColor: nextSubjectColor }}
+                  >
+                    Nächste Lektion starten
+                  </Button>
+                )}
+                <Button
+                  onClick={() => setForcePauseView(false)}
+                  variant="outline"
+                  className="px-6 py-3"
+                >
+                  Zurück zur aktuellen Lektion
+                </Button>
+              </div>
             </div>
+              );
+            })()
           ) : showChoresView ? (
             <ChoresDisplay
               assignments={todaysAssignments}
@@ -960,6 +1071,7 @@ export default function DailyView({ currentDate, onDateChange }) {
               students={students}
               customization={customization}
               isDark={isDark}
+              onMarkCompleted={handleChoreCompletion}
             />
           ) : selectedItem ? (
             <LessonDetailPanel
@@ -976,6 +1088,7 @@ export default function DailyView({ currentDate, onDateChange }) {
               onEndBreakEarly={() => {
                 if (nextLessonAfterPause) {
                   setSelectedItem(nextLessonAfterPause);
+                  setForcePauseView(false);
                 }
               }}
             />
@@ -997,7 +1110,7 @@ export default function DailyView({ currentDate, onDateChange }) {
 
       {/* Empty State */}
       {!currentHoliday && lessonsForDate.length === 0 && !isLoading && !showChoresView && (
-          <motion.div 
+          <motion.div
             className="absolute inset-0 flex items-center justify-center pointer-events-none"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -1014,6 +1127,37 @@ export default function DailyView({ currentDate, onDateChange }) {
             </div>
           </motion.div>
       )}
+
+      {/* Customization Slide-Panel */}
+      <AnimatePresence>
+        {showCustomization && (
+          <>
+            {/* Backdrop */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-black/20 z-40"
+              onClick={() => setShowCustomization(false)}
+            />
+            {/* Slide Panel */}
+            <motion.div
+              initial={{ x: '100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '100%' }}
+              transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+              className="fixed right-0 top-0 h-full w-full max-w-md bg-white dark:bg-slate-900 z-50 shadow-2xl overflow-hidden"
+            >
+              <CustomizationPanel
+                customization={customization}
+                onCustomizationChange={handleCustomizationChange}
+                onClose={() => setShowCustomization(false)}
+              />
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
     </motion.div>
+    </Wrapper>
   );
 }

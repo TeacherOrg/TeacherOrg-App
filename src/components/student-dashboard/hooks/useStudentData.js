@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { Student, Performance, UeberfachlichKompetenz, Competency, StudentSelfAssessment, CompetencyGoal, Class } from '@/api/entities';
+import { Student, Performance, UeberfachlichKompetenz, Competency, StudentSelfAssessment, CompetencyGoal, Class, ChoreAssignment } from '@/api/entities';
 import { calculateWeightedGrade } from '@/components/grades/utils/calculateWeightedGrade';
 import { getFachbereichColor } from '@/utils/colorUtils';
 import pb from '@/api/pb';
@@ -21,6 +21,7 @@ export function useStudentData(studentId = null) {
   const [selfAssessments, setSelfAssessments] = useState([]);
   const [goals, setGoals] = useState([]);
   const [classInfo, setClassInfo] = useState(null);
+  const [choreAssignments, setChoreAssignments] = useState([]);
 
   const currentUser = pb.authStore.model;
   const isStudent = currentUser?.role === 'student';
@@ -72,13 +73,15 @@ export function useStudentData(studentId = null) {
         competenciesData,
         teacherAssessmentsData,
         selfAssessmentsData,
-        goalsData
+        goalsData,
+        choreAssignmentsData
       ] = await Promise.all([
         Performance.filter({ student_id: studentData.id }),
         Competency.filter({ class_id: studentData.class_id }),
         UeberfachlichKompetenz.filter({ student_id: studentData.id }),
         StudentSelfAssessment.filter({ student_id: studentData.id }).catch(() => []),
-        CompetencyGoal.filter({ student_id: studentData.id }).catch(() => [])
+        CompetencyGoal.filter({ student_id: studentData.id }).catch(() => []),
+        ChoreAssignment.filter({ student_id: studentData.id }).catch(() => [])
       ]);
 
       setPerformances(performancesData);
@@ -86,6 +89,7 @@ export function useStudentData(studentId = null) {
       setTeacherAssessments(teacherAssessmentsData);
       setSelfAssessments(selfAssessmentsData);
       setGoals(goalsData);
+      setChoreAssignments(choreAssignmentsData);
 
     } catch (err) {
       console.error('Error loading student data:', err);
@@ -250,6 +254,12 @@ export function useStudentData(studentId = null) {
     const completedGoals = goals.filter(g => g.is_completed);
     const activeGoals = goals.filter(g => !g.is_completed);
 
+    // Chore stats - nur vergangene Ämtlis zählen (fair für die Quote)
+    const today = new Date().toISOString().split('T')[0];
+    const pastChores = choreAssignments.filter(a => a.assignment_date <= today);
+    const totalChores = pastChores.length;
+    const completedChores = pastChores.filter(a => a.is_completed).length;
+
     return {
       totalPerformances: performances.length,
       gradeAverage,
@@ -260,9 +270,13 @@ export function useStudentData(studentId = null) {
       activeGoals: activeGoals.length,
       recentGoals: completedGoals
         .sort((a, b) => new Date(b.completed_date) - new Date(a.completed_date))
-        .slice(0, 5)
+        .slice(0, 5),
+      // Chore stats
+      totalChores,
+      completedChores,
+      failedChores: totalChores - completedChores
     };
-  }, [performances, gradeAverage, competencies, competencyData, goals]);
+  }, [performances, gradeAverage, competencies, competencyData, goals, choreAssignments]);
 
   return {
     // Data
@@ -273,6 +287,7 @@ export function useStudentData(studentId = null) {
     teacherAssessments,
     selfAssessments,
     goals,
+    choreAssignments,
 
     // Derived data
     gradeAverage,

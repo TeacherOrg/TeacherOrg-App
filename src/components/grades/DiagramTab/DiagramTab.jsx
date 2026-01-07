@@ -3,10 +3,11 @@ import FiltersSection from './FiltersSection';
 import Leistungscharts from './LeistungCharts';
 import KompetenzenCharts from './KompetenzenCharts';
 import KPICards from './KPICards';
+import KompetenzenKPICards from './KompetenzenKPICards';
 import { Button } from "@/components/ui/button";
 import { Activity, Star } from 'lucide-react';
 
-const DiagramTab = ({ students, performances, ueberfachlich, subjects, allCompetencies, activeClassId, onDataChange, selectedStudentId }) => {
+const DiagramTab = ({ students, performances, ueberfachlich, subjects, allCompetencies, activeClassId, onDataChange, selectedStudentId, choreAssignments = [], onChoreUpdate }) => {
   const [diagramView, setDiagramView] = useState('leistung');
   const [selectedStudents, setSelectedStudents] = useState([]);
   const [selectedSubject, setSelectedSubject] = useState('all');
@@ -68,14 +69,22 @@ const DiagramTab = ({ students, performances, ueberfachlich, subjects, allCompet
         </Button>
       </div>
 
-      {/* KPI Cards - only show for Leistung view */}
-      {diagramView === 'leistung' && (
+      {/* KPI Cards - show different cards based on view */}
+      {diagramView === 'leistung' ? (
         <KPICards
           performances={performances}
           students={students}
           subjects={subjects}
           selectedSubject={selectedSubject}
           selectedStudents={selectedStudents}
+        />
+      ) : (
+        <KompetenzenKPICards
+          ueberfachlich={ueberfachlich}
+          students={students}
+          choreAssignments={choreAssignments}
+          selectedStudents={selectedStudents}
+          onChoreUpdate={onChoreUpdate}
         />
       )}
 

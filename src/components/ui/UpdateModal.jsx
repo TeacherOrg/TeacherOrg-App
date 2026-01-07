@@ -22,6 +22,8 @@ const UpdateModal = ({ isOpen, onClose, version }) => {
             { text: 'OliOmegaGay', type: 'rainbow' },
             { text: 'MurieLame', type: 'turd' },
             { text: 'Neue Sidebar (Ein/Ausklappbar + Ansichtenanpassung', type: 'fixed' },
+            { text: 'Neues Einstellungsmenü in Tagesansicht', type: 'fixed' },
+            { text: 'Ämtli sind nun als Erledigt markierbar und zählen zu Erfolg', type: 'fixed' },
             { text: 'Einstellungsmenü überarbeitet', type: 'fixed' },
             { text: 'Löschfunktionen korrigiert', type: 'fixed' },
             { text: 'Technische Updates und Upgrades', type: 'mech' },
@@ -74,6 +76,7 @@ const UpdateModal = ({ isOpen, onClose, version }) => {
           items: [
             { text: 'Materialien aus Thema stehen bei den Schritten zur Verfügung ', type: 'fixed' },
             { text: 'Lektionstemplates können erstellt werden und erlauben hinzufügen neuer Lektionen', type: 'fixed' },
+            { text: 'Shift+Enter (auto Nummerierung)', type: 'fixed' },
           ],
         },
         {
@@ -137,7 +140,7 @@ const UpdateModal = ({ isOpen, onClose, version }) => {
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>TeacherOrg Update: Version Alpha 6.9.1 - nice </DialogTitle>
+          <DialogTitle>TeacherOrg Update: Version Alpha 6.9.2 - nice </DialogTitle>
           <DialogDescription>
             Hier sind die neuesten Änderungen:
           </DialogDescription>

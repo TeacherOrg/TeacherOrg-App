@@ -128,7 +128,8 @@ export default function LessonModal({
 
   const subjectName = useMemo(() => {
     if (typeof rawSubject === 'object' && rawSubject?.name) return rawSubject.name;
-    const subjectById = subjects.find(s => s.id === subjectId);
+    // Use String conversion to ensure type-safe comparison
+    const subjectById = subjects.find(s => String(s.id) === String(subjectId));
     if (subjectById) return subjectById.name;
     const subjectByName = subjects.find(s => s.name === rawSubject);
     if (subjectByName) return subjectByName.name;

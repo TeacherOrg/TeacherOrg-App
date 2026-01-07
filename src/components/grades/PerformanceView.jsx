@@ -2,7 +2,7 @@ import React, { Suspense, useState, useEffect, useCallback } from 'react';
 import { Button } from "@/components/ui/button";
 import { usePreferences } from './hooks/usePreferences';
 import { useToast } from "@/components/ui/use-toast";
-import { Performance, UeberfachlichKompetenz, Subject, Competency, Fachbereich, User } from '@/api/entities';
+import { Performance, UeberfachlichKompetenz, Subject, Competency, Fachbereich, User, ChoreAssignment } from '@/api/entities';
 import CalendarLoader from '../ui/CalendarLoader';
 import PerformanceModal from './PerformanceModal';
 import UeberfachlichModal from './UeberfachlichModal';
@@ -18,6 +18,7 @@ const PerformanceView = ({ students = [], performances = [], activeClassId, setA
   const [subjects, setSubjects] = useState([]);
   const [allCompetencies, setAllCompetencies] = useState([]);
   const [ueberfachlich, setUeberfachlich] = useState([]);
+  const [choreAssignments, setChoreAssignments] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isPerformanceModalOpen, setIsPerformanceModalOpen] = useState(false);
   const [isUeberfachlichModalOpen, setIsUeberfachlichModalOpen] = useState(false);
@@ -43,11 +44,12 @@ const PerformanceView = ({ students = [], performances = [], activeClassId, setA
         if (activeClassId) {
           setIsLoading(true);
           console.log('Loading data for class_id:', activeClassId);
-          const [subjectsData, competenciesData, fachbereicheData, ueberfachlichData] = await Promise.all([
+          const [subjectsData, competenciesData, fachbereicheData, ueberfachlichData, choreAssignmentsData] = await Promise.all([
             Subject.filter({ class_id: activeClassId }),
             Competency.filter({ class_id: activeClassId }),
             Fachbereich.filter({ class_id: activeClassId }),
-            UeberfachlichKompetenz.filter({ class_id: activeClassId })
+            UeberfachlichKompetenz.filter({ class_id: activeClassId }),
+            ChoreAssignment.filter({ class_id: activeClassId }).catch(() => [])
           ]);
           // Validierung der überfachlichen Kompetenzen
           const validUeberfachlich = ueberfachlichData.filter(u => {
@@ -66,6 +68,7 @@ const PerformanceView = ({ students = [], performances = [], activeClassId, setA
           });
           setSubjects(subjectsData || []);
           setAllCompetencies(competenciesData || []);
+          setChoreAssignments(choreAssignmentsData || []);
           if (validUeberfachlich.length > 0) {
             console.log('ueberfachlich details:', validUeberfachlich);
           } else {
@@ -193,6 +196,33 @@ const PerformanceView = ({ students = [], performances = [], activeClassId, setA
 
   // handleCreateUeberfachlich
   const handleCreateUeberfachlich = () => setIsUeberfachlichModalOpen(true);
+
+  // handleChoreUpdate - Einzelne Ämtli-Korrektur aus dem Modal
+  const handleChoreUpdate = useCallback(async (choreId, isCompleted) => {
+    try {
+      await ChoreAssignment.update(choreId, {
+        is_completed: isCompleted,
+        completed_at: isCompleted ? new Date().toISOString() : null
+      });
+
+      // Refresh choreAssignments
+      const updatedChoreAssignments = await ChoreAssignment.filter({ class_id: activeClassId }).catch(() => []);
+      setChoreAssignments(updatedChoreAssignments || []);
+
+      toast({
+        title: isCompleted ? "Erledigt" : "Nicht erledigt",
+        description: `Ämtli wurde als ${isCompleted ? 'erledigt' : 'nicht erledigt'} markiert.`,
+        variant: isCompleted ? "success" : "default",
+      });
+    } catch (error) {
+      console.error('Error updating chore:', error);
+      toast({
+        title: "Fehler",
+        description: "Ämtli konnte nicht aktualisiert werden.",
+        variant: "destructive",
+      });
+    }
+  }, [activeClassId, toast]);
 
   // handleSavePerformance
   const handleSavePerformance = async (data, performanceIdToUpdate) => {
@@ -481,6 +511,8 @@ const PerformanceView = ({ students = [], performances = [], activeClassId, setA
             activeClassId={activeClassId}
             onDataChange={onDataChange}
             selectedStudentId={selectedStudentId}
+            choreAssignments={choreAssignments}
+            onChoreUpdate={handleChoreUpdate}
           />
         )}
         {tab === 'leistungen' && (

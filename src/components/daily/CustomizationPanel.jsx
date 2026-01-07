@@ -1,14 +1,16 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { X, Palette, Type, Monitor, Zap, Speaker, LayoutDashboard } from "lucide-react";
-import { DAILY_THEMES } from "@/utils/colorDailyUtils"; // Import themes
+import { X, Palette, Type, Zap, Speaker, Play } from "lucide-react";
+import { SOUND_OPTIONS, previewSound } from "@/utils/audioSounds";
 
 export default function CustomizationPanel({ customization, onCustomizationChange, onClose }) {
+  // DEBUG: Log props bei jedem Render
+  console.log('[CustomizationPanel] Render mit theme:', customization.theme);
+
   const [activeTab, setActiveTab] = useState("appearance");
 
   const handleFontSizeChange = (element, size) => {
@@ -18,13 +20,6 @@ export default function CustomizationPanel({ customization, onCustomizationChang
         ...customization.fontSize,
         [element]: size
       }
-    });
-  };
-
-  const handleBackgroundChange = (type, value) => {
-    onCustomizationChange({
-      ...customization,
-      background: { type, value }
     });
   };
 
@@ -46,43 +41,28 @@ export default function CustomizationPanel({ customization, onCustomizationChang
   };
 
   const handleThemeChange = (theme) => {
+    console.log('[CustomizationPanel] handleThemeChange:', {
+      newTheme: theme,
+      currentPropsTheme: customization.theme
+    });
     onCustomizationChange({
       ...customization,
       theme
     });
   };
 
-  const fontSizeOptions = [
-    { value: 'text-sm', label: 'Klein' },
+  // Titel und Inhalt: Größere Optionen (text-xl als Normal)
+  const titleContentFontSizeOptions = [
+    { value: 'text-xl', label: 'Normal' },
+    { value: 'text-2xl', label: 'Groß' },
+    { value: 'text-3xl', label: 'Sehr groß' },
+  ];
+
+  // Steps: Kleinere Optionen
+  const stepsFontSizeOptions = [
     { value: 'text-base', label: 'Normal' },
     { value: 'text-lg', label: 'Groß' },
     { value: 'text-xl', label: 'Sehr groß' },
-    { value: 'text-2xl', label: 'Extra groß' },
-    { value: 'text-3xl', label: 'Riesig' },
-    { value: 'text-4xl', label: 'Gigantisch' },
-    { value: 'text-5xl', label: 'Maximal' }
-  ];
-
-  const gradientOptions = [
-    { value: 'from-blue-50 to-indigo-100 dark:from-slate-900 dark:to-slate-800', label: 'Blau (Standard)' },
-    { value: 'from-green-50 to-emerald-100 dark:from-slate-900 dark:to-green-900', label: 'Grün' },
-    { value: 'from-purple-50 to-violet-100 dark:from-slate-900 dark:to-purple-900', label: 'Lila' },
-    { value: 'from-orange-50 to-amber-100 dark:from-slate-900 dark:to-orange-900', label: 'Orange' },
-    { value: 'from-pink-50 to-rose-100 dark:from-slate-900 dark:to-pink-900', label: 'Rosa' },
-    { value: 'from-gray-50 to-slate-100 dark:from-slate-900 dark:to-slate-800', label: 'Grau' }
-  ];
-
-  const highContrastOptions = [
-      { value: 'from-white to-gray-200 dark:from-black dark:to-gray-900', label: 'Graustufen Hochkontrast' },
-      { value: 'from-yellow-200 to-yellow-400 dark:from-black dark:to-blue-900', label: 'Blau/Gelb Hochkontrast' }
-  ];
-
-  const backgroundImages = [
-    { value: 'https://images.unsplash.com/photo-1557804506-669a67965ba0?w=1920&h=1080&fit=crop', label: 'Klassenzimmer' },
-    { value: 'https://images.unsplash.com/photo-1481627834876-b7833e8f5570?w=1920&h=1080&fit=crop', label: 'Bibliothek' },
-    { value: 'https://images.unsplash.com/photo-1427504494785-3a9ca7044f45?w=1920&h=1080&fit=crop', label: 'Natur' },
-    { value: 'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=1920&h=1080&fit=crop', label: 'Berge' },
-    { value: 'https://images.unsplash.com/photo-1441974231531-c6227db76b6e?w=1920&h=1080&fit=crop', label: 'Wald' }
   ];
 
     return (
@@ -110,7 +90,7 @@ export default function CustomizationPanel({ customization, onCustomizationChang
       {/* Content */}
       <div className="flex-1 overflow-y-auto p-6">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-3 md:grid-cols-5 overflow-x-auto">
+          <TabsList className="grid w-full grid-cols-2 md:grid-cols-4">
             <TabsTrigger value="appearance" className="flex items-center gap-2">
               <Palette className="w-4 h-4" />
               Design
@@ -119,17 +99,13 @@ export default function CustomizationPanel({ customization, onCustomizationChang
               <Type className="w-4 h-4" />
               Schrift
             </TabsTrigger>
-            <TabsTrigger value="layout" className="flex items-center gap-2">
-              <LayoutDashboard className="w-4 h-4" />
-              Layout
-            </TabsTrigger>
             <TabsTrigger value="behavior" className="flex items-center gap-2">
               <Zap className="w-4 h-4" />
               Verhalten
             </TabsTrigger>
             <TabsTrigger value="audio" className="flex items-center gap-2">
-                <Speaker className="w-4 h-4" />
-                Audio
+              <Speaker className="w-4 h-4" />
+              Audio
             </TabsTrigger>
           </TabsList>
 
@@ -147,136 +123,11 @@ export default function CustomizationPanel({ customization, onCustomizationChang
                 </SelectTrigger>
                 <SelectContent className="z-[200]">
                   <SelectItem value="default">Standard</SelectItem>
-                  <SelectItem value="spring">Frühling</SelectItem>
-                  <SelectItem value="energy">Energie</SelectItem>
-                  <SelectItem value="minimal">Minimal</SelectItem>
+                  <SelectItem value="space">Weltraum</SelectItem>
                 </SelectContent>
               </Select>
             </div>
 
-            <div className="space-y-4">
-              <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-200">
-                Hintergrund
-              </h3>
-              
-              <div className="space-y-4">
-                <div>
-                  <Label className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                    Hintergrund-Typ
-                  </Label>
-                  <Select
-                    value={customization.background.type}
-                    onValueChange={(value) => handleBackgroundChange(value, customization.background.value)}
-                  >
-                    <SelectTrigger className="w-full mt-2">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent className="z-[200]">
-                      <SelectItem value="gradient">Verlauf</SelectItem>
-                      <SelectItem value="solid">Einfarbig</SelectItem>
-                      <SelectItem value="image">Bild</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {customization.background.type === 'gradient' && (
-                  <div>
-                    <Label className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                      Verlauf auswählen
-                    </Label>
-                    <div className="grid grid-cols-2 gap-2 mt-2">
-                      {gradientOptions.map((option) => (
-                        <button
-                          key={option.value}
-                          onClick={() => handleBackgroundChange('gradient', option.value)}
-                          className={`p-3 rounded-lg border-2 transition-all ${
-                            customization.background.value === option.value
-                              ? 'border-blue-500'
-                              : 'border-slate-300 hover:border-slate-400'
-                          }`}
-                        >
-                          <div className={`w-full h-8 rounded bg-gradient-to-r ${option.value}`} />
-                          <p className="text-xs mt-1 text-slate-600 dark:text-slate-400">
-                            {option.label}
-                          </p>
-                        </button>
-                      ))}
-                    </div>
-                     <Label className="text-sm font-medium text-slate-700 dark:text-slate-300 mt-4">
-                      Hochkontrast-Verläufe
-                    </Label>
-                    <div className="grid grid-cols-2 gap-2 mt-2">
-                       {highContrastOptions.map((option) => (
-                        <button
-                          key={option.value}
-                          onClick={() => handleBackgroundChange('gradient', option.value)}
-                          className={`p-3 rounded-lg border-2 transition-all ${
-                            customization.background.value === option.value
-                              ? 'border-blue-500'
-                              : 'border-slate-300 hover:border-slate-400'
-                          }`}
-                        >
-                          <div className={`w-full h-8 rounded bg-gradient-to-r ${option.value}`} />
-                          <p className="text-xs mt-1 text-slate-600 dark:text-slate-400">
-                            {option.label}
-                          </p>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {customization.background.type === 'solid' && (
-                  <div>
-                    <Label className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                      Farbe
-                    </Label>
-                    <Input
-                      type="color"
-                      value={customization.background.value || '#ffffff'}
-                      onChange={(e) => handleBackgroundChange('solid', e.target.value)}
-                      className="w-full h-12 mt-2"
-                    />
-                  </div>
-                )}
-
-                {customization.background.type === 'image' && (
-                  <div>
-                    <Label className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                      Hintergrundbild
-                    </Label>
-                    <div className="grid grid-cols-1 gap-2 mt-2">
-                      {backgroundImages.map((option) => (
-                        <button
-                          key={option.value}
-                          onClick={() => handleBackgroundChange('image', option.value)}
-                          className={`p-2 rounded-lg border-2 transition-all ${
-                            customization.background.value === option.value
-                              ? 'border-blue-500'
-                              : 'border-slate-300 hover:border-slate-400'
-                          }`}
-                        >
-                          <div 
-                            className="w-full h-16 rounded bg-cover bg-center"
-                            style={{ backgroundImage: `url(${option.value})` }}
-                          />
-                          <p className="text-xs mt-1 text-slate-600 dark:text-slate-400">
-                            {option.label}
-                          </p>
-                        </button>
-                      ))}
-                    </div>
-                    <div className="mt-2">
-                      <Input
-                        placeholder="Oder eigene URL eingeben..."
-                        value={customization.background.type === 'image' ? customization.background.value : ''}
-                        onChange={(e) => handleBackgroundChange('image', e.target.value)}
-                      />
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
           </TabsContent>
 
           <TabsContent value="typography" className="space-y-6 mt-6">
@@ -298,7 +149,7 @@ export default function CustomizationPanel({ customization, onCustomizationChang
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent className="z-[200]">
-                      {fontSizeOptions.map((option) => (
+                      {titleContentFontSizeOptions.map((option) => (
                         <SelectItem key={option.value} value={option.value}>
                           {option.label}
                         </SelectItem>
@@ -319,7 +170,7 @@ export default function CustomizationPanel({ customization, onCustomizationChang
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent className="z-[200]">
-                      {fontSizeOptions.map((option) => (
+                      {titleContentFontSizeOptions.map((option) => (
                         <SelectItem key={option.value} value={option.value}>
                           {option.label}
                         </SelectItem>
@@ -330,61 +181,23 @@ export default function CustomizationPanel({ customization, onCustomizationChang
 
                 <div>
                   <Label className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                    Uhr-Schrift
+                    Steps-Schrift
                   </Label>
                   <Select
-                    value={customization.fontSize.clock}
-                    onValueChange={(value) => handleFontSizeChange('clock', value)}
+                    value={customization.fontSize.steps || 'text-base'}
+                    onValueChange={(value) => handleFontSizeChange('steps', value)}
                   >
                     <SelectTrigger className="w-full mt-2">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent className="z-[200]">
-                      {fontSizeOptions.map((option) => (
+                      {stepsFontSizeOptions.map((option) => (
                         <SelectItem key={option.value} value={option.value}>
                           {option.label}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
-                </div>
-              </div>
-            </div>
-          </TabsContent>
-          
-          <TabsContent value="layout" className="space-y-6 mt-6">
-            <div className="space-y-6">
-              <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-200">
-                Sichtbarkeit der Panels
-              </h3>
-              <div className="space-y-4">
-                 <div className="flex items-center justify-between">
-                  <div>
-                    <Label className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                      Lehrer-Notizen anzeigen
-                    </Label>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                      Zeigt die rechte Spalte für persönliche Notizen an.
-                    </p>
-                  </div>
-                  <Switch
-                    checked={customization.showNotes}
-                    onCheckedChange={(checked) => handleToggleChange('showNotes', checked)}
-                  />
-                </div>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <Label className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                      Uhrzeit anzeigen
-                    </Label>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                      Zeigt die Uhr oben rechts an.
-                    </p>
-                  </div>
-                  <Switch
-                    checked={customization.showClock}
-                    onCheckedChange={(checked) => handleToggleChange('showClock', checked)}
-                  />
                 </div>
               </div>
             </div>
@@ -414,6 +227,7 @@ export default function CustomizationPanel({ customization, onCustomizationChang
                     onCheckedChange={(checked) => handleToggleChange('compactMode', checked)}
                   />
                 </div>
+
               </div>
             </div>
           </TabsContent>
@@ -456,6 +270,43 @@ export default function CustomizationPanel({ customization, onCustomizationChang
                                  disabled={!customization.audio?.enabled}
                              />
                              <span>{Math.round((customization.audio?.volume || 0.5) * 100)}%</span>
+                         </div>
+                     </div>
+
+                     {/* Ton-Auswahl */}
+                     <div className="space-y-2">
+                         <Label className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                             Ton auswählen
+                         </Label>
+                         <div className="flex items-center gap-2">
+                             <Select
+                                 value={customization.audio?.sound || 'chime'}
+                                 onValueChange={(value) => handleAudioChange('sound', value)}
+                                 disabled={!customization.audio?.enabled}
+                             >
+                                 <SelectTrigger className="flex-1">
+                                     <SelectValue placeholder="Ton wählen" />
+                                 </SelectTrigger>
+                                 <SelectContent className="z-[200]">
+                                     {SOUND_OPTIONS.map((option) => (
+                                         <SelectItem key={option.value} value={option.value}>
+                                             <div className="flex flex-col">
+                                                 <span>{option.label}</span>
+                                                 <span className="text-xs text-slate-500">{option.description}</span>
+                                             </div>
+                                         </SelectItem>
+                                     ))}
+                                 </SelectContent>
+                             </Select>
+                             <Button
+                                 variant="outline"
+                                 size="icon"
+                                 onClick={() => previewSound(customization.audio?.sound || 'chime', customization.audio?.volume || 0.5)}
+                                 disabled={!customization.audio?.enabled}
+                                 title="Ton abspielen"
+                             >
+                                 <Play className="w-4 h-4" />
+                             </Button>
                          </div>
                      </div>
                  </div>

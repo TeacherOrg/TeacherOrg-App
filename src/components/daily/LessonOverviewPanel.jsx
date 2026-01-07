@@ -21,6 +21,23 @@ export default function LessonOverviewPanel({
   showChoresView,
   onChoresToggle,
 }) {
+  // Kompakter Modus: Reduzierte Abstände
+  const paddingClass = customization.compactMode ? 'p-2' : 'p-3';
+  const gapClass = customization.compactMode ? 'gap-2' : 'gap-3';
+  const cardPaddingClass = customization.compactMode ? 'p-2' : 'p-4';
+
+  // Theme-abhängige Transparenz
+  const isThemedBackground = customization.theme === 'space';
+  const bgClass = isThemedBackground
+    ? 'bg-transparent'
+    : 'bg-white/80 dark:bg-slate-800/80';
+  const headerBgClass = isThemedBackground
+    ? 'bg-transparent'
+    : 'bg-slate-100 dark:bg-slate-700';
+  const borderClass = isThemedBackground
+    ? 'border-purple-500/40 dark:border-purple-400/40'
+    : 'border-slate-200/30 dark:border-slate-700/30';
+  const blurClass = isThemedBackground ? '' : 'backdrop-blur-md';
   const getHolidayDisplay = (holiday) => {
     if (!holiday) return { emoji: '📅', gradient: 'linear-gradient(135deg, #64748b 0%, #475569 100%)' };
     switch (holiday.type) {
@@ -82,7 +99,8 @@ export default function LessonOverviewPanel({
     };
   };
 
-  const cardVariants = {
+  // Animationen nur wenn reducedMotion false
+  const cardVariants = customization.reducedMotion ? {} : {
     hidden: { opacity: 0, y: 20 },
     visible: (i) => ({ opacity: 1, y: 0, transition: { delay: i * 0.08 } }),
     hover: { scale: 1.03 },
@@ -101,11 +119,11 @@ export default function LessonOverviewPanel({
 
   return (
     <motion.div
-      className="bg-white/80 dark:bg-slate-800/80 backdrop-blur-md rounded-2xl shadow-xl border border-slate-200/30 dark:border-slate-700/30 overflow-hidden h-full flex flex-col"
-      initial={{ opacity: 0, x: -50 }}
-      animate={{ opacity: 1, x: 0 }}
+      className={`${bgClass} ${blurClass} rounded-2xl shadow-xl border ${borderClass} overflow-hidden flex flex-col`}
+      initial={customization.reducedMotion ? false : { opacity: 0, x: -50 }}
+      animate={customization.reducedMotion ? false : { opacity: 1, x: 0 }}
     >
-      <div className="bg-slate-100 dark:bg-slate-700 p-3 border-b border-slate-200 dark:border-slate-600">
+      <div className={`${headerBgClass} p-3 border-b border-slate-200/50 dark:border-slate-600/50`}>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <BookOpen className="w-5 h-5 text-slate-600 dark:text-slate-400" />
@@ -142,7 +160,7 @@ export default function LessonOverviewPanel({
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-3">
+      <div className={`flex-1 overflow-y-auto ${paddingClass}`}>
         {currentHoliday ? (
           <motion.div
             className="text-white p-6 rounded-xl text-center relative overflow-hidden"
@@ -160,7 +178,7 @@ export default function LessonOverviewPanel({
             </div>
           </motion.div>
         ) : items.length > 0 ? (
-          <div className="grid grid-cols-1 gap-3" style={{ gridAutoRows: '1fr' }}>
+          <div className={`grid grid-cols-1 ${gapClass}`} style={{ gridAutoRows: '1fr' }}>
             {items.map((lesson, index) => {
               const isSelected = selectedItem?.id === lesson.id;
               const isCurrent = currentItem?.type === 'lesson' && currentItem.id === lesson.id;
@@ -172,13 +190,13 @@ export default function LessonOverviewPanel({
                   key={lesson.id}
                   custom={index}
                   variants={cardVariants}
-                  initial="hidden"
-                  animate="visible"
-                  whileHover="hover"
-                  whileTap="tap"
+                  initial={customization.reducedMotion ? false : "hidden"}
+                  animate={customization.reducedMotion ? false : "visible"}
+                  whileHover={customization.reducedMotion ? undefined : "hover"}
+                  whileTap={customization.reducedMotion ? undefined : "tap"}
                   onClick={() => onItemSelect(lesson)}
                   className={`
-                    rounded-xl p-4 cursor-pointer border-2 transition-all relative overflow-hidden min-h-full flex flex-col
+                    rounded-xl ${cardPaddingClass} cursor-pointer border-2 transition-all relative overflow-hidden min-h-full flex flex-col
                     ${isSelected ? 'ring-4 ring-blue-400 border-blue-500' : 'border-transparent'}
                     ${isCurrent ? 'ring-2 ring-green-400' : ''}
                     ${isPast ? 'opacity-70' : ''}
@@ -222,13 +240,10 @@ export default function LessonOverviewPanel({
                       <div className="w-full bg-white/30 rounded-full h-2 overflow-hidden">
                         <motion.div
                           className="h-full bg-white rounded-full"
-                          initial={{ width: 0 }}
+                          initial={customization.reducedMotion ? false : { width: 0 }}
                           animate={{ width: `${lesson.progress}%` }}
-                          transition={{ duration: 0.5 }}
+                          transition={customization.reducedMotion ? { duration: 0 } : { duration: 0.5 }}
                         />
-                      </div>
-                      <div className="text-right text-white/80 text-xs mt-1">
-                        {lesson.progress}% abgeschlossen
                       </div>
                     </div>
                   )}

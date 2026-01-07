@@ -1,10 +1,14 @@
 import React, { useMemo } from 'react';
+import '../styles/space-theme.css';
 
 /**
  * Animated space background with multiple star layers
  * Pure CSS animations for performance
+ *
+ * @param {boolean} isActive - Controls visibility (for smooth transitions without remounting)
+ * @param {ReactNode} children - Optional children (for wrapper mode)
  */
-export default function SpaceBackground({ children, className = '' }) {
+export default function SpaceBackground({ children, className = '', isActive = true }) {
   // Generate random shooting stars positions
   const shootingStars = useMemo(() => {
     return Array.from({ length: 3 }, (_, i) => ({
@@ -16,6 +20,61 @@ export default function SpaceBackground({ children, className = '' }) {
     }));
   }, []);
 
+  // Overlay mode (no children) - renders as fixed overlay
+  if (!children) {
+    return (
+      <div
+        className={`fixed inset-0 transition-opacity duration-500 ${isActive ? 'opacity-100' : 'opacity-0 pointer-events-none'} ${className}`}
+        style={{ zIndex: 0 }}
+      >
+        {/* Dark background */}
+        <div className="absolute inset-0 bg-[#0a0a1a]" />
+
+        {/* Starfield layers */}
+        <div className="starfield">
+          <div className="starfield-layer starfield-far" />
+          <div className="starfield-layer starfield-mid" />
+          <div className="starfield-layer starfield-near" />
+        </div>
+
+        {/* Nebula gradient overlay */}
+        <div
+          className="absolute inset-0 pointer-events-none"
+          style={{
+            background: `
+              radial-gradient(ellipse at 20% 20%, rgba(124, 58, 237, 0.15) 0%, transparent 50%),
+              radial-gradient(ellipse at 80% 80%, rgba(59, 130, 246, 0.1) 0%, transparent 50%),
+              radial-gradient(ellipse at 50% 50%, rgba(236, 72, 153, 0.05) 0%, transparent 70%)
+            `,
+          }}
+        />
+
+        {/* Shooting stars */}
+        {isActive && shootingStars.map((star) => (
+          <div
+            key={star.id}
+            className="absolute w-1 h-1 bg-white rounded-full pointer-events-none"
+            style={{
+              top: star.top,
+              left: star.left,
+              animation: `shooting-star ${star.duration} ${star.delay} ease-out infinite`,
+              opacity: 0,
+            }}
+          />
+        ))}
+
+        <style>{`
+          @keyframes shooting-star {
+            0% { opacity: 0; transform: translateX(0) translateY(0); }
+            10% { opacity: 1; }
+            100% { opacity: 0; transform: translateX(200px) translateY(200px); }
+          }
+        `}</style>
+      </div>
+    );
+  }
+
+  // Wrapper mode (with children) - original behavior
   return (
     <div className={`space-theme relative min-h-screen ${className}`}>
       {/* Starfield layers */}

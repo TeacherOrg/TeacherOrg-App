@@ -246,11 +246,12 @@ function OverviewTab({ gradeAverage, strengths, weaknesses, stats }) {
       {/* Stats Summary */}
       <SpaceCard className="lg:col-span-2">
         <h3 className="text-lg font-semibold text-white mb-4">Statistiken</h3>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
           <StatItem label="Bewertungen" value={stats.totalPerformances} color="blue" />
           <StatItem label="Kompetenzen" value={`${stats.assessedCompetencies}/${stats.totalCompetencies}`} color="purple" />
           <StatItem label="Aktive Ziele" value={stats.activeGoals} color="yellow" />
           <StatItem label="Erreichte Ziele" value={stats.completedGoals} color="green" />
+          <StatItem label="Ämtlis erledigt" value={`${stats.completedChores || 0}/${stats.totalChores || 0}`} color="orange" />
         </div>
       </SpaceCard>
     </div>
@@ -263,6 +264,7 @@ function StatItem({ label, value, color }) {
     purple: 'text-purple-400',
     yellow: 'text-yellow-400',
     green: 'text-green-400',
+    orange: 'text-orange-400',
   };
 
   return (

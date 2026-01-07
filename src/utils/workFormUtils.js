@@ -11,10 +11,8 @@ export const WORK_FORMS = {
     'group': '\u{1F468}\u{200D}\u{1F469}\u{200D}\u{1F467}\u{200D}\u{1F466}', // 👨‍👩‍👧‍👦
     'gruppe': '\u{1F468}\u{200D}\u{1F469}\u{200D}\u{1F467}\u{200D}\u{1F466}', // 👨‍👩‍👧‍👦
     'gruppenarbeit': '\u{1F468}\u{200D}\u{1F469}\u{200D}\u{1F467}\u{200D}\u{1F466}', // 👨‍👩‍👧‍👦
-    'plenum': '\u{1F3DB}\uFE0F', // 🏛️
-    'frontal': '\u{1F5E3}\uFE0F', // 🗣️
-    'discussion': '\u{1F4AC}',   // 💬
-    'diskussion': '\u{1F4AC}',   // 💬
+    'plenum': '\u{1F4AC}',       // 💬
+    'frontal': '\u{1F4E2}',      // 📢
     'experiment': '\u{1F9EA}'    // 🧪
 };
 

@@ -11,7 +11,7 @@
 // Importiere bestehende Funktionen aus colorUtils
 import { adjustColor, getTextColor, createGradient, isValidHexColor, getComplementaryColor } from './colorUtils';
 
-// Definiere Themen
+// Definiere Themen (nur Standard + Weltraum)
 export const DAILY_THEMES = {
   default: {
     primary: '#3b82f6', // Blau
@@ -19,46 +19,23 @@ export const DAILY_THEMES = {
     accent: '#94a3b8', // Hellgrau
     gradientDirection: 'to-br',
     glowIntensity: 0.4,
-    dark: {  // Neue Sub-Objekte für Dark-Mode
+    dark: {
       primary: '#60a5fa',
       secondary: '#94a3b8',
       accent: '#cbd5e1',
     }
   },
-  spring: {
-    primary: '#6ee7b7', // Mintgrün
-    secondary: '#fb7185', // Koralle
-    accent: '#c4b5fd', // Lavendel
-    gradientDirection: 'to-r',
-    glowIntensity: 0.5,
+  space: {
+    primary: '#7c3aed', // Violett (Nebula)
+    secondary: '#06b6d4', // Cyan (Sterne)
+    accent: '#f472b6', // Pink (Galaxie)
+    gradientDirection: 'to-br',
+    glowIntensity: 0.6,
+    background: 'from-slate-900 via-purple-900 to-slate-900',
     dark: {
-      primary: '#34d399',
-      secondary: '#f43f5e',
-      accent: '#a78bfa',
-    }
-  },
-  energy: {
-    primary: '#3b82f6', // Neonblau
-    secondary: '#d946ef', // Magenta
-    accent: '#84cc16', // Limette
-    gradientDirection: 'to-tr',
-    glowIntensity: 0.7,
-    dark: {
-      primary: '#60a5fa',
-      secondary: '#e879f9',
-      accent: '#a3e635',
-    }
-  },
-  minimal: {
-    primary: '#64748b', // Grau
-    secondary: '#94a3b8', // Hellgrau
-    accent: '#e5e7eb', // Sehr helles Grau
-    gradientDirection: 'to-b',
-    glowIntensity: 0.3,
-    dark: {
-      primary: '#94a3b8',
-      secondary: '#cbd5e1',
-      accent: '#e5e7eb',
+      primary: '#8b5cf6',
+      secondary: '#22d3ee',
+      accent: '#f9a8d4',
     }
   },
 };

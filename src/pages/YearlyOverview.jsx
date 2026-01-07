@@ -514,6 +514,8 @@ function InnerYearlyOverviewPage() {
     setCurrentView(view);
     if (view === 'Woche') {
       navigate(createPageUrl('Timetable'));
+    } else if (view === 'Tag') {
+      navigate('/Timetable?view=Tag');
     }
   };
 
@@ -1164,7 +1166,7 @@ function InnerYearlyOverviewPage() {
   return (
     <div className="h-screen flex flex-col bg-gradient-to-br from-slate-50 via-slate-100 to-slate-200 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 overflow-hidden transition-colors duration-300">
       {/* Header - gleiche Struktur wie TimetableHeader */}
-      <div className="flex flex-col items-center p-4 shadow-lg">
+      <div className="flex flex-col items-center p-4">
         {/* View Toggle Buttons */}
         <div className="flex items-center space-x-4 mb-4">
           <div className="flex space-x-4 p-2 bg-white/80 dark:bg-slate-800/80 backdrop-blur-md rounded-lg border border-slate-200 dark:border-slate-700 shadow-lg">
@@ -1183,7 +1185,7 @@ function InnerYearlyOverviewPage() {
         </div>
 
         {/* Navigation Section - gleicher Style wie TimetableHeader */}
-        <div className="flex items-center space-x-4 my-4 p-2 bg-gray-100 dark:bg-slate-700 rounded-lg shadow-md">
+        <div className="flex items-center space-x-4 my-4 p-2 bg-white/60 dark:bg-slate-800/60 backdrop-blur-sm rounded-lg">
           <Button variant="ghost" onClick={() => setCurrentYear(y => y - 1)} className="rounded-lg hover:bg-gray-200 dark:hover:bg-slate-600">
             <ChevronsLeft />
           </Button>

@@ -1,13 +1,7 @@
 import React, { memo, forwardRef } from 'react';
 import { createPortal } from 'react-dom';
 import { adjustColor } from '@/utils/colorUtils';
-
-const WORK_FORMS = {
-  'Single': '👤 Single',
-  'Partner': '👥 Partner',
-  'Group': '👨‍👩‍👧‍👦 Group',
-  'Plenum': '🏛️ Plenum'
-};
+import { getWorkFormIcon } from '@/utils/workFormUtils';
 
 const OverlayView = forwardRef(({ lesson, schedule, overlayRef, disableHover, isDragging, position, subjectColor }, ref) => {
   if (disableHover || isDragging || position.top === 0) return null;
@@ -79,12 +73,12 @@ const OverlayView = forwardRef(({ lesson, schedule, overlayRef, disableHover, is
                             {step.time ? `${step.time}min` : ''}
                         </td>
                         <td className="px-2 py-2 text-slate-200">
-                            {WORK_FORMS[step.workForm] || step.workForm || ''}
+                            {getWorkFormIcon(step.workForm)}
                         </td>
-                        <td className="px-2 py-2 text-white">
+                        <td className="px-2 py-2 text-white whitespace-pre-wrap">
                             {step.activity || ''}
                         </td>
-                        <td className="px-2 py-2 text-slate-200">
+                        <td className="px-2 py-2 text-slate-200 whitespace-pre-wrap">
                             {step.material || ''}
                         </td>
                     </tr>

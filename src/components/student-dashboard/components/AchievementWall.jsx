@@ -1,5 +1,5 @@
 import React from 'react';
-import { Trophy, Star, Target, Rocket, Award, Sparkles, Sword } from 'lucide-react';
+import { Trophy, Star, Target, Rocket, Award, Sparkles, Sword, ClipboardCheck } from 'lucide-react';
 
 /**
  * Achievement Wall - Showcase of completed goals and milestones
@@ -9,8 +9,11 @@ import { Trophy, Star, Target, Rocket, Award, Sparkles, Sword } from 'lucide-rea
  * @param {Array} competencies - List of competencies for labels
  * @param {Object} stats - Statistics from useStudentData
  * @param {number} conqueredCount - Number of conquered weaknesses (improved by ≥0.5)
+ * @param {Object} choreStats - Chore statistics { totalChores, completedChores }
  */
-export default function AchievementWall({ completedGoals = [], competencies = [], stats = {}, conqueredCount = 0 }) {
+export default function AchievementWall({ completedGoals = [], competencies = [], stats = {}, conqueredCount = 0, choreStats = {} }) {
+  // Extract chore stats from props or stats object
+  const completedChores = choreStats.completedChores ?? stats.completedChores ?? 0;
   const getCompetencyName = (compId) => {
     const comp = competencies.find(c => c.id === compId);
     return comp?.name || 'Unbekannt';
@@ -99,6 +102,40 @@ export default function AchievementWall({ completedGoals = [], competencies = []
       progress: conqueredCount,
       target: 3,
       unlockHint: 'Verbessere 3 Fachbereiche um je 0.5!'
+    },
+    // Ämtli Badges
+    {
+      id: 'amtli_starter',
+      name: 'Ämtli-Starter',
+      description: '5 Ämtlis erledigt',
+      icon: ClipboardCheck,
+      earned: completedChores >= 5,
+      color: 'from-orange-500 to-amber-500',
+      progress: completedChores,
+      target: 5,
+      unlockHint: 'Erledige 5 Ämtlis!'
+    },
+    {
+      id: 'amtli_profi',
+      name: 'Ämtli-Profi',
+      description: '10 Ämtlis erledigt',
+      icon: ClipboardCheck,
+      earned: completedChores >= 10,
+      color: 'from-orange-600 to-red-500',
+      progress: completedChores,
+      target: 10,
+      unlockHint: 'Erledige 10 Ämtlis!'
+    },
+    {
+      id: 'amtli_meister',
+      name: 'Ämtli-Meister',
+      description: '20 Ämtlis erledigt',
+      icon: Trophy,
+      earned: completedChores >= 20,
+      color: 'from-yellow-500 to-orange-600',
+      progress: completedChores,
+      target: 20,
+      unlockHint: 'Erledige 20 Ämtlis!'
     }
   ];
 

@@ -14,18 +14,20 @@ import DailyView from "../pages/DailyView";
 import CopyWeekLayout from "../components/timetable/CopyWeekLayout";
 import CalendarLoader from "../components/ui/CalendarLoader";
 import { createPageUrl } from '@/utils/index.js';
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import debounce from 'lodash/debounce';
 import OverlayView from "../components/timetable/OverlayView";
 import { adjustColor, createGradient } from '@/utils/colorUtils';
 import { useLessonStore } from '@/store';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import pb from '@/api/pb';
+import { CustomizationSettings } from '@/api/entities';
 import { calculateAllerleiGradient } from '@/components/timetable/allerlei/AllerleiUtils';
 import { findFreeSlot, findAlternativeSlot } from '@/utils/slotUtils';
 import TimetableHeader from '../components/timetable/TimetableHeader';
 import TimetablePool from '../components/timetable/TimetablePool';
 import TimetableOverlays from '../components/timetable/TimetableOverlays';
+import SpaceBackground from '../components/student-dashboard/components/SpaceBackground';
 import useTimetableData from '../hooks/useTimetableData';
 import useTimetableStates from '../hooks/useTimetableStates';
 import useDragAndDrop from '../hooks/useDragAndDrop';
@@ -43,6 +45,7 @@ export default function TimetablePage() {
 
 function InnerTimetablePage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const allLessons = useLessonStore((state) => state.allLessons);
   const allerleiLessons = useLessonStore((state) => state.allerleiLessons);
   const {
@@ -71,6 +74,30 @@ function InnerTimetablePage() {
   // Neu: State für Pool-Refresh
   const [poolRefreshKey, setPoolRefreshKey] = useState(0);
 
+  // State für DailyView Theme (für Space-Theme Hintergrund)
+  const [dailyViewTheme, setDailyViewTheme] = useState('default');
+
+  // Lade DailyView Theme für Space-Hintergrund
+  useEffect(() => {
+    const loadTheme = async () => {
+      try {
+        const userId = pb.authStore.model?.id;
+        if (!userId) return;
+        const settings = await CustomizationSettings.list({ filter: `user_id = "${userId}"` });
+        if (settings && settings.length > 0) {
+          setDailyViewTheme(settings[0].theme || 'default');
+        }
+      } catch (error) {
+        console.error('Error loading theme:', error);
+      }
+    };
+    loadTheme();
+  }, []);
+
+  // Callback für Theme-Änderung von DailyView
+  const handleThemeChange = useCallback((newTheme) => {
+    setDailyViewTheme(newTheme);
+  }, []);
 
   // Initialize currentYear and currentWeek (using ISO week year for correct year at year boundaries)
   const [currentWeek, setCurrentWeek] = useState(getCurrentWeek());
@@ -86,6 +113,15 @@ function InnerTimetablePage() {
 
   // Call useTimetableStates with settings, currentYear, and currentWeek
   const { currentView, setCurrentView, viewMode, setViewMode, currentDate, setCurrentDate, renderKey, setRenderKey, isModalOpen, setIsModalOpen, editingLesson, setEditingLesson, slotInfo, setSlotInfo, initialSubjectForModal, setInitialSubjectForModal, isCopying, setIsCopying, copiedLesson, setCopiedLesson, activeDragId, setActiveDragId, hoverLesson, setHoverLesson, hoverPosition, setHoverPosition, disableHover, setDisableHover, overlayRef, handleShowHover, handleHideHover, timeSlots, weekInfo, autoFit, setAutoFit } = useTimetableStates(settings || {}, currentYear, currentWeek);
+
+  // Handle view query parameter from URL (e.g., /Timetable?view=Tag)
+  useEffect(() => {
+    const viewParam = searchParams.get('view');
+    if (viewParam === 'Tag') {
+      setCurrentView('Tag');
+      setViewMode('day');
+    }
+  }, [searchParams, setCurrentView, setViewMode]);
 
   const queryClientLocal = useQueryClient();
 
@@ -848,8 +884,16 @@ function InnerTimetablePage() {
     subjects,
   ]);
 
+  // Space-Theme Hintergrund für DailyView
+  const isSpaceThemeActive = viewMode === 'day' && dailyViewTheme === 'space';
+
   return (
-    <div className="timetable-page-container flex flex-col h-screen overflow-hidden bg-gradient-to-br from-slate-50 via-slate-100 to-slate-200 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 transition-colors duration-300">
+    <>
+    {/* SpaceBackground als Overlay - IMMER gerendert wenn viewMode === 'day', Sichtbarkeit per isActive */}
+    {viewMode === 'day' && (
+      <SpaceBackground isActive={dailyViewTheme === 'space'} />
+    )}
+    <div className={`timetable-page-container flex flex-col h-screen overflow-hidden transition-colors duration-300 relative z-10 ${isSpaceThemeActive ? 'space-theme-active' : ''}`}>
       <div className="timetable-header-container">
         <TimetableHeader
           currentView={currentView}
@@ -866,6 +910,7 @@ function InnerTimetablePage() {
           handleNextWeek={handleNextWeek}
           handlePrevDay={handlePrevDay}
           handleNextDay={handleNextDay}
+          isSpaceTheme={viewMode === 'day' && dailyViewTheme === 'space'}
         />
       </div>
 
@@ -938,6 +983,7 @@ function InnerTimetablePage() {
           onEditLesson={handleEditLesson}
           onDeleteLesson={handleDeleteLesson}
           holidays={holidays}
+          onThemeChange={handleThemeChange}
         />
       )}
 
@@ -973,5 +1019,6 @@ function InnerTimetablePage() {
         settings={settings}
       />
     </div>
+    </>
   );
 }

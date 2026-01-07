@@ -4,11 +4,13 @@ import {
   User,
   Users2,
   Users,
-  Building,
+  MessageCircle,
   ChevronLeft,
   ChevronRight,
   Play,
   Coffee,
+  Megaphone,
+  FlaskConical,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useTopicProgress } from "@/hooks/useTopicProgress";
@@ -16,18 +18,14 @@ import { useAllerleiTopicProgress } from "@/hooks/useAllerleiTopicProgress";
 import { createMixedSubjectGradient, createGradient } from "@/utils/colorUtils";
 
 const WORK_FORM_ICONS = {
-  Single: User,
-  Partner: Users2,
-  Group: Users,
-  Plenum: Building,
+  single: User,
+  partner: Users2,
+  group: Users,
+  plenum: MessageCircle,
+  frontal: Megaphone,
+  experiment: FlaskConical,
 };
 
-const WORK_FORMS = {
-  Single: "👤 Single",
-  Partner: "👥 Partner",
-  Group: "👨‍👩‍👧‍👦 Group",
-  Plenum: "🏛️ Plenum",
-};
 
 export default function LessonDetailPanel({
   lesson,
@@ -38,7 +36,6 @@ export default function LessonDetailPanel({
   selectedDate,
   manualStepIndex,
   onManualStepChange,
-  onEndBreakEarly,
 }) {
   const [currentStepIndex, setCurrentStepIndex] = useState(-1);
   const [manualStepControl, setManualStepControl] = useState(false);
@@ -184,23 +181,35 @@ export default function LessonDetailPanel({
       .filter(m => m && m.trim() !== '' && m !== '–')
       || [];
 
+    // Dynamische Farbe basierend auf dem nächsten Fach (Fallback: Orange)
+    const nextSubjectColor = nextLesson?.subject?.color || '#f97316';
+
+    // Prüfe ob es eine Doppellektions-Pause ist (gleiche Lektion nach der Pause)
+    const isDoubleLessonBreak = displayLesson?.is_double_lesson &&
+      nextLesson?.id === displayLesson?.id;
+
+    // Theme-abhängige Transparenz für Pause-Ansicht
+    const pauseBgClass = customization.theme === 'space'
+      ? 'bg-white/30 dark:bg-slate-900/30 border border-white/20 dark:border-white/10'
+      : 'bg-white/95 dark:bg-slate-900/95';
+
     return (
-      <div className="rounded-2xl shadow-2xl bg-white/95 dark:bg-slate-900/95 overflow-hidden h-full flex flex-col items-center justify-center p-8">
-        {/* Kaffeetasse */}
-        <Coffee className="w-20 h-20 text-orange-500 mb-4 animate-pulse" />
+      <div className={`rounded-2xl shadow-2xl ${pauseBgClass} overflow-hidden h-full flex flex-col items-center justify-center p-8`}>
+        {/* Kaffeetasse - Farbe des nächsten Fachs */}
+        <Coffee className="w-20 h-20 mb-4 animate-pulse" style={{ color: nextSubjectColor }} />
 
         {/* Pause Text */}
         <h2 className="text-3xl font-bold text-slate-800 dark:text-slate-200 mb-2">
           {currentItem.name}
         </h2>
 
-        {/* Live Countdown */}
-        <div className="text-5xl font-bold text-orange-500 tabular-nums mb-8">
+        {/* Live Countdown - Farbe des nächsten Fachs */}
+        <div className="text-5xl font-bold tabular-nums mb-8" style={{ color: nextSubjectColor }}>
           {String(remainingMinutes).padStart(2, '0')}:{String(remainingSeconds).padStart(2, '0')}
         </div>
 
-        {/* Nächste Lektion */}
-        {nextLesson && (
+        {/* Nächste Lektion - NICHT anzeigen bei Doppellektions-Pause */}
+        {nextLesson && !isDoubleLessonBreak && (
           <div className="w-full max-w-md bg-slate-100 dark:bg-slate-800 rounded-xl p-6">
             <h3 className="text-lg font-semibold text-slate-700 dark:text-slate-300 mb-2">
               Nächste Lektion
@@ -212,7 +221,7 @@ export default function LessonDetailPanel({
               </span>
             </div>
 
-            {/* Materialien */}
+            {/* Materialien - Bullet Points in Fachfarbe */}
             {nextLessonMaterials.length > 0 && (
               <div className="mt-4">
                 <h4 className="text-sm font-semibold text-slate-600 dark:text-slate-400 mb-2">
@@ -221,7 +230,7 @@ export default function LessonDetailPanel({
                 <ul className="space-y-1">
                   {nextLessonMaterials.map((material, idx) => (
                     <li key={idx} className="flex items-center gap-2 text-slate-700 dark:text-slate-300">
-                      <span className="w-2 h-2 bg-orange-500 rounded-full"></span>
+                      <span className="w-2 h-2 rounded-full" style={{ backgroundColor: nextSubjectColor }}></span>
                       {material}
                     </li>
                   ))}
@@ -231,15 +240,6 @@ export default function LessonDetailPanel({
           </div>
         )}
 
-        {/* Pause frühzeitig beenden Button */}
-        {onEndBreakEarly && nextLesson && (
-          <Button
-            onClick={onEndBreakEarly}
-            className="mt-6 px-6 py-3 bg-orange-500 hover:bg-orange-600 text-white"
-          >
-            Pause frühzeitig beenden
-          </Button>
-        )}
       </div>
     );
   }
@@ -259,18 +259,33 @@ export default function LessonDetailPanel({
     );
   }
 
+  // Kompakter Modus
+  const headerPadding = customization.compactMode ? 'p-4' : 'p-6';
+  const contentPadding = customization.compactMode ? 'p-3 md:p-4' : 'p-4 md:p-6';
+
+  // Theme-abhängige Transparenz
+  const isThemedBackground = customization.theme === 'space';
+  const getBgClass = () => {
+    if (customization.transparencyMode) {
+      return "bg-transparent border border-white/20 dark:border-white/10";
+    }
+    if (isThemedBackground) {
+      return "bg-transparent border border-purple-500/30 dark:border-purple-400/30";
+    }
+    return "bg-white/95 dark:bg-slate-900/95 border border-slate-200/30 dark:border-slate-700/30";
+  };
+
+  // Transition-Klassen bedingt anwenden
+  const transitionClass = customization.reducedMotion ? '' : 'transition-all duration-500';
+
   // Haupt-Detail-Ansicht
   return (
     <div
-      className={`flex h-full flex-col overflow-hidden rounded-2xl shadow-2xl ${
-        customization.transparencyMode
-          ? "bg-transparent border border-white/20 dark:border-white/10"
-          : "bg-white/95 dark:bg-slate-900/95 border border-slate-200/30 dark:border-slate-700/30"
-      }`}
+      className={`flex h-full flex-col overflow-hidden rounded-2xl shadow-2xl ${getBgClass()}`}
     >
       {/* Header mit Fachfarben-Gradient */}
       <div
-        className="p-6 border-b border-slate-200 dark:border-slate-700"
+        className={`${headerPadding} border-b border-slate-200 dark:border-slate-700`}
         style={{ background: customization.transparencyMode ? "transparent" : headerGradient }}
       >
         <div className="flex justify-between items-start">
@@ -314,8 +329,8 @@ export default function LessonDetailPanel({
 
 
       {/* Inhaltsbereich */}
-      <div className="flex-1 overflow-y-auto bg-white/95 dark:bg-slate-900/95">
-        <div className="p-4 md:p-6">
+      <div className={`flex-1 overflow-y-auto ${isThemedBackground ? 'bg-white/20 dark:bg-slate-900/20' : 'bg-white/95 dark:bg-slate-900/95'}`}>
+        <div className={contentPadding}>
           {/* Schrittsteuerung */}
           <div className="flex justify-between items-center mb-6">
             <div className="flex gap-2">
@@ -348,7 +363,13 @@ export default function LessonDetailPanel({
                 <div
                   key={step.id || index}
                   className={`p-4 rounded-xl border-2 ${
-                    isCurrent ? "border-blue-500 bg-blue-50 dark:bg-blue-900/30" : "border-slate-200 dark:border-slate-700"
+                    isCurrent
+                      ? isThemedBackground
+                        ? "border-blue-400/50 bg-blue-500/20"
+                        : "border-blue-500 bg-blue-50 dark:bg-blue-900/30"
+                      : isThemedBackground
+                        ? "border-slate-500/20 bg-white/5"
+                        : "border-slate-200 dark:border-slate-700"
                   }`}
                 >
                   <div className="flex items-center justify-between mb-3">
@@ -368,7 +389,7 @@ export default function LessonDetailPanel({
                           fill="none"
                           strokeDasharray="100"
                           strokeDashoffset={manuallyCompletedSteps.has(index) ? 0 : 100 * (1 - progress / 100)}
-                          className="transition-all duration-500"
+                          className={transitionClass}
                         />
                         {manuallyCompletedSteps.has(index) && (
                           <text x="20" y="24" textAnchor="middle" fill="#22c55e" fontSize="14" className="rotate-90" style={{ transformOrigin: '20px 20px' }}>✓</text>
@@ -376,15 +397,14 @@ export default function LessonDetailPanel({
                       </svg>
                       <span className="font-semibold text-lg">{step.time} Min</span>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center">
                       <WorkFormIcon className="h-6 w-6" />
-                      <span>{WORK_FORMS[step.workForm] || step.workForm}</span>
                     </div>
                   </div>
-                  <div className="text-sm">
+                  <div className={`${customization.fontSize?.steps || 'text-sm'}`}>
                     <span className="font-medium">Ablauf:</span> {step.activity || "–"}
                   </div>
-                  <div className="text-sm mt-1">
+                  <div className={`${customization.fontSize?.steps || 'text-sm'} mt-1`}>
                     <span className="font-medium">Material:</span> {step.material || "–"}
                   </div>
                 </div>
@@ -412,10 +432,16 @@ export default function LessonDetailPanel({
                     key={step.id || index}
                     className={`grid grid-cols-subgrid col-span-5 gap-4 p-4 rounded-lg border transition-all ${
                       isCurrent
-                        ? "bg-yellow-50 dark:bg-yellow-900/30 border-yellow-400 dark:border-yellow-600 shadow-sm"
+                        ? isThemedBackground
+                          ? "bg-yellow-500/20 border-yellow-400/50 shadow-sm"
+                          : "bg-yellow-50 dark:bg-yellow-900/30 border-yellow-400 dark:border-yellow-600 shadow-sm"
                         : isCompleted
-                        ? "bg-green-50 dark:bg-green-900/20 opacity-70"
-                        : "bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700"
+                        ? isThemedBackground
+                          ? "bg-green-500/15 border-green-500/30 opacity-80"
+                          : "bg-green-50 dark:bg-green-900/20 opacity-70"
+                        : isThemedBackground
+                          ? "bg-white/5 border-slate-500/20"
+                          : "bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700"
                     }`}
                   >
                     <div className="flex items-center">
@@ -434,20 +460,19 @@ export default function LessonDetailPanel({
                           fill="none"
                           strokeDasharray="100"
                           strokeDashoffset={manuallyCompletedSteps.has(index) ? 0 : 100 * (1 - progress / 100)}
-                          className="transition-all duration-500"
+                          className={transitionClass}
                         />
                         {manuallyCompletedSteps.has(index) && (
                           <text x="20" y="24" textAnchor="middle" fill="#22c55e" fontSize="14" className="rotate-90" style={{ transformOrigin: '20px 20px' }}>✓</text>
                         )}
                       </svg>
                     </div>
-                    <div className="flex items-center text-sm">{step.time ? `${step.time} Min` : "–"}</div>
-                    <div className="flex items-center gap-2 text-sm">
+                    <div className={`flex items-center ${customization.fontSize?.steps || 'text-sm'}`}>{step.time ? `${step.time} Min` : "–"}</div>
+                    <div className={`flex items-center ${customization.fontSize?.steps || 'text-sm'}`}>
                       <WorkFormIcon className="h-5 w-5 text-slate-500" />
-                      <span className="truncate">{WORK_FORMS[step.workForm] || step.workForm || "–"}</span>
                     </div>
-                    <div className="text-sm break-words">{step.activity || "–"}</div>
-                    <div className="text-sm break-words">{step.material || "–"}</div>
+                    <div className={`break-words ${customization.fontSize?.steps || 'text-sm'}`}>{step.activity || "–"}</div>
+                    <div className={`break-words ${customization.fontSize?.steps || 'text-sm'}`}>{step.material || "–"}</div>
                   </motion.div>
                 );
               })}
