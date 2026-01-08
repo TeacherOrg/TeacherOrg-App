@@ -4,6 +4,8 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
 import { Filter, ChevronUp, ChevronDown } from 'lucide-react';
+import { useStudentSortPreference } from '@/hooks/useStudentSortPreference';
+import { sortStudents } from '@/utils/studentSortUtils';
 
 const FiltersSection = ({
   diagramView,
@@ -20,14 +22,16 @@ const FiltersSection = ({
   students
 }) => {
   const [studentDropdownOpen, setStudentDropdownOpen] = useState(false);
+  const [sortPreference] = useStudentSortPreference();
 
   const studentOptions = useMemo(() => {
     if (!Array.isArray(students)) return [];
-    return students.map(s => ({
+    const sorted = sortStudents(students, sortPreference);
+    return sorted.map(s => ({
       value: s.id,
       label: s.name || `${s.firstName || ''} ${s.lastName || ''}`.trim() || 'Unnamed Student'
     }));
-  }, [students]);
+  }, [students, sortPreference]);
 
   const subjectOptions = useMemo(() => {
     if (!Array.isArray(subjects)) return [{ value: 'all', label: 'Alle' }];

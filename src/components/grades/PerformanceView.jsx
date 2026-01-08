@@ -198,9 +198,12 @@ const PerformanceView = ({ students = [], performances = [], activeClassId, setA
   const handleCreateUeberfachlich = () => setIsUeberfachlichModalOpen(true);
 
   // handleChoreUpdate - Einzelne Ämtli-Korrektur aus dem Modal
-  const handleChoreUpdate = useCallback(async (choreId, isCompleted) => {
+  // Akzeptiert jetzt status-string: 'completed', 'not_completed', 'pending'
+  const handleChoreUpdate = useCallback(async (choreId, newStatus) => {
     try {
+      const isCompleted = newStatus === 'completed';
       await ChoreAssignment.update(choreId, {
+        status: newStatus,
         is_completed: isCompleted,
         completed_at: isCompleted ? new Date().toISOString() : null
       });
@@ -209,11 +212,13 @@ const PerformanceView = ({ students = [], performances = [], activeClassId, setA
       const updatedChoreAssignments = await ChoreAssignment.filter({ class_id: activeClassId }).catch(() => []);
       setChoreAssignments(updatedChoreAssignments || []);
 
-      toast({
-        title: isCompleted ? "Erledigt" : "Nicht erledigt",
-        description: `Ämtli wurde als ${isCompleted ? 'erledigt' : 'nicht erledigt'} markiert.`,
-        variant: isCompleted ? "success" : "default",
-      });
+      const messages = {
+        completed: { title: 'Erledigt', desc: 'Ämtli wurde als erledigt markiert.', variant: 'success' },
+        not_completed: { title: 'Nicht erledigt', desc: 'Ämtli wurde als nicht erledigt markiert.', variant: 'default' },
+        pending: { title: 'Zurückgesetzt', desc: 'Ämtli wurde zurückgesetzt.', variant: 'default' }
+      };
+      const msg = messages[newStatus] || messages.pending;
+      toast({ title: msg.title, description: msg.desc, variant: msg.variant });
     } catch (error) {
       console.error('Error updating chore:', error);
       toast({

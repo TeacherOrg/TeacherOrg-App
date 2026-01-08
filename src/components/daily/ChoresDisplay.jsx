@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { User, Check, X, CheckCircle } from "lucide-react";
+import { User, Check, X, CheckCircle, XCircle } from "lucide-react";
 
 export default function ChoresDisplay({
   assignments,
@@ -39,30 +39,43 @@ export default function ChoresDisplay({
         students: [],
         assignmentIds: [],
         completedCount: 0,
-        isCompleted: false
+        notCompletedCount: 0,
+        isCompleted: false,
+        isNotCompleted: false
       };
     }
+    // Status normalisieren (Rückwärtskompatibilität)
+    const status = assignment.status || (assignment.is_completed ? 'completed' : 'pending');
     acc[key].students.push({
       name: assignment.studentName,
       assignmentId: assignment.id,
-      isCompleted: assignment.is_completed
+      status: status,
+      isCompleted: status === 'completed',
+      isNotCompleted: status === 'not_completed'
     });
     acc[key].assignmentIds.push(assignment.id);
-    if (assignment.is_completed) {
+    if (status === 'completed') {
       acc[key].completedCount++;
+    } else if (status === 'not_completed') {
+      acc[key].notCompletedCount++;
     }
     return acc;
   }, {});
 
-  // Mark chore as completed if ALL students completed
+  // Mark chore status based on ALL students' statuses
   Object.values(groupedChores).forEach(chore => {
-    chore.isCompleted = chore.students.length > 0 &&
-                        chore.completedCount === chore.students.length;
+    const total = chore.students.length;
+    // Alle erledigt = grün
+    chore.isCompleted = total > 0 && chore.completedCount === total;
+    // Mindestens einer nicht erledigt = rot (wenn keine mehr pending)
+    chore.isNotCompleted = total > 0 &&
+                           chore.notCompletedCount > 0 &&
+                           (chore.completedCount + chore.notCompletedCount) === total;
   });
 
   const groupedChoresList = Object.values(groupedChores);
 
-  // Theme-abhängige Transparenz
+  // Theme-abhängige Transparenz und Textfarben
   const isThemedBackground = customization?.theme === 'space';
   const containerBgClass = isThemedBackground
     ? 'bg-transparent'
@@ -74,6 +87,12 @@ export default function ChoresDisplay({
     ? 'border-purple-500/40 dark:border-purple-400/40'
     : 'border-slate-200/30 dark:border-slate-700/30';
   const blurClass = isThemedBackground ? '' : 'backdrop-blur-md';
+  const textColorClass = isThemedBackground
+    ? 'text-white'
+    : 'text-slate-800 dark:text-slate-200';
+  const subtextColorClass = isThemedBackground
+    ? 'text-white/70'
+    : 'text-slate-500 dark:text-slate-400';
 
   // Animation variants
   const cardVariants = customization?.reducedMotion ? {} : {
@@ -95,17 +114,17 @@ export default function ChoresDisplay({
 
   return (
     <motion.div
-      className={`${containerBgClass} ${blurClass} rounded-2xl shadow-xl border ${borderClass} overflow-hidden h-full flex flex-col`}
+      className={`${containerBgClass} ${blurClass} rounded-2xl shadow-xl border ${borderClass} overflow-hidden h-full min-h-0 flex flex-col`}
       initial={customization?.reducedMotion ? false : { opacity: 0 }}
       animate={customization?.reducedMotion ? false : { opacity: 1 }}
       transition={{ duration: 0.5 }}
     >
       <div className={`${headerBgClass} p-2 md:p-3 border-b border-slate-200/50 dark:border-slate-600/50`}>
-        <h3 className={`${customization?.fontSize?.title || 'text-xl'} font-bold text-slate-800 dark:text-slate-200 font-[Inter]`}>
+        <h3 className={`${customization?.fontSize?.title || 'text-xl'} font-bold ${textColorClass} font-[Inter]`}>
           Ämtchen am Ende des Tages
         </h3>
       </div>
-      <div className="flex-1 overflow-y-auto p-3 md:p-4">
+      <div className="flex-1 min-h-0 overflow-y-auto p-3 md:p-4">
         {groupedChoresList.length > 0 ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4">
             {groupedChoresList.map((chore, index) => (
@@ -122,13 +141,18 @@ export default function ChoresDisplay({
                   border: `2px solid ${chore.choreColor}40`,
                   color: isDark ? "#e2e8f0" : "#1e293b",
                 }}
-                onMouseEnter={() => !chore.isCompleted && setHoveredChoreId(chore.chore_id)}
+                onMouseEnter={() => setHoveredChoreId(chore.chore_id)}
                 onMouseLeave={() => setHoveredChoreId(null)}
               >
-                {/* Completion Indicator */}
+                {/* Status Indicator */}
                 {chore.isCompleted && (
                   <div className="absolute top-2 right-2 z-10">
                     <CheckCircle className="w-6 h-6 text-green-500" />
+                  </div>
+                )}
+                {chore.isNotCompleted && (
+                  <div className="absolute top-2 right-2 z-10">
+                    <XCircle className="w-6 h-6 text-red-500" />
                   </div>
                 )}
 
@@ -146,7 +170,7 @@ export default function ChoresDisplay({
 
                   {/* Beschreibung (optional) */}
                   {chore.choreDescription && (
-                    <p className="text-sm text-slate-600 dark:text-slate-400 mb-3 line-clamp-2 font-[Poppins]">
+                    <p className={`text-sm ${subtextColorClass} mb-3 line-clamp-2 font-[Poppins]`}>
                       {chore.choreDescription}
                     </p>
                   )}
@@ -162,11 +186,17 @@ export default function ChoresDisplay({
                     {chore.students.map((student, idx) => (
                       <div key={idx} className="flex items-center gap-2 justify-center">
                         <User className="w-4 h-4" style={{ color: chore.choreColor }} />
-                        <span className={`font-semibold ${student.isCompleted ? 'line-through text-green-600' : ''}`}>
+                        <span className={`font-semibold ${
+                          student.isCompleted ? 'line-through text-green-600' :
+                          student.isNotCompleted ? 'line-through text-red-500' : ''
+                        }`}>
                           {student.name}
                         </span>
                         {student.isCompleted && (
                           <Check className="w-3 h-3 text-green-500" />
+                        )}
+                        {student.isNotCompleted && (
+                          <X className="w-3 h-3 text-red-500" />
                         )}
                       </div>
                     ))}
@@ -175,7 +205,7 @@ export default function ChoresDisplay({
 
                 {/* Hover Overlay with Buttons */}
                 <AnimatePresence>
-                  {hoveredChoreId === chore.chore_id && !chore.isCompleted && (
+                  {hoveredChoreId === chore.chore_id && (
                     <motion.div
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
@@ -184,28 +214,48 @@ export default function ChoresDisplay({
                       className="absolute inset-0 rounded-2xl flex flex-col items-center justify-center gap-3 z-20"
                       style={{ backgroundColor: 'rgba(0,0,0,0.3)' }}
                     >
-                      <motion.button
-                        initial={{ y: -10, opacity: 0 }}
-                        animate={{ y: 0, opacity: 1 }}
-                        exit={{ y: -10, opacity: 0 }}
-                        transition={{ delay: 0.05 }}
-                        onClick={() => handleMarkCompleted(chore.assignmentIds, true)}
-                        className="flex items-center gap-2 px-5 py-2.5 bg-green-500 hover:bg-green-600 text-white font-semibold rounded-xl shadow-lg transition-colors"
-                      >
-                        <Check className="w-5 h-5" />
-                        Erledigt
-                      </motion.button>
-                      <motion.button
-                        initial={{ y: 10, opacity: 0 }}
-                        animate={{ y: 0, opacity: 1 }}
-                        exit={{ y: 10, opacity: 0 }}
-                        transition={{ delay: 0.1 }}
-                        onClick={() => handleMarkCompleted(chore.assignmentIds, false)}
-                        className="flex items-center gap-2 px-5 py-2.5 bg-red-500 hover:bg-red-600 text-white font-semibold rounded-xl shadow-lg transition-colors"
-                      >
-                        <X className="w-5 h-5" />
-                        Nicht erledigt
-                      </motion.button>
+                      {/* Pending oder not_completed: Erledigt-Button anzeigen */}
+                      {!chore.isCompleted && (
+                        <motion.button
+                          initial={{ y: -10, opacity: 0 }}
+                          animate={{ y: 0, opacity: 1 }}
+                          exit={{ y: -10, opacity: 0 }}
+                          transition={{ delay: 0.05 }}
+                          onClick={() => handleMarkCompleted(chore.assignmentIds, 'completed')}
+                          className="flex items-center gap-2 px-5 py-2.5 bg-green-500 hover:bg-green-600 text-white font-semibold rounded-xl shadow-lg transition-colors"
+                        >
+                          <Check className="w-5 h-5" />
+                          Erledigt
+                        </motion.button>
+                      )}
+                      {/* Pending: Nicht-erledigt-Button anzeigen */}
+                      {!chore.isCompleted && !chore.isNotCompleted && (
+                        <motion.button
+                          initial={{ y: 10, opacity: 0 }}
+                          animate={{ y: 0, opacity: 1 }}
+                          exit={{ y: 10, opacity: 0 }}
+                          transition={{ delay: 0.1 }}
+                          onClick={() => handleMarkCompleted(chore.assignmentIds, 'not_completed')}
+                          className="flex items-center gap-2 px-5 py-2.5 bg-red-500 hover:bg-red-600 text-white font-semibold rounded-xl shadow-lg transition-colors"
+                        >
+                          <X className="w-5 h-5" />
+                          Nicht erledigt
+                        </motion.button>
+                      )}
+                      {/* Completed oder not_completed: Zurücksetzen-Button anzeigen */}
+                      {(chore.isCompleted || chore.isNotCompleted) && (
+                        <motion.button
+                          initial={{ y: 10, opacity: 0 }}
+                          animate={{ y: 0, opacity: 1 }}
+                          exit={{ y: 10, opacity: 0 }}
+                          transition={{ delay: 0.1 }}
+                          onClick={() => handleMarkCompleted(chore.assignmentIds, 'pending')}
+                          className="flex items-center gap-2 px-5 py-2.5 bg-slate-500 hover:bg-slate-600 text-white font-semibold rounded-xl shadow-lg transition-colors"
+                        >
+                          <X className="w-5 h-5" />
+                          Zurücksetzen
+                        </motion.button>
+                      )}
                     </motion.div>
                   )}
                 </AnimatePresence>
@@ -215,7 +265,7 @@ export default function ChoresDisplay({
         ) : (
           <div className="text-center py-6 md:py-12">
             <div className="text-4xl md:text-6xl mb-2 md:mb-4">📋</div>
-            <p className={`${customization?.fontSize?.content || 'text-xl'} text-slate-500 dark:text-slate-400 font-[Poppins]`}>
+            <p className={`${customization?.fontSize?.content || 'text-xl'} ${subtextColorClass} font-[Poppins]`}>
               Keine Ämtchen für heute
             </p>
           </div>

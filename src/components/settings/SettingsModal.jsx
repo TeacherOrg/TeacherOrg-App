@@ -6,7 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { X, User as UserIcon, Sun, Moon, Monitor, Home, RotateCcw, Lock, LogOut, HelpCircle, CheckCircle, Trash2, Loader2, AlertTriangle } from 'lucide-react';
+import { X, User as UserIcon, Users, Sun, Moon, Monitor, Home, RotateCcw, Lock, LogOut, HelpCircle, CheckCircle, Trash2, Loader2, AlertTriangle } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
 import pb from '@/api/pb';
 import CalendarLoader from '../ui/CalendarLoader';
@@ -15,6 +15,7 @@ import { syncYearlyLessonToWeekly } from '@/hooks/useYearlyLessonSync';
 import { isEqual } from 'lodash';
 import toast from 'react-hot-toast';
 import { useTutorial, TUTORIAL_IDS } from '@/hooks/useTutorial';
+import { useStudentSortPreference } from '@/hooks/useStudentSortPreference';
 
 import ClassesSettings from './ClassesSettings';
 import SubjectSettings from './SubjectSettings';
@@ -30,6 +31,7 @@ const ProfileSettings = ({
   onClose
 }) => {
   const { resetAllTutorials, showTutorial, isCompleted, progress, setShowSetupWizard } = useTutorial();
+  const [studentSortPreference, setStudentSortPreference] = useStudentSortPreference();
   const [user, setUser] = useState(null);
   const [showPasswordForm, setShowPasswordForm] = useState(false);
   const [oldPassword, setOldPassword] = useState('');
@@ -428,6 +430,30 @@ const ProfileSettings = ({
               ))}
             </SelectContent>
           </Select>
+        </CardContent>
+      </Card>
+
+      <Card className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-3 text-slate-900 dark:text-white">
+            <Users className="w-5 h-5 text-purple-500" />
+            Schülersortierung
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Label className="text-slate-700 dark:text-slate-300">Sortieren nach</Label>
+          <Select value={studentSortPreference} onValueChange={setStudentSortPreference}>
+            <SelectTrigger className="bg-white dark:bg-slate-700 border-slate-300 dark:border-slate-600">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="firstName">Vorname (A-Z)</SelectItem>
+              <SelectItem value="lastName">Nachname (A-Z)</SelectItem>
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">
+            Gilt für alle Schülerlisten in der App
+          </p>
         </CardContent>
       </Card>
 

@@ -9,6 +9,8 @@ import { UeberfachlichKompetenz, Competency, User } from '@/api/entities';
 import { Search, ChevronDown, ChevronRight, Trash2, Star, Clock, Plus, Save, X, FileText } from 'lucide-react';
 import { format } from "date-fns";
 import { useToast } from "@/components/ui/use-toast";
+import { useStudentSortPreference } from '@/hooks/useStudentSortPreference';
+import { sortStudents } from '@/utils/studentSortUtils';
 
 const useDebounce = (value, delay) => {
   const [debouncedValue, setDebouncedValue] = useState(value);
@@ -215,6 +217,7 @@ export default function UeberfachlichTable({
   const [quickAddState, setQuickAddState] = useState({ key: null, score: 0, notes: '' });
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
+  const [sortPreference] = useStudentSortPreference();
 
   // Debugging-Logs für Props
   useEffect(() => {
@@ -229,8 +232,9 @@ export default function UeberfachlichTable({
   }, [students, ueberfachlich, activeClassId, expandedHistories, expandedCompetencies, allCompetencies]);
 
   const studentsForClass = useMemo(() => {
-    return students.filter(s => s.class_id === activeClassId);
-  }, [students, activeClassId]);
+    const filtered = students.filter(s => s.class_id === activeClassId);
+    return sortStudents(filtered, sortPreference);
+  }, [students, activeClassId, sortPreference]);
 
   // Berechne eindeutige Kompetenzen basierend auf competency_id (Relation-ID)
   const allCompetenciesLocal = useMemo(() => {

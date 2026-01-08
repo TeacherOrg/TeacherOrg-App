@@ -147,7 +147,15 @@ export default function DailyView({ currentDate, onDateChange, onThemeChange }) 
     theme: 'default', // Fallback auf 'default'
     autoFocusCurrentLesson: true,
     showOverview: true,
-    audio: { enabled: false, volume: 0.5, sound: 'chime' },
+    audio: {
+      volume: 0.5,
+      lessonEndEnabled: false,
+      lessonEndSound: 'chime',
+      lessonStartEnabled: false,
+      lessonStartSound: 'bell',
+      stepEndEnabled: false,
+      stepEndSound: 'ping',
+    },
     transparencyMode: false,
     forceDarkText: false,
     forceLightText: false,
@@ -205,9 +213,13 @@ export default function DailyView({ currentDate, onDateChange, onThemeChange }) 
             compactMode: loaded.compact_mode,
             reducedMotion: loaded.reduced_motion || false,
             audio: {
-              enabled: loaded.audio_enabled,
               volume: loaded.audio_volume,
-              sound: loaded.audio_sound || 'chime',
+              lessonEndEnabled: loaded.audio_lesson_end_enabled || loaded.audio_enabled || false, // Fallback für alte Daten
+              lessonEndSound: loaded.audio_lesson_end_sound || loaded.audio_sound || 'chime', // Fallback für alte Daten
+              lessonStartEnabled: loaded.audio_lesson_start_enabled || false,
+              lessonStartSound: loaded.audio_lesson_start_sound || 'bell',
+              stepEndEnabled: loaded.audio_step_end_enabled || false,
+              stepEndSound: loaded.audio_step_end_sound || 'ping',
             },
             transparencyMode: loaded.transparency_mode || false,
             forceDarkText: loaded.force_dark_text || false,
@@ -297,24 +309,24 @@ export default function DailyView({ currentDate, onDateChange, onThemeChange }) 
     }
   };
 
-  // Memoize calculateProgress function
+  // Memoize calculateProgress function - uses currentTime state for real-time updates
   const calculateProgress = useCallback((startTime, endTime) => {
-    const now = new Date();
+    const now = currentTime; // Use state instead of new Date() for reactive updates
     const today = now.toDateString();
     const selectedDay = currentDate.toDateString();
-    
+
     if (today !== selectedDay) return 0;
-    
+
     const start = new Date(`${today} ${startTime}`);
     const end = new Date(`${today} ${endTime}`);
-    
+
     if (now < start) return 0;
     if (now > end) return 100;
-    
+
     const total = end - start;
     const elapsed = now - start;
     return Math.round((elapsed / total) * 100);
-  }, [currentDate]);
+  }, [currentDate, currentTime]);
 
   // Get lessons for the selected date
   const lessonsForDate = useMemo(() => {
@@ -692,18 +704,35 @@ export default function DailyView({ currentDate, onDateChange, onThemeChange }) 
   }, [currentTime, lessonsForDate, currentDate]);
 
   // Play audio at the end of a lesson
-  const lastPlayedLessonRef = useRef(null);
+  const lastPlayedLessonEndRef = useRef(null);
   useEffect(() => {
-      if (customization.audio?.enabled && currentItem?.type === 'lesson') {
+      if (customization.audio?.lessonEndEnabled && currentItem?.type === 'lesson') {
           const now = new Date();
           const lessonEndTime = new Date(`${now.toDateString()} ${currentItem.timeSlot.end}`);
           const secondsToEnd = (lessonEndTime.getTime() - now.getTime()) / 1000;
 
           // Spiele Ton wenn 0-1.5 Sekunden vor Ende und noch nicht für diese Lektion gespielt
           const lessonKey = `${currentItem.period_slot}-${currentItem.timeSlot.end}`;
-          if (secondsToEnd > 0 && secondsToEnd < 1.5 && lastPlayedLessonRef.current !== lessonKey) {
-              lastPlayedLessonRef.current = lessonKey;
-              playSound(customization.audio.sound || 'chime', customization.audio.volume || 0.5);
+          if (secondsToEnd > 0 && secondsToEnd < 1.5 && lastPlayedLessonEndRef.current !== lessonKey) {
+              lastPlayedLessonEndRef.current = lessonKey;
+              playSound(customization.audio.lessonEndSound || 'chime', customization.audio.volume || 0.5);
+          }
+      }
+  }, [currentTime, currentItem, customization.audio]);
+
+  // Play audio at the start of a lesson
+  const lastPlayedLessonStartRef = useRef(null);
+  useEffect(() => {
+      if (customization.audio?.lessonStartEnabled && currentItem?.type === 'lesson') {
+          const now = new Date();
+          const lessonStartTime = new Date(`${now.toDateString()} ${currentItem.timeSlot.start}`);
+          const secondsFromStart = (now.getTime() - lessonStartTime.getTime()) / 1000;
+
+          // Spiele Ton wenn 0-3 Sekunden nach Start und noch nicht für diese Lektion gespielt
+          const lessonKey = `${currentItem.period_slot}-${currentItem.timeSlot.start}`;
+          if (secondsFromStart >= 0 && secondsFromStart < 3 && lastPlayedLessonStartRef.current !== lessonKey) {
+              lastPlayedLessonStartRef.current = lessonKey;
+              playSound(customization.audio.lessonStartSound || 'bell', customization.audio.volume || 0.5);
           }
       }
   }, [currentTime, currentItem, customization.audio]);
@@ -738,14 +767,23 @@ export default function DailyView({ currentDate, onDateChange, onThemeChange }) 
       setManualStepIndex(index);
   }, []);
 
+  // Handler für Step-Completion Sound
+  const handleStepComplete = useCallback((stepIndex) => {
+      if (customization.audio?.stepEndEnabled) {
+          playSound(customization.audio.stepEndSound || 'ping', customization.audio.volume || 0.5);
+      }
+  }, [customization.audio]);
+
   // Handler für Ämtli-Completion
-  const handleChoreCompletion = useCallback(async (assignmentIds, isCompleted) => {
+  const handleChoreCompletion = useCallback(async (assignmentIds, status) => {
     try {
       const now = new Date().toISOString();
+      const isCompleted = status === 'completed';
 
       await Promise.all(assignmentIds.map(id =>
         ChoreAssignment.update(id, {
-          is_completed: isCompleted,
+          status: status,
+          is_completed: isCompleted, // Rückwärtskompatibilität
           completed_at: isCompleted ? now : null
         })
       ));
@@ -755,7 +793,13 @@ export default function DailyView({ currentDate, onDateChange, onThemeChange }) 
       const updatedAssignments = await ChoreAssignment.list({ user_id: userId });
       setChoreAssignments(updatedAssignments || []);
 
-      toast.success(isCompleted ? 'Ämtli als erledigt markiert!' : 'Ämtli als nicht erledigt markiert.');
+      // Status-spezifische Toast-Nachrichten
+      const messages = {
+        completed: 'Ämtli als erledigt markiert!',
+        not_completed: 'Ämtli als nicht erledigt markiert.',
+        pending: 'Ämtli zurückgesetzt.'
+      };
+      toast.success(messages[status] || 'Ämtli-Status aktualisiert.');
     } catch (error) {
       console.error('Error updating chore completion:', error);
       toast.error('Fehler beim Aktualisieren des Ämtli.');
@@ -781,9 +825,13 @@ export default function DailyView({ currentDate, onDateChange, onThemeChange }) 
         auto_focus_current_lesson: customizationData.autoFocusCurrentLesson,
         compact_mode: customizationData.compactMode,
         reduced_motion: customizationData.reducedMotion,
-        audio_enabled: customizationData.audio?.enabled,
         audio_volume: customizationData.audio?.volume,
-        audio_sound: customizationData.audio?.sound || 'chime',
+        audio_lesson_end_enabled: customizationData.audio?.lessonEndEnabled || false,
+        audio_lesson_end_sound: customizationData.audio?.lessonEndSound || 'chime',
+        audio_lesson_start_enabled: customizationData.audio?.lessonStartEnabled || false,
+        audio_lesson_start_sound: customizationData.audio?.lessonStartSound || 'bell',
+        audio_step_end_enabled: customizationData.audio?.stepEndEnabled || false,
+        audio_step_end_sound: customizationData.audio?.stepEndSound || 'ping',
         transparency_mode: customizationData.transparencyMode,
         force_dark_text: customizationData.forceDarkText,
         force_light_text: customizationData.forceLightText,
@@ -914,22 +962,22 @@ export default function DailyView({ currentDate, onDateChange, onThemeChange }) 
   return (
     <Wrapper>
     <motion.div
-      className="h-full w-full overflow-hidden relative font-[Poppins]"
+      className="h-full w-full overflow-hidden relative font-[Poppins] flex flex-col"
       style={{ ...getBackgroundStyle() }}
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       transition={{ duration: 1 }}
     >
-      {/* Main Content Area */}
+      {/* Main Content Area - flex-1 min-h-0 für korrekte Höhenanpassung */}
       <div
-        className={`w-full grid grid-cols-1 lg:grid-cols-[minmax(400px,35%)_1fr] gap-2 md:gap-3 items-stretch max-h-[calc(100vh-120px)] ${
+        className={`flex-1 min-h-0 w-full grid grid-cols-1 lg:grid-cols-[minmax(400px,35%)_1fr] gap-2 md:gap-3 items-stretch ${
           isFullscreen ? 'p-0' : 'p-4'
         }`}
       >
         {/* Lesson Overview Panel */}
         {customization.showOverview && (
           <motion.div
-            className="min-w-0 self-stretch overflow-y-auto"
+            className="min-w-0 min-h-0 self-stretch"
           >
             <LessonOverviewPanel
               items={lessonsForDate}
@@ -953,7 +1001,7 @@ export default function DailyView({ currentDate, onDateChange, onThemeChange }) 
         )}
 
         {/* Main Central Panel */}
-        <div className="overflow-y-auto overflow-x-hidden min-w-0 flex flex-col self-stretch" style={{ maxWidth: '100%' }}>
+        <div className="overflow-y-auto overflow-x-hidden min-w-0 min-h-0 flex flex-col self-stretch" style={{ maxWidth: '100%' }}>
           {manualChoresView ? (
             <ChoresDisplay
               assignments={todaysAssignments}
@@ -972,11 +1020,12 @@ export default function DailyView({ currentDate, onDateChange, onThemeChange }) 
               // Farbe der nächsten Lektion (Fallback: Orange)
               const nextSubjectColor = nextLessonAfterPause?.subject?.color || '#f97316';
 
-              // Materialien sammeln
-              const materials = nextLessonAfterPause?.steps
-                ?.map(step => step.material)
-                .filter(m => m && m.trim() !== '' && m !== '–')
-                || [];
+              // Materialien sammeln (dedupliziert)
+              const materials = [...new Set(
+                nextLessonAfterPause?.steps
+                  ?.map(step => step.material)
+                  .filter(m => m && m.trim() !== '' && m !== '–')
+              )] || [];
 
               // Theme-abhängige Transparenz für Pause-Ansicht
               const pauseBgClass = customization.theme === 'space'
@@ -1083,6 +1132,7 @@ export default function DailyView({ currentDate, onDateChange, onThemeChange }) 
               selectedDate={currentDate}
               manualStepIndex={manualStepIndex}
               onManualStepChange={handleManualStepChange}
+              onStepComplete={handleStepComplete}
               theme={customization.theme || 'default'}
               isDark={isDark}
               onEndBreakEarly={() => {

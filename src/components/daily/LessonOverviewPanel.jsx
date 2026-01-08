@@ -38,6 +38,20 @@ export default function LessonOverviewPanel({
     ? 'border-purple-500/40 dark:border-purple-400/40'
     : 'border-slate-200/30 dark:border-slate-700/30';
   const blurClass = isThemedBackground ? '' : 'backdrop-blur-md';
+
+  // Automatische Textfarben bei Space-Theme (immer hell für bessere Lesbarkeit)
+  const textColorClass = isThemedBackground
+    ? 'text-white'
+    : 'text-slate-800 dark:text-slate-200';
+  const iconColorClass = isThemedBackground
+    ? 'text-white/80'
+    : 'text-slate-600 dark:text-slate-400';
+  const subtextColorClass = isThemedBackground
+    ? 'text-white/70'
+    : 'text-slate-600 dark:text-slate-400';
+  const buttonClass = isThemedBackground
+    ? 'text-white/80 hover:text-white hover:bg-white/20'
+    : '';
   const getHolidayDisplay = (holiday) => {
     if (!holiday) return { emoji: '📅', gradient: 'linear-gradient(135deg, #64748b 0%, #475569 100%)' };
     switch (holiday.type) {
@@ -119,30 +133,30 @@ export default function LessonOverviewPanel({
 
   return (
     <motion.div
-      className={`${bgClass} ${blurClass} rounded-2xl shadow-xl border ${borderClass} overflow-hidden flex flex-col`}
+      className={`${bgClass} ${blurClass} rounded-2xl shadow-xl border ${borderClass} overflow-hidden flex flex-col h-full min-h-0`}
       initial={customization.reducedMotion ? false : { opacity: 0, x: -50 }}
       animate={customization.reducedMotion ? false : { opacity: 1, x: 0 }}
     >
       <div className={`${headerBgClass} p-3 border-b border-slate-200/50 dark:border-slate-600/50`}>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <BookOpen className="w-5 h-5 text-slate-600 dark:text-slate-400" />
-            <h3 className={`${customization.fontSize.content} font-bold text-slate-800 dark:text-slate-200 font-[Poppins]`}>
+            <BookOpen className={`w-5 h-5 ${iconColorClass}`} />
+            <h3 className={`${customization.fontSize.content} font-bold ${textColorClass} font-[Poppins]`}>
               Tagesübersicht
             </h3>
           </div>
           <div className="flex gap-1">
-            <Button variant="ghost" size="icon" onClick={onSettingsClick} className="h-7 w-7 rounded-lg" title="Einstellungen">
+            <Button variant="ghost" size="icon" onClick={onSettingsClick} className={`h-7 w-7 rounded-lg ${buttonClass}`} title="Einstellungen">
               <Settings className="w-4 h-4" />
             </Button>
-            <Button variant="ghost" size="icon" onClick={onFullscreenToggle} className="h-7 w-7 rounded-lg" title="Vollbild">
+            <Button variant="ghost" size="icon" onClick={onFullscreenToggle} className={`h-7 w-7 rounded-lg ${buttonClass}`} title="Vollbild">
               {isFullscreen ? <Minimize className="w-4 h-4" /> : <Maximize className="w-4 h-4" />}
             </Button>
             <Button
               variant="ghost"
               size="icon"
               onClick={onPauseToggle}
-              className={`h-7 w-7 rounded-lg ${forcePauseView ? 'bg-orange-500 text-white hover:bg-orange-600' : ''}`}
+              className={`h-7 w-7 rounded-lg ${forcePauseView ? 'bg-orange-500 text-white hover:bg-orange-600' : buttonClass}`}
               title="Pause"
             >
               <Coffee className="w-4 h-4" />
@@ -151,7 +165,7 @@ export default function LessonOverviewPanel({
               variant="ghost"
               size="icon"
               onClick={onChoresToggle}
-              className={`h-7 w-7 rounded-lg ${showChoresView ? 'bg-blue-500 text-white hover:bg-blue-600' : ''}`}
+              className={`h-7 w-7 rounded-lg ${showChoresView ? 'bg-blue-500 text-white hover:bg-blue-600' : buttonClass}`}
               title="Ämtli"
             >
               <ClipboardList className="w-4 h-4" />
@@ -160,7 +174,7 @@ export default function LessonOverviewPanel({
         </div>
       </div>
 
-      <div className={`flex-1 overflow-y-auto ${paddingClass}`}>
+      <div className={`flex-1 min-h-0 overflow-y-auto overflow-x-hidden ${paddingClass}`}>
         {currentHoliday ? (
           <motion.div
             className="text-white p-6 rounded-xl text-center relative overflow-hidden"
@@ -254,7 +268,7 @@ export default function LessonOverviewPanel({
         ) : (
           <div className="text-center py-12">
             <div className="text-6xl mb-4">📚</div>
-            <p className={`${customization.fontSize.content} text-slate-500 dark:text-slate-400`}>
+            <p className={`${customization.fontSize.content} ${subtextColorClass}`}>
               Keine Lektionen geplant
             </p>
           </div>

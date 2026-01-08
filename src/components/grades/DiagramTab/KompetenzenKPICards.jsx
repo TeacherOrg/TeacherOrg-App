@@ -54,8 +54,15 @@ const KompetenzenKPICards = ({
     const today = new Date().toISOString().split('T')[0];
     const pastChores = relevantChores.filter(a => a.assignment_date <= today);
     const totalChores = pastChores.length;
-    const completedChores = pastChores.filter(a => a.is_completed).length;
-    const failedChores = pastChores.filter(a => a.is_completed === false && a.completed_at).length;
+    // Status-basierte Zählung mit Fallback für alte Daten
+    const completedChores = pastChores.filter(a => {
+      const status = a.status || (a.is_completed ? 'completed' : 'pending');
+      return status === 'completed';
+    }).length;
+    const notCompletedChores = pastChores.filter(a => {
+      const status = a.status || (a.is_completed ? 'completed' : 'pending');
+      return status === 'not_completed';
+    }).length;
     const choresRate = totalChores > 0 ? Math.round((completedChores / totalChores) * 100) : 0;
 
     // Group chores by week > date for modal display
@@ -91,7 +98,8 @@ const KompetenzenKPICards = ({
     return {
       totalChores,
       completedChores,
-      failedChores,
+      notCompletedChores,
+      openChores: totalChores - completedChores - notCompletedChores,
       choresRate,
       choresByWeek,
       allChoresCount: relevantChores.length
@@ -113,9 +121,11 @@ const KompetenzenKPICards = ({
     });
   };
 
+  // Status-Cycling: completed → not_completed, andere → completed
   const handleChoreToggle = async (choreId, currentStatus) => {
     if (onChoreUpdate) {
-      await onChoreUpdate(choreId, !currentStatus);
+      const newStatus = currentStatus === 'completed' ? 'not_completed' : 'completed';
+      await onChoreUpdate(choreId, newStatus);
     }
   };
 
@@ -227,11 +237,11 @@ const KompetenzenKPICards = ({
                 <div className="text-xs text-green-700 dark:text-green-300">Erledigt</div>
               </div>
               <div className="text-center p-3 bg-red-100 dark:bg-red-900/30 rounded-lg">
-                <div className="text-2xl font-bold text-red-600 dark:text-red-400">{kpis.failedChores}</div>
+                <div className="text-2xl font-bold text-red-600 dark:text-red-400">{kpis.notCompletedChores}</div>
                 <div className="text-xs text-red-700 dark:text-red-300">Nicht erledigt</div>
               </div>
               <div className="text-center p-3 bg-slate-100 dark:bg-slate-800 rounded-lg">
-                <div className="text-2xl font-bold text-slate-600 dark:text-slate-400">{kpis.totalChores - kpis.completedChores - kpis.failedChores}</div>
+                <div className="text-2xl font-bold text-slate-600 dark:text-slate-400">{kpis.openChores}</div>
                 <div className="text-xs text-slate-500 dark:text-slate-400">Offen</div>
               </div>
             </div>
@@ -242,7 +252,10 @@ const KompetenzenKPICards = ({
               .map(([weekKey, weekData]) => {
                 const isExpanded = expandedWeeks.has(weekKey);
                 const weekChores = Object.values(weekData.days).flat();
-                const weekCompleted = weekChores.filter(c => c.is_completed).length;
+                const weekCompleted = weekChores.filter(c => {
+                  const status = c.status || (c.is_completed ? 'completed' : 'pending');
+                  return status === 'completed';
+                }).length;
                 const weekTotal = weekChores.length;
 
                 return (
@@ -289,51 +302,57 @@ const KompetenzenKPICards = ({
                                     {formatDate(date)}
                                   </div>
                                   <div className="space-y-2 ml-3">
-                                    {dayChores.map((chore) => (
-                                      <div
-                                        key={chore.id}
-                                        className={`flex items-center justify-between p-2 rounded-lg ${
-                                          chore.is_completed
-                                            ? 'bg-green-50 dark:bg-green-900/20'
-                                            : chore.completed_at
-                                              ? 'bg-red-50 dark:bg-red-900/20'
-                                              : 'bg-slate-50 dark:bg-slate-800/30'
-                                        }`}
-                                      >
-                                        <div className="flex items-center gap-2 min-w-0 flex-1">
-                                          <span className="text-lg flex-shrink-0">
-                                            {chore.expand?.chore_id?.icon || '📋'}
-                                          </span>
-                                          <div className="min-w-0 flex-1">
-                                            <p className="font-medium text-slate-900 dark:text-white text-sm truncate">
-                                              {chore.chore_name || 'Ämtli'}
-                                            </p>
-                                            <p className="text-xs text-slate-500 dark:text-slate-400 truncate">
-                                              {chore.studentName}
-                                            </p>
-                                          </div>
-                                        </div>
-                                        <button
-                                          onClick={() => handleChoreToggle(chore.id, chore.is_completed)}
-                                          className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center transition-colors ${
-                                            chore.is_completed
-                                              ? 'bg-green-500 hover:bg-green-600 text-white'
-                                              : chore.completed_at
-                                                ? 'bg-red-500 hover:bg-red-600 text-white'
-                                                : 'bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-600 dark:text-slate-300'
-                                          }`}
-                                          title={chore.is_completed ? 'Als nicht erledigt markieren' : 'Als erledigt markieren'}
+                                    {dayChores.map((chore) => {
+                                      // Status mit Fallback für alte Daten
+                                      const status = chore.status || (chore.is_completed ? 'completed' : 'pending');
+                                      const bgClass = status === 'completed'
+                                        ? 'bg-green-50 dark:bg-green-900/20'
+                                        : status === 'not_completed'
+                                          ? 'bg-red-50 dark:bg-red-900/20'
+                                          : 'bg-slate-50 dark:bg-slate-800/30';
+                                      const btnClass = status === 'completed'
+                                        ? 'bg-green-500 hover:bg-green-600 text-white'
+                                        : status === 'not_completed'
+                                          ? 'bg-red-500 hover:bg-red-600 text-white'
+                                          : 'bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-600 dark:text-slate-300';
+                                      const title = status === 'completed'
+                                        ? 'Als nicht erledigt markieren'
+                                        : 'Als erledigt markieren';
+
+                                      return (
+                                        <div
+                                          key={chore.id}
+                                          className={`flex items-center justify-between p-2 rounded-lg ${bgClass}`}
                                         >
-                                          {chore.is_completed ? (
-                                            <Check className="w-4 h-4" />
-                                          ) : chore.completed_at ? (
-                                            <X className="w-4 h-4" />
-                                          ) : (
-                                            <ClipboardCheck className="w-4 h-4" />
-                                          )}
-                                        </button>
-                                      </div>
-                                    ))}
+                                          <div className="flex items-center gap-2 min-w-0 flex-1">
+                                            <span className="text-lg flex-shrink-0">
+                                              {chore.expand?.chore_id?.icon || '📋'}
+                                            </span>
+                                            <div className="min-w-0 flex-1">
+                                              <p className="font-medium text-slate-900 dark:text-white text-sm truncate">
+                                                {chore.chore_name || 'Ämtli'}
+                                              </p>
+                                              <p className="text-xs text-slate-500 dark:text-slate-400 truncate">
+                                                {chore.studentName}
+                                              </p>
+                                            </div>
+                                          </div>
+                                          <button
+                                            onClick={() => handleChoreToggle(chore.id, status)}
+                                            className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center transition-colors ${btnClass}`}
+                                            title={title}
+                                          >
+                                            {status === 'completed' ? (
+                                              <Check className="w-4 h-4" />
+                                            ) : status === 'not_completed' ? (
+                                              <X className="w-4 h-4" />
+                                            ) : (
+                                              <ClipboardCheck className="w-4 h-4" />
+                                            )}
+                                          </button>
+                                        </div>
+                                      );
+                                    })}
                                   </div>
                                 </div>
                               ))}

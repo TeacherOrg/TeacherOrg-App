@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import { motion } from "framer-motion";
 import {
   User,
@@ -36,9 +36,11 @@ export default function LessonDetailPanel({
   selectedDate,
   manualStepIndex,
   onManualStepChange,
+  onStepComplete, // Callback wenn ein Step abgeschlossen wird
 }) {
   const [currentStepIndex, setCurrentStepIndex] = useState(-1);
   const [manualStepControl, setManualStepControl] = useState(false);
+  const completedStepsRef = useRef(new Set()); // Track welche Steps bereits als complete gemeldet wurden
 
   // Anzuzeigende Lektion (ausgewählt oder aktuell laufend)
   const displayLesson = lesson || (currentItem?.type === "lesson" ? currentItem : null);
@@ -167,6 +169,24 @@ export default function LessonDetailPanel({
     return progresses;
   }, [displayLesson, currentTime, selectedDate]);
 
+  // Trigger onStepComplete callback when a step reaches 100%
+  useEffect(() => {
+    if (!onStepComplete || !displayLesson?.id || !stepProgress.length) return;
+
+    stepProgress.forEach((progress, index) => {
+      const stepKey = `${displayLesson.id}-step-${index}`;
+      if (progress >= 100 && !completedStepsRef.current.has(stepKey)) {
+        completedStepsRef.current.add(stepKey);
+        onStepComplete(index);
+      }
+    });
+  }, [stepProgress, displayLesson?.id, onStepComplete]);
+
+  // Reset completed steps ref when lesson changes
+  useEffect(() => {
+    completedStepsRef.current = new Set();
+  }, [displayLesson?.id]);
+
   // Pause-Ansicht mit Live-Countdown
   if (isPause) {
     // Berechne verbleibende Zeit bis Pausenende
@@ -175,11 +195,12 @@ export default function LessonDetailPanel({
     const remainingMinutes = Math.floor(remainingMs / 60000);
     const remainingSeconds = Math.floor((remainingMs % 60000) / 1000);
 
-    // Sammle Materialien der nächsten Lektion (nur wenn mindestens eines vorhanden)
-    const nextLessonMaterials = nextLesson?.steps
-      ?.map(step => step.material)
-      .filter(m => m && m.trim() !== '' && m !== '–')
-      || [];
+    // Sammle Materialien der nächsten Lektion (dedupliziert)
+    const nextLessonMaterials = [...new Set(
+      nextLesson?.steps
+        ?.map(step => step.material)
+        .filter(m => m && m.trim() !== '' && m !== '–')
+    )] || [];
 
     // Dynamische Farbe basierend auf dem nächsten Fach (Fallback: Orange)
     const nextSubjectColor = nextLesson?.subject?.color || '#f97316';
@@ -188,10 +209,17 @@ export default function LessonDetailPanel({
     const isDoubleLessonBreak = displayLesson?.is_double_lesson &&
       nextLesson?.id === displayLesson?.id;
 
-    // Theme-abhängige Transparenz für Pause-Ansicht
-    const pauseBgClass = customization.theme === 'space'
+    // Theme-abhängige Transparenz und Textfarben für Pause-Ansicht
+    const isSpaceTheme = customization.theme === 'space';
+    const pauseBgClass = isSpaceTheme
       ? 'bg-white/30 dark:bg-slate-900/30 border border-white/20 dark:border-white/10'
       : 'bg-white/95 dark:bg-slate-900/95';
+    const pauseTextClass = isSpaceTheme ? 'text-white' : 'text-slate-800 dark:text-slate-200';
+    const pauseSubtextClass = isSpaceTheme ? 'text-white/80' : 'text-slate-700 dark:text-slate-300';
+    const pauseCardBgClass = isSpaceTheme
+      ? 'bg-white/20 dark:bg-slate-800/50 border border-white/20'
+      : 'bg-slate-100 dark:bg-slate-800';
+    const pauseLabelClass = isSpaceTheme ? 'text-white/70' : 'text-slate-600 dark:text-slate-400';
 
     return (
       <div className={`rounded-2xl shadow-2xl ${pauseBgClass} overflow-hidden h-full flex flex-col items-center justify-center p-8`}>
@@ -199,7 +227,7 @@ export default function LessonDetailPanel({
         <Coffee className="w-20 h-20 mb-4 animate-pulse" style={{ color: nextSubjectColor }} />
 
         {/* Pause Text */}
-        <h2 className="text-3xl font-bold text-slate-800 dark:text-slate-200 mb-2">
+        <h2 className={`text-3xl font-bold ${pauseTextClass} mb-2`}>
           {currentItem.name}
         </h2>
 
@@ -210,13 +238,13 @@ export default function LessonDetailPanel({
 
         {/* Nächste Lektion - NICHT anzeigen bei Doppellektions-Pause */}
         {nextLesson && !isDoubleLessonBreak && (
-          <div className="w-full max-w-md bg-slate-100 dark:bg-slate-800 rounded-xl p-6">
-            <h3 className="text-lg font-semibold text-slate-700 dark:text-slate-300 mb-2">
+          <div className={`w-full max-w-md ${pauseCardBgClass} rounded-xl p-6`}>
+            <h3 className={`text-lg font-semibold ${pauseSubtextClass} mb-2`}>
               Nächste Lektion
             </h3>
             <div className="flex items-center gap-2 mb-4">
               <span className="text-2xl">{nextLesson.displayEmoji || nextLesson.subject?.emoji || '📚'}</span>
-              <span className="text-xl font-bold text-slate-800 dark:text-slate-200">
+              <span className={`text-xl font-bold ${pauseTextClass}`}>
                 {nextLesson.displayName || nextLesson.subject?.name || 'Unbekannt'}
               </span>
             </div>
@@ -224,12 +252,12 @@ export default function LessonDetailPanel({
             {/* Materialien - Bullet Points in Fachfarbe */}
             {nextLessonMaterials.length > 0 && (
               <div className="mt-4">
-                <h4 className="text-sm font-semibold text-slate-600 dark:text-slate-400 mb-2">
+                <h4 className={`text-sm font-semibold ${pauseLabelClass} mb-2`}>
                   Materialien bereitstellen:
                 </h4>
                 <ul className="space-y-1">
                   {nextLessonMaterials.map((material, idx) => (
-                    <li key={idx} className="flex items-center gap-2 text-slate-700 dark:text-slate-300">
+                    <li key={idx} className={`flex items-center gap-2 ${pauseSubtextClass}`}>
                       <span className="w-2 h-2 rounded-full" style={{ backgroundColor: nextSubjectColor }}></span>
                       {material}
                     </li>
@@ -246,14 +274,21 @@ export default function LessonDetailPanel({
 
   // Keine Lektion ausgewählt
   if (!displayLesson) {
+    const isSpaceTheme = customization.theme === 'space';
     return (
-      <div className="flex items-center justify-center h-full text-center bg-white/50 dark:bg-slate-800/50 rounded-2xl">
+      <div className={`flex items-center justify-center h-full text-center rounded-2xl ${
+        isSpaceTheme ? 'bg-transparent' : 'bg-white/50 dark:bg-slate-800/50'
+      }`}>
         <div>
           <div className="text-6xl mb-4">👈</div>
-          <h2 className={`${customization.fontSize.title} font-bold text-slate-600 dark:text-slate-400 mb-2`}>
+          <h2 className={`${customization.fontSize.title} font-bold mb-2 ${
+            isSpaceTheme ? 'text-white' : 'text-slate-600 dark:text-slate-400'
+          }`}>
             Kein Element ausgewählt
           </h2>
-          <p className={`${customization.fontSize.content} text-slate-500`}>Wählen Sie eine Lektion aus.</p>
+          <p className={`${customization.fontSize.content} ${
+            isSpaceTheme ? 'text-white/70' : 'text-slate-500'
+          }`}>Wählen Sie eine Lektion aus.</p>
         </div>
       </div>
     );
@@ -281,7 +316,7 @@ export default function LessonDetailPanel({
   // Haupt-Detail-Ansicht
   return (
     <div
-      className={`flex h-full flex-col overflow-hidden rounded-2xl shadow-2xl ${getBgClass()}`}
+      className={`flex h-full min-h-0 flex-col overflow-hidden rounded-2xl shadow-2xl ${getBgClass()}`}
     >
       {/* Header mit Fachfarben-Gradient */}
       <div
@@ -329,7 +364,7 @@ export default function LessonDetailPanel({
 
 
       {/* Inhaltsbereich */}
-      <div className={`flex-1 overflow-y-auto ${isThemedBackground ? 'bg-white/20 dark:bg-slate-900/20' : 'bg-white/95 dark:bg-slate-900/95'}`}>
+      <div className={`flex-1 min-h-0 overflow-y-auto ${isThemedBackground ? 'bg-white/20 dark:bg-slate-900/20' : 'bg-white/95 dark:bg-slate-900/95'}`}>
         <div className={contentPadding}>
           {/* Schrittsteuerung */}
           <div className="flex justify-between items-center mb-6">

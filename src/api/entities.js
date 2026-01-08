@@ -181,6 +181,12 @@ class PbEntity {
       // Completion-Tracking Felder
       normalizedItem.is_completed = normalizedItem.is_completed || false;
       normalizedItem.completed_at = normalizedItem.completed_at || null;
+
+      // Status-Feld normalisieren (pending | completed | not_completed)
+      // Rückwärtskompatibilität: Wenn status nicht gesetzt, von is_completed ableiten
+      if (!normalizedItem.status) {
+        normalizedItem.status = normalizedItem.is_completed ? 'completed' : 'pending';
+      }
     }
 
     if (this.name === 'lehrplan_kompetenz') {

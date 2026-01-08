@@ -237,77 +237,169 @@ export default function CustomizationPanel({ customization, onCustomizationChang
                  <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-200">
                     Audio-Benachrichtigungen
                  </h3>
-                 <div className="space-y-4">
+
+                 {/* Globale Lautstärke */}
+                 <div className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg">
+                     <div>
+                         <Label className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                             Globale Lautstärke
+                         </Label>
+                     </div>
+                     <div className="flex items-center gap-2 w-1/2">
+                         <input
+                             type="range"
+                             min="0"
+                             max="1"
+                             step="0.1"
+                             value={customization.audio?.volume || 0.5}
+                             onChange={(e) => handleAudioChange('volume', parseFloat(e.target.value))}
+                             className="w-full"
+                         />
+                         <span className="text-sm w-12 text-right">{Math.round((customization.audio?.volume || 0.5) * 100)}%</span>
+                     </div>
+                 </div>
+
+                 {/* 1. Stundenende */}
+                 <div className="space-y-3 p-4 border border-slate-200 dark:border-slate-700 rounded-lg">
                      <div className="flex items-center justify-between">
                          <div>
                              <Label className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                                 Audio-Signal am Stundenende
+                                 Stundenende
                              </Label>
                              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                                 Spielt einen kurzen Ton am Ende jeder Lektion ab
+                                 Spielt einen Ton am Ende jeder Lektion
                              </p>
                          </div>
                          <Switch
-                            checked={customization.audio?.enabled}
-                            onCheckedChange={(checked) => handleAudioChange('enabled', checked)}
+                            checked={customization.audio?.lessonEndEnabled}
+                            onCheckedChange={(checked) => handleAudioChange('lessonEndEnabled', checked)}
                          />
                      </div>
-                      <div className="flex items-center justify-between">
+                     <div className="flex items-center gap-2">
+                         <Select
+                             value={customization.audio?.lessonEndSound || 'chime'}
+                             onValueChange={(value) => handleAudioChange('lessonEndSound', value)}
+                             disabled={!customization.audio?.lessonEndEnabled}
+                         >
+                             <SelectTrigger className="flex-1">
+                                 <SelectValue placeholder="Ton wählen" />
+                             </SelectTrigger>
+                             <SelectContent className="z-[200]">
+                                 {SOUND_OPTIONS.map((option) => (
+                                     <SelectItem key={option.value} value={option.value}>
+                                         <div className="flex flex-col">
+                                             <span>{option.label}</span>
+                                             <span className="text-xs text-slate-500">{option.description}</span>
+                                         </div>
+                                     </SelectItem>
+                                 ))}
+                             </SelectContent>
+                         </Select>
+                         <Button
+                             variant="outline"
+                             size="icon"
+                             onClick={() => previewSound(customization.audio?.lessonEndSound || 'chime', customization.audio?.volume || 0.5)}
+                             disabled={!customization.audio?.lessonEndEnabled}
+                             title="Ton abspielen"
+                         >
+                             <Play className="w-4 h-4" />
+                         </Button>
+                     </div>
+                 </div>
+
+                 {/* 2. Lektionsbeginn */}
+                 <div className="space-y-3 p-4 border border-slate-200 dark:border-slate-700 rounded-lg">
+                     <div className="flex items-center justify-between">
                          <div>
                              <Label className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                                 Lautstärke
+                                 Lektionsbeginn
                              </Label>
+                             <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                                 Spielt einen Ton beim Start einer neuen Lektion
+                             </p>
                          </div>
-                         <div className="flex items-center gap-2 w-1/2">
-                             <input
-                                 type="range"
-                                 min="0"
-                                 max="1"
-                                 step="0.1"
-                                 value={customization.audio?.volume || 0.5}
-                                 onChange={(e) => handleAudioChange('volume', parseFloat(e.target.value))}
-                                 className="w-full"
-                                 disabled={!customization.audio?.enabled}
-                             />
-                             <span>{Math.round((customization.audio?.volume || 0.5) * 100)}%</span>
-                         </div>
+                         <Switch
+                            checked={customization.audio?.lessonStartEnabled}
+                            onCheckedChange={(checked) => handleAudioChange('lessonStartEnabled', checked)}
+                         />
                      </div>
+                     <div className="flex items-center gap-2">
+                         <Select
+                             value={customization.audio?.lessonStartSound || 'bell'}
+                             onValueChange={(value) => handleAudioChange('lessonStartSound', value)}
+                             disabled={!customization.audio?.lessonStartEnabled}
+                         >
+                             <SelectTrigger className="flex-1">
+                                 <SelectValue placeholder="Ton wählen" />
+                             </SelectTrigger>
+                             <SelectContent className="z-[200]">
+                                 {SOUND_OPTIONS.map((option) => (
+                                     <SelectItem key={option.value} value={option.value}>
+                                         <div className="flex flex-col">
+                                             <span>{option.label}</span>
+                                             <span className="text-xs text-slate-500">{option.description}</span>
+                                         </div>
+                                     </SelectItem>
+                                 ))}
+                             </SelectContent>
+                         </Select>
+                         <Button
+                             variant="outline"
+                             size="icon"
+                             onClick={() => previewSound(customization.audio?.lessonStartSound || 'bell', customization.audio?.volume || 0.5)}
+                             disabled={!customization.audio?.lessonStartEnabled}
+                             title="Ton abspielen"
+                         >
+                             <Play className="w-4 h-4" />
+                         </Button>
+                     </div>
+                 </div>
 
-                     {/* Ton-Auswahl */}
-                     <div className="space-y-2">
-                         <Label className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                             Ton auswählen
-                         </Label>
-                         <div className="flex items-center gap-2">
-                             <Select
-                                 value={customization.audio?.sound || 'chime'}
-                                 onValueChange={(value) => handleAudioChange('sound', value)}
-                                 disabled={!customization.audio?.enabled}
-                             >
-                                 <SelectTrigger className="flex-1">
-                                     <SelectValue placeholder="Ton wählen" />
-                                 </SelectTrigger>
-                                 <SelectContent className="z-[200]">
-                                     {SOUND_OPTIONS.map((option) => (
-                                         <SelectItem key={option.value} value={option.value}>
-                                             <div className="flex flex-col">
-                                                 <span>{option.label}</span>
-                                                 <span className="text-xs text-slate-500">{option.description}</span>
-                                             </div>
-                                         </SelectItem>
-                                     ))}
-                                 </SelectContent>
-                             </Select>
-                             <Button
-                                 variant="outline"
-                                 size="icon"
-                                 onClick={() => previewSound(customization.audio?.sound || 'chime', customization.audio?.volume || 0.5)}
-                                 disabled={!customization.audio?.enabled}
-                                 title="Ton abspielen"
-                             >
-                                 <Play className="w-4 h-4" />
-                             </Button>
+                 {/* 3. Step-Ende */}
+                 <div className="space-y-3 p-4 border border-slate-200 dark:border-slate-700 rounded-lg">
+                     <div className="flex items-center justify-between">
+                         <div>
+                             <Label className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                                 Step abgeschlossen
+                             </Label>
+                             <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                                 Spielt einen Ton wenn ein Step beendet ist
+                             </p>
                          </div>
+                         <Switch
+                            checked={customization.audio?.stepEndEnabled}
+                            onCheckedChange={(checked) => handleAudioChange('stepEndEnabled', checked)}
+                         />
+                     </div>
+                     <div className="flex items-center gap-2">
+                         <Select
+                             value={customization.audio?.stepEndSound || 'ping'}
+                             onValueChange={(value) => handleAudioChange('stepEndSound', value)}
+                             disabled={!customization.audio?.stepEndEnabled}
+                         >
+                             <SelectTrigger className="flex-1">
+                                 <SelectValue placeholder="Ton wählen" />
+                             </SelectTrigger>
+                             <SelectContent className="z-[200]">
+                                 {SOUND_OPTIONS.map((option) => (
+                                     <SelectItem key={option.value} value={option.value}>
+                                         <div className="flex flex-col">
+                                             <span>{option.label}</span>
+                                             <span className="text-xs text-slate-500">{option.description}</span>
+                                         </div>
+                                     </SelectItem>
+                                 ))}
+                             </SelectContent>
+                         </Select>
+                         <Button
+                             variant="outline"
+                             size="icon"
+                             onClick={() => previewSound(customization.audio?.stepEndSound || 'ping', customization.audio?.volume || 0.5)}
+                             disabled={!customization.audio?.stepEndEnabled}
+                             title="Ton abspielen"
+                         >
+                             <Play className="w-4 h-4" />
+                         </Button>
                      </div>
                  </div>
             </div>

@@ -8,6 +8,8 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/components/ui/use-toast";
 import { Performance, User } from '@/api/entities';
 import { ChevronDown, ChevronUp, Edit, Trash2, Save, X, Plus } from 'lucide-react';
+import { useStudentSortPreference } from '@/hooks/useStudentSortPreference';
+import { sortStudents } from '@/utils/studentSortUtils';
 import { getTextColor } from '@/utils/colorUtils';
 
 // 5-Stufen-Farbsystem für Noten (Schweizer Notensystem 1-6, 6 ist beste)
@@ -36,6 +38,8 @@ const LeistungenTable = ({
   savePreferences // Neu: von PerformanceView als Prop erhalten
 }) => {
   const { toast } = useToast();
+  const [sortPreference] = useStudentSortPreference();
+  const sortedStudents = useMemo(() => sortStudents(students, sortPreference), [students, sortPreference]);
   const [editingGrades, setEditingGrades] = useState({});
   const [editingFachbereiche, setEditingFachbereiche] = useState({});
   const [newFachbereichInputs, setNewFachbereichInputs] = useState({});
@@ -557,7 +561,7 @@ const LeistungenTable = ({
                             )}
                             <h4 className="text-black dark:text-white font-medium mb-3">Schülernoten</h4>
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                              {(Array.isArray(students) ? students : []).map(student => {
+                              {sortedStudents.map(student => {
                                 if (!student || !student.id) return null;
 
                                 const perf = group.performances.find(p => p.student_id === student.id);

@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useMemo } from 'react';
 import { Class, Student, Subject, Lesson, YearlyLesson, Performance, UeberfachlichKompetenz, Topic, Fachbereich, AllerleiLesson, Competency, Chore, ChoreAssignment, Group, UserPreferences, LehrplanKompetenz, User } from '@/api/entities';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -8,6 +8,8 @@ import { Plus, Trash2, ChevronDown, ChevronUp, FileText, Loader2, UserPlus, KeyR
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import pb from '@/api/pb';
 import toast from 'react-hot-toast';
+import { useStudentSortPreference } from '@/hooks/useStudentSortPreference';
+import { sortStudents } from '@/utils/studentSortUtils';
 
 // Utility functions for cascading deletes with rate limiting
 const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
@@ -35,6 +37,10 @@ export default function ClassesSettings({ classes, refreshData, setActiveClassId
   const [newClassName, setNewClassName] = useState('');
   const [activeClassId, setLocalActiveClassId] = useState(classes.length > 0 ? classes[0].id : null);
   const [students, setStudents] = useState([]);
+  const [sortPreference] = useStudentSortPreference();
+
+  // Sort students based on user preference
+  const sortedStudents = useMemo(() => sortStudents(students, sortPreference), [students, sortPreference]);
   const [newStudent, setNewStudent] = useState({ first_name: '', last_name: '' });
   const [isUploading, setIsUploading] = useState(false);
   const [studentList, setStudentList] = useState('');
@@ -730,9 +736,9 @@ export default function ClassesSettings({ classes, refreshData, setActiveClassId
                         <div className="space-y-3 pl-4 border-l-2 border-slate-300 dark:border-slate-600">
                           {/* Students list with email and account status */}
                           <div className="max-h-64 overflow-y-auto">
-                            {students.length > 0 ? (
+                            {sortedStudents.length > 0 ? (
                               <div className="space-y-2">
-                                {students.map(student => (
+                                {sortedStudents.map(student => (
                                   <div key={student.id} className="flex items-center gap-2 p-2 bg-white dark:bg-slate-700 rounded text-sm">
                                     {/* Account Status Icon */}
                                     <div className={`w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 ${

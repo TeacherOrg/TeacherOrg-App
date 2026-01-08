@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -14,6 +14,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Save, X, Star, Plus, FileText } from 'lucide-react';
 import { Competency, User } from '@/api/entities';
 import { useToast } from "@/components/ui/use-toast";
+import { useStudentSortPreference } from '@/hooks/useStudentSortPreference';
+import { sortStudents } from '@/utils/studentSortUtils';
 
 const InteractiveStarRating = ({ student, rating, onRatingChange, notes, onNotesChange }) => {
   const [showNotes, setShowNotes] = useState(false);
@@ -80,12 +82,16 @@ export default function UeberfachlichModal({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [currentCompetencies, setCurrentCompetencies] = useState(allCompetencies);
   const { toast } = useToast();
+  const [sortPreference] = useStudentSortPreference();
 
   useEffect(() => {
       setCurrentCompetencies(allCompetencies);
   }, [allCompetencies]);
 
-  const studentsForClass = students.filter(s => s.class_id === activeClassId);
+  const studentsForClass = useMemo(() => {
+    const filtered = students.filter(s => s.class_id === activeClassId);
+    return sortStudents(filtered, sortPreference);
+  }, [students, activeClassId, sortPreference]);
 
   useEffect(() => {
     if (isOpen) {
