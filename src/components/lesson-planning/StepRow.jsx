@@ -23,7 +23,6 @@ const StepRow = ({
   topicMaterials = [],
   topicColor,
   isLast = false,
-  isUnifiedDouble = false,
   lessonDuration = 45,
 }) => {
   const [isMaterialFocused, setIsMaterialFocused] = useState(false);
@@ -32,8 +31,8 @@ const StepRow = ({
 
   const showQuickAdd = topicMaterials.length > 0 && (isLast || isMaterialFocused);
 
-  // Calculate max time based on lesson duration and double lesson mode
-  const maxTime = isUnifiedDouble ? (lessonDuration * 2) : lessonDuration;
+  // Calculate max time based on lesson duration
+  const maxTime = lessonDuration;
 
   // Calculate dynamic rows based on line breaks
   const getRowCount = (value) => Math.max(1, (value?.match(/\n/g) || []).length + 1);

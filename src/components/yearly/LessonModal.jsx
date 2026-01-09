@@ -6,6 +6,7 @@ import { createGradient, getTextColorForBackground } from '@/utils/colorUtils';
 import { generateId } from '@/components/lesson-planning/utils';
 import { useStepManagement, useTemplateSaveModal } from '@/components/lesson-planning/hooks';
 import TemplateSaveModal from '@/components/lesson-planning/TemplateSaveModal';
+import { emitTourEvent, TOUR_EVENTS } from '@/components/onboarding/tours/tourEvents';
 
 // Shared components
 import {
@@ -115,7 +116,6 @@ export default function LessonModal({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [addSecondLesson, setAddSecondLesson] = useState(false);
   const [secondYearlyLessonId, setSecondYearlyLessonId] = useState('');
-  const [isUnifiedDouble, setIsUnifiedDouble] = useState(false);
   const [saveAndNext, setSaveAndNext] = useState(false);
 
   const prevIsOpenRef = useRef(false);
@@ -127,14 +127,23 @@ export default function LessonModal({
   const subjectId = typeof rawSubject === 'object' ? rawSubject.id : rawSubject;
 
   const subjectName = useMemo(() => {
+    // 1. Check if subject is already an object with name
     if (typeof rawSubject === 'object' && rawSubject?.name) return rawSubject.name;
-    // Use String conversion to ensure type-safe comparison
+
+    // 2. Check for PocketBase expand pattern
+    if (displayLesson?.expand?.subject?.name) return displayLesson.expand.subject.name;
+
+    // 3. Try to find by ID in subjects array
     const subjectById = subjects.find(s => String(s.id) === String(subjectId));
     if (subjectById) return subjectById.name;
+
+    // 4. Try to find by name match (in case rawSubject is already a name string)
     const subjectByName = subjects.find(s => s.name === rawSubject);
     if (subjectByName) return subjectByName.name;
-    return rawSubject || 'Fach';
-  }, [rawSubject, subjectId, subjects]);
+
+    // 5. Fallback to raw value or default
+    return typeof rawSubject === 'string' && rawSubject.length > 0 ? rawSubject : 'Fach';
+  }, [rawSubject, subjectId, subjects, displayLesson]);
 
   // Filter topics by subject
   const subjectTopics = useMemo(() => {
@@ -151,6 +160,13 @@ export default function LessonModal({
   }, [formData.topic_id, subjectTopics]);
 
   const topicColor = currentTopic?.color || subjectColor || '#3b82f6';
+
+  // Emit tour event when modal opens
+  useEffect(() => {
+    if (isOpen) {
+      emitTourEvent(TOUR_EVENTS.LESSON_MODAL_OPENED);
+    }
+  }, [isOpen]);
 
   // Initialize form when modal opens
   useEffect(() => {
@@ -187,18 +203,16 @@ export default function LessonModal({
       second_yearly_lesson_id: currentLesson?.second_yearly_lesson_id || null
     });
 
-    // In fixed schedule mode, all double lessons are unified 90-minute blocks
+    // In fixed schedule mode, double lessons are template-based unified blocks (no second lesson editing)
+    // In flexible mode, double lessons always link two separate lessons
     const isFixedModeDouble = settings?.scheduleType === 'fixed' &&
       (currentLesson?.is_double_lesson || isTemplateDoubleLesson);
 
-    if (isFixedModeDouble || isTemplateDoubleLesson) {
-      setIsUnifiedDouble(true);
+    if (isFixedModeDouble) {
       setAddSecondLesson(false);
-    } else if (hasSecondLesson) {
-      setIsUnifiedDouble(false);
+    } else if (hasSecondLesson || (currentLesson?.is_double_lesson && !isFixedModeDouble)) {
       setAddSecondLesson(true);
     } else {
-      setIsUnifiedDouble(false);
       setAddSecondLesson(false);
     }
 
@@ -231,11 +245,9 @@ export default function LessonModal({
     setFormData(prev => ({ ...prev, is_double_lesson: checked }));
 
     if (checked) {
-      // In fixed schedule mode, double lessons are unified 90-minute blocks
-      if (settings?.scheduleType === 'fixed') {
-        setIsUnifiedDouble(true);
-        setAddSecondLesson(false);
-      } else {
+      // In fixed schedule mode, double lessons are template-based (no manual second lesson)
+      // In flexible mode, double lessons always link two separate lessons
+      if (settings?.scheduleType !== 'fixed') {
         setAddSecondLesson(true);
       }
     } else {
@@ -247,13 +259,12 @@ export default function LessonModal({
         second_name: '',
         second_yearly_lesson_id: null
       }));
-      setIsUnifiedDouble(false);
     }
   }, [setSecondSteps, settings]);
 
   // Effect for second lesson linking (flexible mode)
   useEffect(() => {
-    if (!addSecondLesson || isUnifiedDouble) {
+    if (!addSecondLesson) {
       setSecondSteps([]);
       setSecondYearlyLessonId('');
       setFormData(prev => ({ ...prev, second_name: '', second_yearly_lesson_id: null }));
@@ -296,7 +307,7 @@ export default function LessonModal({
       }));
       setSecondSteps([]);
     }
-  }, [addSecondLesson, lesson, newLessonSlot, allYearlyLessons, isUnifiedDouble, setSecondSteps]);
+  }, [addSecondLesson, lesson, newLessonSlot, allYearlyLessons, setSecondSteps]);
 
   // Cleanup on close
   useEffect(() => {
@@ -304,16 +315,6 @@ export default function LessonModal({
       closeTemplateSave();
     }
   }, [isOpen, closeTemplateSave]);
-
-  // Handle unified double toggle
-  const handleUnifiedDoubleToggle = useCallback((checked) => {
-    setIsUnifiedDouble(checked);
-    if (checked) {
-      setPrimarySteps(prev => [...prev, ...secondSteps.map(s => ({ ...s, id: generateId() }))]);
-      setSecondSteps([]);
-      setAddSecondLesson(false);
-    }
-  }, [secondSteps, setPrimarySteps, setSecondSteps]);
 
   // Clean steps for save
   const cleanStepsData = (stepsArray) => {
@@ -333,9 +334,9 @@ export default function LessonModal({
       id: lesson?.id,  // WICHTIG: ID für Updates mitgeben
       topic_id: data.topic_id === 'no_topic' ? null : data.topic_id,
       steps: cleanStepsData(primarySteps),
-      secondSteps: isUnifiedDouble ? [] : (addSecondLesson ? cleanStepsData(secondSteps) : []),
+      secondSteps: addSecondLesson ? cleanStepsData(secondSteps) : [],
       is_double_lesson: data.is_double_lesson,
-      second_yearly_lesson_id: isUnifiedDouble || !addSecondLesson ? null : secondYearlyLessonId,
+      second_yearly_lesson_id: addSecondLesson ? secondYearlyLessonId : null,
       notes: data.notes
     };
 
@@ -352,6 +353,12 @@ export default function LessonModal({
 
     try {
       await executeSave(formData);
+
+      // Emit tour event when lesson is saved
+      emitTourEvent(TOUR_EVENTS.LESSON_SAVED, {
+        lessonId: lesson?.id || 'new',
+        isDoubleLesson: formData.is_double_lesson
+      });
 
       if (saveAndNext) {
         const increment = formData.is_double_lesson ? 2 : 1;
@@ -394,7 +401,7 @@ export default function LessonModal({
 
   // Colors
   const modalColor = subjectColor || '#3b82f6';
-  const modalBackground = createGradient(modalColor, -20, '135deg');
+  const modalBackground = createGradient(modalColor);
   const buttonTextColor = getTextColorForBackground(modalBackground);
 
   // Form validity
@@ -417,6 +424,7 @@ export default function LessonModal({
           title={modalTitle}
           subtitle={lesson ? 'Jahreslektion bearbeiten' : 'Neue Jahreslektion erstellen'}
           color={modalColor}
+          gradient={modalBackground}
         />
 
         <form id="yearly-lesson-form" onSubmit={handleSubmit} className="space-y-6 pt-4">
@@ -429,40 +437,61 @@ export default function LessonModal({
             onExamChange={(checked) => setFormData(prev => ({ ...prev, is_exam: checked }))}
           />
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Topic Selector - full width */}
+          <div className="space-y-2">
             <TopicSelector
               value={formData.topic_id}
               onChange={(value) => setFormData(prev => ({ ...prev, topic_id: value }))}
               topics={subjectTopics}
             />
+          </div>
 
+          {/* Title section - both titles on one row when double lesson */}
+          <div className={`grid gap-4 ${formData.is_double_lesson && addSecondLesson ? 'grid-cols-1 md:grid-cols-2' : 'grid-cols-1'}`}>
             <div className="space-y-2">
               <Label className="text-sm font-semibold text-slate-900 dark:text-white">
-                Titel (Lektion {displayLesson?.lesson_number})
+                {formData.is_double_lesson && addSecondLesson
+                  ? 'Titel (1. Lektion)'
+                  : `Titel (Lektion ${displayLesson?.lesson_number})`}
               </Label>
               <Input
                 id="name"
                 name="name"
                 value={formData.name}
                 onChange={handleInputChange}
-                className="bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white"
+                className="lesson-title-input bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white"
                 placeholder={`Lektion ${displayLesson?.lesson_number || ''}`}
                 maxLength={30}
               />
             </div>
+
+            {formData.is_double_lesson && addSecondLesson && (
+              <div className="space-y-2">
+                <Label htmlFor="second_name" className="text-sm font-semibold text-slate-900 dark:text-white">
+                  Titel (2. Lektion)
+                </Label>
+                <Input
+                  id="second_name"
+                  name="second_name"
+                  value={formData.second_name || ''}
+                  onChange={handleInputChange}
+                  className="bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white"
+                  placeholder={`Lektion ${Number(displayLesson?.lesson_number || 1) + 1}`}
+                  maxLength={30}
+                />
+              </div>
+            )}
           </div>
 
           <DoubleLessonSection
             isDoubleLesson={formData.is_double_lesson}
             addSecondLesson={addSecondLesson}
-            isUnifiedDouble={isUnifiedDouble}
             secondName={formData.second_name}
             secondYearlyLessonId={secondYearlyLessonId}
             availableSecondLessons={[]}
             currentLessonNumber={displayLesson?.lesson_number || 1}
             scheduleType={settings?.scheduleType || 'flexible'}
             onAddSecondLessonChange={setAddSecondLesson}
-            onUnifiedDoubleChange={handleUnifiedDoubleToggle}
             onSecondNameChange={(value) => setFormData(prev => ({ ...prev, second_name: value }))}
             onSecondLessonSelect={() => {}}
             subjectName={subjectName}
@@ -484,7 +513,6 @@ export default function LessonModal({
             subjectId={subjectId}
             topicMaterials={currentTopic?.materials || []}
             topicColor={topicColor}
-            isUnifiedDouble={isUnifiedDouble}
             buttonLabel="Schritt hinzufügen (Lektion 1)"
             showSaveAsTemplate={true}
             onSaveAsTemplate={() => {
@@ -495,7 +523,7 @@ export default function LessonModal({
             lessonDuration={settings?.lessonDuration || 45}
           />
 
-          {formData.is_double_lesson && addSecondLesson && !isUnifiedDouble && (
+          {formData.is_double_lesson && addSecondLesson && (
             <StepsSection
               label="Zweite Lektion – Schritte"
               steps={secondSteps}
@@ -509,7 +537,6 @@ export default function LessonModal({
               subjectId={subjectId}
               topicMaterials={currentTopic?.materials || []}
               topicColor={topicColor}
-              isUnifiedDouble={isUnifiedDouble}
               buttonLabel="Schritt hinzufügen (2. Lektion)"
               lessonDuration={settings?.lessonDuration || 45}
             />

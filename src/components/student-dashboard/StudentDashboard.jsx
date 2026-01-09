@@ -20,6 +20,8 @@ export default function StudentDashboard({ studentId = null }) {
   const [activeTab, setActiveTab] = useState('overview');
 
   // Load all student data
+  const studentData = useStudentData(studentId);
+
   const {
     student,
     classInfo,
@@ -34,7 +36,7 @@ export default function StudentDashboard({ studentId = null }) {
     error,
     isStudent,
     refresh
-  } = useStudentData(studentId);
+  } = studentData;
 
   // Self-assessment operations
   const selfAssessmentOps = useSelfAssessments(student?.id, refresh);
@@ -156,10 +158,9 @@ export default function StudentDashboard({ studentId = null }) {
 
             {activeTab === 'achievements' && (
               <AchievementsTab
+                studentData={studentData}
                 goals={goals}
-                stats={stats}
                 competencyData={competencyData}
-                conqueredCount={conqueredCount}
               />
             )}
           </main>
@@ -400,7 +401,7 @@ function GoalsTab({ competencyData, goals, goalOps, isStudent }) {
   );
 }
 
-function AchievementsTab({ goals, stats, competencyData, conqueredCount }) {
+function AchievementsTab({ studentData, goals, competencyData }) {
   return (
     <div>
       <SpaceCard>
@@ -409,10 +410,9 @@ function AchievementsTab({ goals, stats, competencyData, conqueredCount }) {
           Erfolge
         </h3>
         <AchievementWall
+          studentData={studentData}
           completedGoals={goals.filter(g => g.is_completed)}
           competencies={competencyData}
-          stats={stats}
-          conqueredCount={conqueredCount}
         />
       </SpaceCard>
     </div>

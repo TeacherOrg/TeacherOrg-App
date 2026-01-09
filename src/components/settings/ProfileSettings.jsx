@@ -131,6 +131,7 @@ export default function ProfileSettings({ onClose }) {
 
     const pageOptions = [
         { value: 'Timetable', label: 'Stundenplan' },
+        { value: 'YearlyOverview', label: 'Jahresübersicht' },
         { value: 'Grades', label: 'Noten' },
         { value: 'Groups', label: 'Gruppen' },
         { value: 'Chores', label: 'Ämtchen' }

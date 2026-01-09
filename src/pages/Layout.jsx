@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { Link, useLocation, useNavigate } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { User } from "@/api/entities";
 import { createPageUrl } from '@/utils/index.js';
 import {
@@ -19,8 +19,6 @@ import {
 } from "@/components/ui/sidebar";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import SettingsModal from "../components/settings/SettingsModal";
-import CalendarLoader from "../components/ui/CalendarLoader";
-import pb from '@/api/pb';
 import { useTutorial } from '@/hooks/useTutorial';
 
 const navigationItems = [
@@ -57,11 +55,7 @@ const getSidebarDefaultState = () => {
 
 export default function Layout({ children }) {
   const location = useLocation();
-  const navigate = useNavigate();
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
-  const [user, setUser] = useState(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [sidebarError, setSidebarError] = useState(null);
   const [theme, setTheme] = useState(localStorage.getItem('theme') || 'dark');
   const [isFullscreen, setIsFullscreen] = useState(false);
   const { triggerTutorialForRoute } = useTutorial();
@@ -77,33 +71,12 @@ export default function Layout({ children }) {
     triggerTutorialForRoute(location.pathname);
   }, [location.pathname, triggerTutorialForRoute]);
 
-  useEffect(() => {
-    const checkAuth = async () => {
-      try {
-        if (pb.authStore.isValid && pb.authStore.model) {
-          setUser(pb.authStore.model);
-        } else {
-          await pb.collection('users').authRefresh();
-          setUser(pb.authStore.model || null);
-        }
-      } catch (error) {
-        console.error("User not authenticated", error);
-        setSidebarError('Authentication failed. Redirecting to login...');
-        navigate('/login');
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    checkAuth();
-  }, [navigate]);
-
   const handleLogout = async () => {
     try {
       await User.logout();
-      navigate('/login');
+      // Navigation erfolgt automatisch durch ProtectedRoute
     } catch (error) {
       console.error("Logout error:", error);
-      setSidebarError('Logout failed. Please try again.');
     }
   };
 
@@ -128,16 +101,12 @@ export default function Layout({ children }) {
     );
   };
 
-  if (isLoading) return <div className="min-h-screen bg-gradient-to-br from-slate-50 via-slate-100 to-slate-200 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 flex items-center justify-center"><CalendarLoader /></div>;
-  if (!user) return null;
-  if (sidebarError) return <div className="min-h-screen flex items-center justify-center"><p className="text-red-500">{sidebarError}</p></div>;
-
   return (
     <>
       <style>{ScrollbarStyles}</style>
       <SidebarProvider defaultOpen={getSidebarDefaultState()}>
         <div className="min-h-screen flex w-full bg-gradient-to-br from-slate-50 via-slate-100 to-slate-200 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 transition-colors duration-300">
-          {!isFullscreen || location.pathname !== createPageUrl("Timetable") ? (
+            {!isFullscreen || location.pathname !== createPageUrl("Timetable") ? (
             <Sidebar collapsible="icon">
               <SidebarContent 
                 className={cn(
@@ -235,19 +204,19 @@ export default function Layout({ children }) {
                 <SidebarRail className="z-30" />
               </SidebarContent>
             </Sidebar>
-          ) : null}
+            ) : null}
 
-          <main className="flex-1 flex flex-col overflow-hidden">
-            <div className="flex-1 overflow-auto">
-              {children}
-            </div>
-          </main>
+            <main className="flex-1 flex flex-col overflow-hidden">
+              <div className="flex-1 overflow-auto">
+                {children}
+              </div>
+            </main>
 
-          <SettingsModal
-            isOpen={isSettingsModalOpen}
-            onClose={() => setIsSettingsModalOpen(false)}
-          />
-        </div>
+            <SettingsModal
+              isOpen={isSettingsModalOpen}
+              onClose={() => setIsSettingsModalOpen(false)}
+            />
+          </div>
       </SidebarProvider>
     </>
   );

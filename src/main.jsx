@@ -41,7 +41,7 @@ const onRenderCallback = (id, phase, actualDuration, baseDuration, startTime, co
 };
 
 // ✅ GLOBALER QUERYCLIENT (einmalig für die ganze App)
-const queryClient = new QueryClient({
+export const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       staleTime: 1000 * 60 * 5, // 5 Minuten Standard-Cache

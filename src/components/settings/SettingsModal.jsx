@@ -6,7 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { X, User as UserIcon, Users, Sun, Moon, Monitor, Home, RotateCcw, Lock, LogOut, HelpCircle, CheckCircle, Trash2, Loader2, AlertTriangle } from 'lucide-react';
+import { X, User as UserIcon, Sun, Moon, Monitor, Home, RotateCcw, Lock, LogOut, HelpCircle, CheckCircle, Trash2, Loader2, AlertTriangle } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
 import pb from '@/api/pb';
 import CalendarLoader from '../ui/CalendarLoader';
@@ -15,7 +15,6 @@ import { syncYearlyLessonToWeekly } from '@/hooks/useYearlyLessonSync';
 import { isEqual } from 'lodash';
 import toast from 'react-hot-toast';
 import { useTutorial, TUTORIAL_IDS } from '@/hooks/useTutorial';
-import { useStudentSortPreference } from '@/hooks/useStudentSortPreference';
 
 import ClassesSettings from './ClassesSettings';
 import SubjectSettings from './SubjectSettings';
@@ -31,7 +30,6 @@ const ProfileSettings = ({
   onClose
 }) => {
   const { resetAllTutorials, showTutorial, isCompleted, progress, setShowSetupWizard } = useTutorial();
-  const [studentSortPreference, setStudentSortPreference] = useStudentSortPreference();
   const [user, setUser] = useState(null);
   const [showPasswordForm, setShowPasswordForm] = useState(false);
   const [oldPassword, setOldPassword] = useState('');
@@ -436,30 +434,6 @@ const ProfileSettings = ({
       <Card className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
         <CardHeader>
           <CardTitle className="flex items-center gap-3 text-slate-900 dark:text-white">
-            <Users className="w-5 h-5 text-purple-500" />
-            Schülersortierung
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Label className="text-slate-700 dark:text-slate-300">Sortieren nach</Label>
-          <Select value={studentSortPreference} onValueChange={setStudentSortPreference}>
-            <SelectTrigger className="bg-white dark:bg-slate-700 border-slate-300 dark:border-slate-600">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="firstName">Vorname (A-Z)</SelectItem>
-              <SelectItem value="lastName">Nachname (A-Z)</SelectItem>
-            </SelectContent>
-          </Select>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">
-            Gilt für alle Schülerlisten in der App
-          </p>
-        </CardContent>
-      </Card>
-
-      <Card className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-3 text-slate-900 dark:text-white">
             <Home className="w-5 h-5 text-blue-500" />
             Navigation
           </CardTitle>
@@ -629,6 +603,23 @@ const SettingsModal = ({ isOpen, onClose }) => {
   const [pendingName, setPendingName] = useState('');
   const [pendingUserSettings, setPendingUserSettings] = useState({ preferred_theme: 'dark', default_start_page: 'Timetable' });
   const initialSettingsRef = useRef(null);
+
+  // ESC key handler
+  useEffect(() => {
+    const handleEscape = (event) => {
+      if (event.key === 'Escape' && isOpen) {
+        onClose();
+      }
+    };
+
+    if (isOpen) {
+      document.addEventListener('keydown', handleEscape);
+    }
+
+    return () => {
+      document.removeEventListener('keydown', handleEscape);
+    };
+  }, [isOpen, onClose]);
 
   const loadAllData = useCallback(async () => {
     setIsLoading(true);
@@ -905,8 +896,8 @@ const SettingsModal = ({ isOpen, onClose }) => {
           </Button>
         </div>
         <div className="flex flex-1 overflow-hidden">
-          <aside className="w-1/4 bg-slate-50 dark:bg-slate-800 p-4 border-r border-slate-200 dark:border-slate-700">
-            <nav className="space-y-2">
+          <aside className="w-1/4 bg-slate-50 dark:bg-slate-800 p-4 border-r border-slate-200 dark:border-slate-700 overflow-hidden flex flex-col">
+            <nav className="space-y-2 overflow-y-auto flex-1 pr-2">
               {CATEGORIES.map((category) => (
                 <button
                   key={category.name}
@@ -936,13 +927,19 @@ const SettingsModal = ({ isOpen, onClose }) => {
           </main>
         </div>
         <div className="p-4 flex justify-end gap-3 border-t border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800">
-          <Button variant="outline" onClick={onClose}>Abbrechen</Button>
+          <Button
+            variant="outline"
+            onClick={onClose}
+            className="bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 border-slate-300 dark:border-slate-600"
+          >
+            Abbrechen
+          </Button>
           {hasPendingChanges() ? (
             <Button onClick={handleSave} className="bg-blue-600 hover:bg-blue-700">
               Speichern & Schließen
             </Button>
           ) : (
-            <Button variant="outline" onClick={onClose}>
+            <Button onClick={onClose} className="bg-blue-600 hover:bg-blue-700">
               Schließen
             </Button>
           )}

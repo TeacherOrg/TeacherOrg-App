@@ -1,216 +1,129 @@
-import React from 'react';
-import { Trophy, Star, Target, Rocket, Award, Sparkles, Sword, ClipboardCheck } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import { Star, Sparkles, Target, ChevronRight } from 'lucide-react';
+import { useAchievements } from '../hooks/useAchievements';
+import { ACHIEVEMENT_CATEGORIES, getCategoryName } from '../config/achievements';
+import AchievementCard from './AchievementCard';
 
 /**
- * Achievement Wall - Showcase of completed goals and milestones
- * Space-themed with constellation-like visualization
+ * Achievement Wall - 4-Tier Rarity System
+ * Displays achievements grouped by category with progressive unlocking
  *
- * @param {Array} completedGoals - List of completed goals
- * @param {Array} competencies - List of competencies for labels
- * @param {Object} stats - Statistics from useStudentData
- * @param {number} conqueredCount - Number of conquered weaknesses (improved by ≥0.5)
- * @param {Object} choreStats - Chore statistics { totalChores, completedChores }
+ * @param {Object} studentData - Data from useStudentData hook
+ * @param {Array} completedGoals - List of completed goals (for timeline)
+ * @param {Array} competencies - List of competencies (for timeline labels)
  */
-export default function AchievementWall({ completedGoals = [], competencies = [], stats = {}, conqueredCount = 0, choreStats = {} }) {
-  // Extract chore stats from props or stats object
-  const completedChores = choreStats.completedChores ?? stats.completedChores ?? 0;
+export default function AchievementWall({ studentData, completedGoals = [], competencies = [] }) {
+  const [filterCategory, setFilterCategory] = useState('all');
+
+  // Get achievements data
+  const {
+    achievements,
+    groupedByCategory,
+    stats
+  } = useAchievements(studentData);
+
+  // Filter achievements by selected category
+  const filteredCategories = useMemo(() => {
+    if (filterCategory === 'all') {
+      return groupedByCategory;
+    }
+
+    return {
+      [filterCategory]: groupedByCategory[filterCategory]
+    };
+  }, [groupedByCategory, filterCategory]);
+
+  // Helper to get competency name
   const getCompetencyName = (compId) => {
     const comp = competencies.find(c => c.id === compId);
     return comp?.name || 'Unbekannt';
   };
 
-  // Calculate progress for "all competencies" badge
-  const competenciesWithGoals = new Set(completedGoals.map(g => g.competency_id).filter(Boolean));
+  // Get available filter categories (only those with achievements)
+  const availableCategories = useMemo(() => {
+    const categories = Object.keys(groupedByCategory).map(key => ({
+      key,
+      name: getCategoryName(key),
+      count: groupedByCategory[key].achievements.length,
+      earned: groupedByCategory[key].achievements.filter(a => a.earned).length
+    }));
 
-  // Define achievement badges based on milestones
-  const badges = [
-    {
-      id: 'first_goal',
-      name: 'Erster Schritt',
-      description: 'Erstes Ziel erreicht',
-      icon: Target,
-      earned: completedGoals.length >= 1,
-      color: 'from-blue-500 to-cyan-500',
-      progress: completedGoals.length,
-      target: 1,
-      unlockHint: 'Erreiche dein erstes Ziel!'
-    },
-    {
-      id: 'five_goals',
-      name: 'Zielstrebig',
-      description: '5 Ziele erreicht',
-      icon: Star,
-      earned: completedGoals.length >= 5,
-      color: 'from-purple-500 to-pink-500',
-      progress: completedGoals.length,
-      target: 5,
-      unlockHint: 'Erreiche 5 Ziele!'
-    },
-    {
-      id: 'ten_goals',
-      name: 'Durchstarter',
-      description: '10 Ziele erreicht',
-      icon: Rocket,
-      earned: completedGoals.length >= 10,
-      color: 'from-yellow-500 to-orange-500',
-      progress: completedGoals.length,
-      target: 10,
-      unlockHint: 'Erreiche 10 Ziele!'
-    },
-    {
-      id: 'all_competencies',
-      name: 'Allrounder',
-      description: 'Ziele in allen Kompetenzen',
-      icon: Trophy,
-      earned: competencies.length > 0 && competencies.every(c =>
-        completedGoals.some(g => g.competency_id === c.id)
-      ),
-      color: 'from-green-500 to-emerald-500',
-      progress: competenciesWithGoals.size,
-      target: competencies.length || 1,
-      unlockHint: `Ziele in ${competencies.length} Kompetenzen erreichen`
-    },
-    {
-      id: 'high_performer',
-      name: 'Höhenflug',
-      description: 'Durchschnitt über 5.0',
-      icon: Award,
-      earned: stats.gradeAverage >= 5.0,
-      color: 'from-amber-500 to-yellow-400',
-      progress: stats.gradeAverage || 0,
-      target: 5.0,
-      unlockHint: 'Erreiche einen Durchschnitt von 5.0!'
-    },
-    {
-      id: 'eroberer',
-      name: 'Eroberer',
-      description: 'Eine Schwäche um 0.5+ verbessert',
-      icon: Sword,
-      earned: conqueredCount >= 1,
-      color: 'from-red-500 to-orange-500',
-      progress: conqueredCount,
-      target: 1,
-      unlockHint: 'Verbessere einen Fachbereich um 0.5!'
-    },
-    {
-      id: 'meister_eroberer',
-      name: 'Meister-Eroberer',
-      description: '3 Schwächen erobert',
-      icon: Sword,
-      earned: conqueredCount >= 3,
-      color: 'from-red-600 to-yellow-500',
-      progress: conqueredCount,
-      target: 3,
-      unlockHint: 'Verbessere 3 Fachbereiche um je 0.5!'
-    },
-    // Ämtli Badges
-    {
-      id: 'amtli_starter',
-      name: 'Ämtli-Starter',
-      description: '5 Ämtlis erledigt',
-      icon: ClipboardCheck,
-      earned: completedChores >= 5,
-      color: 'from-orange-500 to-amber-500',
-      progress: completedChores,
-      target: 5,
-      unlockHint: 'Erledige 5 Ämtlis!'
-    },
-    {
-      id: 'amtli_profi',
-      name: 'Ämtli-Profi',
-      description: '10 Ämtlis erledigt',
-      icon: ClipboardCheck,
-      earned: completedChores >= 10,
-      color: 'from-orange-600 to-red-500',
-      progress: completedChores,
-      target: 10,
-      unlockHint: 'Erledige 10 Ämtlis!'
-    },
-    {
-      id: 'amtli_meister',
-      name: 'Ämtli-Meister',
-      description: '20 Ämtlis erledigt',
-      icon: Trophy,
-      earned: completedChores >= 20,
-      color: 'from-yellow-500 to-orange-600',
-      progress: completedChores,
-      target: 20,
-      unlockHint: 'Erledige 20 Ämtlis!'
-    }
-  ];
-
-  const earnedBadges = badges.filter(b => b.earned);
-  const lockedBadges = badges.filter(b => !b.earned);
+    return categories;
+  }, [groupedByCategory]);
 
   return (
     <div className="space-y-8">
-      {/* Badges Section */}
-      <div>
-        <h4 className="text-sm font-medium text-slate-400 uppercase tracking-wide mb-4">
-          Abzeichen
-        </h4>
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4">
-          {badges.map(badge => {
-            const progressPercent = Math.min((badge.progress / badge.target) * 100, 100);
-
-            return (
-              <div
-                key={badge.id}
-                className={`
-                  achievement-star relative p-4 rounded-xl text-center transition-all duration-300 group
-                  ${badge.earned
-                    ? 'bg-gradient-to-br ' + badge.color + ' shadow-lg'
-                    : 'bg-slate-800/50 border border-slate-700'
-                  }
-                `}
-              >
-                {/* Glow effect for earned */}
-                {badge.earned && (
-                  <div className="absolute inset-0 rounded-xl bg-white/20 animate-pulse" />
-                )}
-
-                <badge.icon
-                  className={`w-8 h-8 mx-auto mb-2 relative z-10 ${
-                    badge.earned ? 'text-white' : 'text-slate-500'
-                  }`}
-                />
-                <p className={`text-xs font-medium relative z-10 ${
-                  badge.earned ? 'text-white' : 'text-slate-400'
-                }`}>
-                  {badge.name}
-                </p>
-
-                {/* Progress for locked badges - unter dem Badge-Text */}
-                {!badge.earned && (
-                  <div className="mt-3 relative z-10">
-                    {/* Progress bar */}
-                    <div className="w-full h-1.5 bg-slate-700 rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-gradient-to-r from-purple-500 to-blue-500 rounded-full transition-all duration-500"
-                        style={{ width: `${progressPercent}%` }}
-                      />
-                    </div>
-                    {/* Progress text - zentriert unter dem Balken */}
-                    <p className="text-[10px] text-slate-500 mt-1 text-center">
-                      {badge.id === 'high_performer'
-                        ? `${badge.progress.toFixed(1)} / ${badge.target}`
-                        : `${badge.progress} / ${badge.target}`
-                      }
-                    </p>
-                  </div>
-                )}
-
-                {/* Tooltip on hover */}
-                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-slate-900 rounded-lg text-xs text-slate-300 whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-20 shadow-xl border border-slate-700">
-                  <p className="font-medium">{badge.description}</p>
-                  {!badge.earned && (
-                    <p className="text-purple-400 mt-1">{badge.unlockHint}</p>
-                  )}
-                </div>
-              </div>
-            );
-          })}
+      {/* Statistics Panel */}
+      <div className="achievement-stats-panel">
+        <div className="achievement-stat">
+          <div className="achievement-stat-value">{stats.earned}</div>
+          <div className="achievement-stat-label">Errungen</div>
         </div>
+        <div className="achievement-stat">
+          <div className="achievement-stat-value">{stats.total}</div>
+          <div className="achievement-stat-label">Gesamt</div>
+        </div>
+        <div className="achievement-stat">
+          <div className="achievement-stat-value">{stats.completionPercent}%</div>
+          <div className="achievement-stat-label">Fortschritt</div>
+        </div>
+        <div className="achievement-stat">
+          <div className="achievement-stat-value">
+            {stats.byTier.legendary?.earned || 0}
+          </div>
+          <div className="achievement-stat-label">Legendär</div>
+        </div>
+      </div>
+
+      {/* Filter Tabs */}
+      <div className="achievement-filter-tabs">
+        <button
+          className={`achievement-filter-tab ${filterCategory === 'all' ? 'active' : ''}`}
+          onClick={() => setFilterCategory('all')}
+        >
+          Alle ({stats.earned}/{stats.total})
+        </button>
+        {availableCategories.map(category => (
+          <button
+            key={category.key}
+            className={`achievement-filter-tab ${filterCategory === category.key ? 'active' : ''}`}
+            onClick={() => setFilterCategory(category.key)}
+          >
+            {category.name} ({category.earned}/{category.count})
+          </button>
+        ))}
+      </div>
+
+      {/* Achievement Categories */}
+      <div className="space-y-6">
+        {Object.entries(filteredCategories).map(([categoryKey, categoryData]) => (
+          <div key={categoryKey} className="achievement-category-section">
+            <h3 className="achievement-category-title">
+              {categoryData.categoryName}
+            </h3>
+
+            {/* Tier Progression */}
+            <div className="tier-progression">
+              {categoryData.achievements.map((achievement, index) => (
+                <React.Fragment key={achievement.id}>
+                  <AchievementCard
+                    achievement={achievement}
+                    showNextTierPreview={true}
+                  />
+
+                  {/* Arrow between visible tiers */}
+                  {index < categoryData.achievements.length - 1 &&
+                   achievement.isVisible &&
+                   categoryData.achievements[index + 1].isVisible && (
+                    <div className="tier-arrow hidden md:block">
+                      <ChevronRight className="w-6 h-6" />
+                    </div>
+                  )}
+                </React.Fragment>
+              ))}
+            </div>
+          </div>
+        ))}
       </div>
 
       {/* Completed Goals Timeline */}
@@ -228,62 +141,62 @@ export default function AchievementWall({ completedGoals = [], competencies = []
           </div>
         ) : (
           <div className="space-y-3 max-h-96 overflow-y-auto pr-2">
-            {completedGoals.map((goal, index) => (
-              <div
-                key={goal.id}
-                className="flex items-start gap-3 p-3 rounded-lg bg-slate-800/30 border border-green-500/20 hover:border-green-500/40 transition-colors"
-                style={{
-                  animationDelay: `${index * 0.1}s`,
-                }}
-              >
-                {/* Star indicator */}
-                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-green-500/20 flex items-center justify-center">
-                  <Star className="w-4 h-4 text-green-400 fill-green-400" />
-                </div>
-
-                {/* Content */}
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm text-white">{goal.goal_text}</p>
-                  <div className="flex items-center gap-2 mt-1 text-xs text-slate-400">
-                    <span className="text-purple-400">{getCompetencyName(goal.competency_id)}</span>
-                    <span>•</span>
-                    <span>{new Date(goal.completed_date).toLocaleDateString('de-DE')}</span>
+            {completedGoals
+              .sort((a, b) => new Date(b.completed_date) - new Date(a.completed_date))
+              .map((goal, index) => (
+                <div
+                  key={goal.id}
+                  className="flex items-start gap-3 p-3 rounded-lg bg-slate-800/30 border border-green-500/20 hover:border-green-500/40 transition-colors"
+                  style={{
+                    animationDelay: `${index * 0.1}s`,
+                  }}
+                >
+                  {/* Star indicator */}
+                  <div className="flex-shrink-0 w-8 h-8 rounded-full bg-green-500/20 flex items-center justify-center">
+                    <Star className="w-4 h-4 text-green-400 fill-green-400" />
                   </div>
-                </div>
 
-                {/* Celebration effect for recent */}
-                {index < 3 && (
-                  <div className="flex-shrink-0 text-yellow-400 animate-bounce">
-                    ✨
+                  {/* Content */}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-white">{goal.goal_text}</p>
+                    <div className="flex items-center gap-2 mt-1 text-xs text-slate-400">
+                      {goal.competency_id && (
+                        <>
+                          <span className="text-purple-400">{getCompetencyName(goal.competency_id)}</span>
+                          <span>•</span>
+                        </>
+                      )}
+                      <span>{new Date(goal.completed_date).toLocaleDateString('de-DE')}</span>
+                    </div>
                   </div>
-                )}
-              </div>
-            ))}
+
+                  {/* Celebration effect for recent */}
+                  {index < 3 && (
+                    <div className="flex-shrink-0 text-yellow-400 animate-bounce">
+                      ✨
+                    </div>
+                  )}
+                </div>
+              ))}
           </div>
         )}
       </div>
 
-      {/* Summary Stats */}
-      <div className="grid grid-cols-3 gap-4 pt-4 border-t border-slate-700">
-        <div className="text-center">
-          <div className="text-2xl font-bold text-green-400">
-            {completedGoals.length}
-          </div>
-          <div className="text-xs text-slate-400">Ziele erreicht</div>
+      {/* Achievement Tips (Optional) */}
+      {stats.earned === 0 && (
+        <div className="p-4 bg-purple-500/10 border border-purple-500/30 rounded-lg">
+          <h5 className="text-sm font-semibold text-purple-400 mb-2">
+            🎯 Wie du Erfolge freischaltest
+          </h5>
+          <ul className="text-xs text-slate-300 space-y-1">
+            <li>• Erreiche Ziele, um Goal-Achievements zu verdienen</li>
+            <li>• Erledige Ämtlis für die Ämtli-Meisterschaft</li>
+            <li>• Verbessere deine Noten für Exzellenz-Erfolge</li>
+            <li>• Arbeite an deinen Schwächen für Eroberer-Erfolge</li>
+            <li>• Reflektiere regelmäßig für Beständigkeits-Erfolge</li>
+          </ul>
         </div>
-        <div className="text-center">
-          <div className="text-2xl font-bold text-yellow-400">
-            {earnedBadges.length}/{badges.length}
-          </div>
-          <div className="text-xs text-slate-400">Abzeichen</div>
-        </div>
-        <div className="text-center">
-          <div className="text-2xl font-bold text-purple-400">
-            {new Set(completedGoals.map(g => g.competency_id)).size}
-          </div>
-          <div className="text-xs text-slate-400">Kompetenzen</div>
-        </div>
-      </div>
+      )}
     </div>
   );
 }

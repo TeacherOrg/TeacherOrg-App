@@ -278,6 +278,253 @@ export function useStudentData(studentId = null) {
     };
   }, [performances, gradeAverage, competencies, competencyData, goals, choreAssignments]);
 
+  // NEW: Calculate consistency streak (consecutive weeks with self-assessments)
+  const consistencyStreak = useMemo(() => {
+    if (selfAssessments.length === 0) return 0;
+
+    // Get week number from date (ISO week)
+    const getWeek = (date) => {
+      const d = new Date(date);
+      const dayNum = d.getUTCDay() || 7;
+      d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+      const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+      return Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
+    };
+
+    // Get unique weeks with assessments
+    const weeksWithAssessments = new Set(
+      selfAssessments.map(a => {
+        const year = new Date(a.date).getUTCFullYear();
+        const week = getWeek(a.date);
+        return `${year}-W${week}`;
+      })
+    );
+
+    const sortedWeeks = Array.from(weeksWithAssessments).sort();
+
+    if (sortedWeeks.length === 0) return 0;
+
+    // Calculate longest streak
+    let maxStreak = 1;
+    let currentStreak = 1;
+
+    for (let i = 1; i < sortedWeeks.length; i++) {
+      const [prevYear, prevWeek] = sortedWeeks[i - 1].split('-W').map(Number);
+      const [currYear, currWeek] = sortedWeeks[i].split('-W').map(Number);
+
+      // Check if consecutive weeks (accounting for year boundaries)
+      const isConsecutive = (currYear === prevYear && currWeek === prevWeek + 1) ||
+                           (currYear === prevYear + 1 && prevWeek === 52 && currWeek === 1);
+
+      if (isConsecutive) {
+        currentStreak++;
+        maxStreak = Math.max(maxStreak, currentStreak);
+      } else {
+        currentStreak = 1;
+      }
+    }
+
+    return maxStreak;
+  }, [selfAssessments]);
+
+  // NEW: Count self-reflections
+  const selfReflectionCount = useMemo(() => {
+    return selfAssessments.length;
+  }, [selfAssessments]);
+
+  // NEW: Calculate self-awareness gap (average difference between self and teacher scores)
+  const selfAwarenessGap = useMemo(() => {
+    const gaps = competencyData
+      .filter(c => c.teacherScore !== null && c.selfScore !== null)
+      .map(c => Math.abs(c.teacherScore - c.selfScore));
+
+    if (gaps.length === 0) return null;
+
+    return gaps.reduce((sum, gap) => sum + gap, 0) / gaps.length;
+  }, [competencyData]);
+
+  // NEW: Count perfect grades (6.0)
+  const perfectGrades = useMemo(() => {
+    return performances.filter(p => p.grade === 6.0).length;
+  }, [performances]);
+
+  // NEW: Calculate improvement streak
+  const improvementStreak = useMemo(() => {
+    if (performances.length === 0) return 0;
+
+    // Group by fachbereich and sort by date
+    const byFachbereich = {};
+
+    performances.forEach(p => {
+      if (!p.grade || p.grade === 0 || !p.date) return;
+
+      if (Array.isArray(p.fachbereiche)) {
+        p.fachbereiche.forEach(fb => {
+          if (!byFachbereich[fb]) {
+            byFachbereich[fb] = [];
+          }
+          byFachbereich[fb].push({ date: p.date, grade: p.grade });
+        });
+      }
+    });
+
+    let maxStreak = 0;
+
+    Object.values(byFachbereich).forEach(grades => {
+      if (grades.length < 2) return;
+
+      const sorted = grades.sort((a, b) => new Date(a.date) - new Date(b.date));
+      let currentStreak = 0;
+
+      for (let i = 1; i < sorted.length; i++) {
+        if (sorted[i].grade > sorted[i - 1].grade) {
+          currentStreak++;
+          maxStreak = Math.max(maxStreak, currentStreak);
+        } else {
+          currentStreak = 0;
+        }
+      }
+    });
+
+    return maxStreak;
+  }, [performances]);
+
+  // NEW: Check if multiple fachbereiche have improvement streaks
+  const hasMultipleImprovementStreaks = useMemo(() => {
+    if (performances.length === 0) return false;
+
+    const byFachbereich = {};
+
+    performances.forEach(p => {
+      if (!p.grade || p.grade === 0 || !p.date) return;
+
+      if (Array.isArray(p.fachbereiche)) {
+        p.fachbereiche.forEach(fb => {
+          if (!byFachbereich[fb]) {
+            byFachbereich[fb] = [];
+          }
+          byFachbereich[fb].push({ date: p.date, grade: p.grade });
+        });
+      }
+    });
+
+    let fachbereicheWithStreaks = 0;
+
+    Object.values(byFachbereich).forEach(grades => {
+      if (grades.length < 3) return;
+
+      const sorted = grades.sort((a, b) => new Date(a.date) - new Date(b.date));
+      let hasStreak = false;
+
+      // Check for at least 3 consecutive improvements
+      for (let i = 2; i < sorted.length; i++) {
+        if (sorted[i].grade > sorted[i - 1].grade &&
+            sorted[i - 1].grade > sorted[i - 2].grade) {
+          hasStreak = true;
+          break;
+        }
+      }
+
+      if (hasStreak) {
+        fachbereicheWithStreaks++;
+      }
+    });
+
+    return fachbereicheWithStreaks >= 2;
+  }, [performances]);
+
+  // NEW: Check for transformation (weak area <4.0 to 5.0+)
+  const hasTransformation = useMemo(() => {
+    if (performances.length === 0) return false;
+
+    const byFachbereich = {};
+
+    performances.forEach(p => {
+      if (!p.grade || p.grade === 0 || !p.date) return;
+
+      if (Array.isArray(p.fachbereiche)) {
+        p.fachbereiche.forEach(fb => {
+          if (!byFachbereich[fb]) {
+            byFachbereich[fb] = [];
+          }
+          byFachbereich[fb].push({ date: p.date, grade: p.grade });
+        });
+      }
+    });
+
+    // Check each fachbereich for transformation
+    return Object.values(byFachbereich).some(grades => {
+      if (grades.length < 2) return false;
+
+      const sorted = grades.sort((a, b) => new Date(a.date) - new Date(b.date));
+
+      // Calculate early average (first half)
+      const halfPoint = Math.floor(sorted.length / 2);
+      const earlyGrades = sorted.slice(0, halfPoint);
+      const recentGrades = sorted.slice(halfPoint);
+
+      if (earlyGrades.length === 0 || recentGrades.length === 0) return false;
+
+      const earlyAvg = earlyGrades.reduce((sum, g) => sum + g.grade, 0) / earlyGrades.length;
+      const recentAvg = recentGrades.reduce((sum, g) => sum + g.grade, 0) / recentGrades.length;
+
+      return earlyAvg < 4.0 && recentAvg >= 5.0;
+    });
+  }, [performances]);
+
+  // NEW: Subject breadth calculations
+  const { subjectCount, hasHighBreadth, hasExcellentBreadth } = useMemo(() => {
+    if (performances.length === 0) {
+      return { subjectCount: 0, hasHighBreadth: false, hasExcellentBreadth: false };
+    }
+
+    // Group by subject
+    const bySubject = {};
+
+    performances.forEach(p => {
+      if (!p.grade || p.grade === 0 || !p.subject) return;
+
+      if (!bySubject[p.subject]) {
+        bySubject[p.subject] = [];
+      }
+      bySubject[p.subject].push(p.grade);
+    });
+
+    const subjectAverages = Object.entries(bySubject).map(([subject, grades]) => ({
+      subject,
+      average: grades.reduce((sum, g) => sum + g, 0) / grades.length,
+      count: grades.length
+    }));
+
+    const count = subjectAverages.length;
+
+    // High breadth: 8+ subjects with 4.5+ average
+    const highBreadth = subjectAverages.filter(s => s.average >= 4.5).length >= 8;
+
+    // Excellent breadth: 10+ subjects all with 5.0+ average
+    const excellentBreadth = count >= 10 && subjectAverages.every(s => s.average >= 5.0);
+
+    return {
+      subjectCount: count,
+      hasHighBreadth: highBreadth,
+      hasExcellentBreadth: excellentBreadth
+    };
+  }, [performances]);
+
+  // NEW: Calculate engagement score (total activities)
+  const engagementScore = useMemo(() => {
+    const completedGoalsCount = goals.filter(g => g.is_completed).length;
+    const completedChoresCount = stats.completedChores || 0;
+    const selfAssessmentCount = selfAssessments.length;
+
+    return completedGoalsCount + completedChoresCount + selfAssessmentCount;
+  }, [goals, stats.completedChores, selfAssessments]);
+
+  // Helper function to get completed goals
+  const completedGoals = useMemo(() => {
+    return goals.filter(g => g.is_completed);
+  }, [goals]);
+
   return {
     // Data
     student,
@@ -296,6 +543,21 @@ export function useStudentData(studentId = null) {
     conqueredCount,
     competencyData,
     stats,
+
+    // NEW: Achievement-related calculations
+    consistencyStreak,
+    selfReflectionCount,
+    selfAwarenessGap,
+    perfectGrades,
+    improvementStreak,
+    hasMultipleImprovementStreaks,
+    hasTransformation,
+    subjectCount,
+    hasHighBreadth,
+    hasExcellentBreadth,
+    engagementScore,
+    completedGoals,
+    completedChores: stats.completedChores,
 
     // State
     loading,

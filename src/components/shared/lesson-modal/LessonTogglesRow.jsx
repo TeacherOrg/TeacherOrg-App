@@ -42,7 +42,7 @@ export function LessonTogglesRow({
         </Label>
       </div>
 
-      <div className="flex items-center gap-2">
+      <div className="double-lesson-toggle flex items-center gap-2">
         <Switch
           id="double-lesson"
           checked={isDoubleLesson}

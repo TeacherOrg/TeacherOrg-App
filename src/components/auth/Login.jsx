@@ -1,5 +1,6 @@
 // src/components/auth/Login.jsx
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import pb from '@/api/pb';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -13,7 +14,8 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'; // shadcn/ui Dialog
 
-export default function Login({ onLogin }) {
+export default function Login() {
+  const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [username, setUsername] = useState('');
@@ -30,6 +32,14 @@ export default function Login({ onLogin }) {
   const [resetLoading, setResetLoading] = useState(false);
   const [resetMessage, setResetMessage] = useState('');
   const [resetError, setResetError] = useState('');
+
+  // Redirect wenn bereits eingeloggt
+  useEffect(() => {
+    if (pb.authStore.isValid && pb.authStore.model) {
+      const defaultPage = pb.authStore.model.default_start_page || 'Timetable';
+      navigate(`/${defaultPage}`, { replace: true });
+    }
+  }, [navigate]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -52,7 +62,8 @@ export default function Login({ onLogin }) {
         setMessage('Registrierung erfolgreich! Bitte prüfe deine E-Mail zur Bestätigung.');
       } else {
         const authData = await pb.collection('users').authWithPassword(email, password);
-        onLogin(authData.record);
+        const defaultPage = authData.record.default_start_page || 'Timetable';
+        navigate(`/${defaultPage}`, { replace: true });
       }
     } catch (err) {
       setError(err.message || JSON.stringify(err.data));

@@ -6,25 +6,27 @@ import Login from "@/components/auth/Login";
 import pb from '@/api/pb';
 import { User } from '@/api/entities';
 import CalendarLoader from "@/components/ui/CalendarLoader";
-import AuthGuard from '@/components/auth/AuthGuard';
 import ErrorBoundary from '@/components/ErrorBoundary';
+import { Routes, Route } from 'react-router-dom';
+import ProtectedRoute from '@/components/auth/ProtectedRoute';
+import Landing from '@/pages/Landing';
 import debounce from 'lodash/debounce';
 import { version } from '../package.json';
 import UpdateModal from '@/components/ui/UpdateModal';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { queryClient } from '@/main.jsx';
 import { useLessonStore } from '@/store';
 // Onboarding imports
 import { OnboardingProvider, useOnboarding } from '@/components/onboarding/OnboardingProvider';
 import { SetupWizard } from '@/components/onboarding/SetupWizard';
+import { TourProvider } from '@/components/onboarding/TourProvider';
+import { TourSpotlight } from '@/components/onboarding/TourSpotlight';
+import { usePostLoginInit } from '@/hooks/usePostLoginInit';
 import { TimetableTutorial } from '@/components/onboarding/tutorials/TimetableTutorial';
 import { YearlyTutorial } from '@/components/onboarding/tutorials/YearlyTutorial';
 import { GroupsTutorial } from '@/components/onboarding/tutorials/GroupsTutorial';
 import { TopicsTutorial } from '@/components/onboarding/tutorials/TopicsTutorial';
 import { GradesTutorial } from '@/components/onboarding/tutorials/GradesTutorial';
 import { HelpButton } from '@/components/onboarding/HelpButton';
-
-// Erstelle eine Instanz von QueryClient
-const queryClient = new QueryClient();
 
 // Onboarding Content Component - renders all onboarding UI
 function OnboardingContent() {
@@ -110,6 +112,9 @@ function App() {
     }
   }, [user]);
 
+  // Daten nach Login initialisieren
+  usePostLoginInit(user);
+
   if (loading) {
     return (
       <div className="min-h-screen bg-slate-900 flex items-center justify-center">
@@ -118,43 +123,56 @@ function App() {
     );
   }
 
-  if (!user) {
-    return <Login onLogin={(loggedUser) => setUser(loggedUser)} />;
-  }
-
   return (
     <ErrorBoundary>
-      <QueryClientProvider client={queryClient}>
-        <OnboardingProvider>
-          <AuthGuard>
-            <Pages />
-          </AuthGuard>
-          {/* Onboarding Components */}
-          <OnboardingContent />
-          <HotToastToaster
-            position="top-right"
-            toastOptions={{
-              duration: 4000,
-              style: {
-                background: '#1e293b',
-                color: '#ffffff',
-                border: '1px solid #475569',
-              },
-              error: {
-                style: {
-                  background: '#7f1d1d',
-                  color: '#ffffff',
-                },
-              },
-            }}
-          />
-          <UpdateModal
-            isOpen={showUpdateModal}
-            onClose={() => setShowUpdateModal(false)}
-            version={version}
-          />
-        </OnboardingProvider>
-      </QueryClientProvider>
+      {/* HotToast und UpdateModal auf Top-Level */}
+      <HotToastToaster
+        position="top-right"
+        toastOptions={{
+          duration: 4000,
+          style: {
+            background: '#1e293b',
+            color: '#ffffff',
+            border: '1px solid #475569',
+          },
+          error: {
+            style: {
+              background: '#7f1d1d',
+              color: '#ffffff',
+            },
+          },
+        }}
+      />
+      <UpdateModal
+        isOpen={showUpdateModal}
+        onClose={() => setShowUpdateModal(false)}
+        version={version}
+      />
+
+      {/* Router mit Public & Protected Routes */}
+      <Routes>
+        {/* Public Route: Login */}
+        <Route path="/login" element={<Login />} />
+
+        {/* Public Route: Landing */}
+        <Route path="/landing" element={<Landing />} />
+
+        {/* Protected Routes: Alle anderen Seiten */}
+        <Route
+          path="/*"
+          element={
+            <ProtectedRoute>
+              <TourProvider>
+                <OnboardingProvider>
+                  <Pages />
+                  <OnboardingContent />
+                  <TourSpotlight />
+                </OnboardingProvider>
+              </TourProvider>
+            </ProtectedRoute>
+          }
+        />
+      </Routes>
     </ErrorBoundary>
   );
 }

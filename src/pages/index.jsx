@@ -8,7 +8,6 @@ import TopicsView from "./TopicsView"; // Neue Komponente importieren
 import { Route, Routes, useLocation } from 'react-router-dom';
 import StudentsOverview from '@/pages/StudentsOverview';
 import StudentDashboardPage from './StudentDashboardPage';
-import Landing from "./Landing";
 
 const PAGES = {
     Timetable: Timetable,
@@ -36,16 +35,6 @@ export default function Pages() {
     const location = useLocation();
     const currentPage = _getCurrentPage(location.pathname);
 
-    // Landing hat eigenes Layout (ohne Sidebar)
-    if (location.pathname === '/landing') {
-        return (
-            <Routes>
-                <Route path="/landing" element={<Landing />} />
-            </Routes>
-        );
-    }
-
-    // Alle anderen Seiten mit Sidebar-Layout
     return (
         <Layout currentPageName={currentPage}>
             <Routes>

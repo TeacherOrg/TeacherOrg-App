@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import pb from '@/api/pb';
+import { useTour } from './TourProvider';
 
 // Tutorial IDs - diese werden im User-Record gespeichert
 export const TUTORIAL_IDS = {
@@ -27,6 +28,9 @@ const OnboardingContext = createContext(null);
 export function OnboardingProvider({ children }) {
   // Query Client für Cache-Invalidierung
   const queryClient = useQueryClient();
+
+  // Tour system hook
+  const { startTour } = useTour();
 
   // State
   const [completedTutorials, setCompletedTutorials] = useState([]);
@@ -145,7 +149,7 @@ export function OnboardingProvider({ children }) {
   }, [saveTutorialStatus]);
 
   // Setup-Wizard abschliessen
-  const completeSetupWizard = useCallback(async () => {
+  const completeSetupWizard = useCallback(async (shouldStartTour = false) => {
     try {
       const user = pb.authStore.model;
       if (user) {
@@ -160,10 +164,19 @@ export function OnboardingProvider({ children }) {
 
       // Query Cache invalidieren damit Timetable neue Daten lädt
       queryClient.invalidateQueries({ queryKey: ['timetableData'] });
+
+      // NEW: Start interactive tour if requested
+      if (shouldStartTour) {
+        // Small delay to let wizard close
+        setTimeout(() => {
+          console.log('[Onboarding] Starting interactive tour');
+          startTour('INTERACTIVE_ONBOARDING');
+        }, 500);
+      }
     } catch (error) {
       console.error('Error completing setup wizard:', error);
     }
-  }, [completeTutorial, queryClient]);
+  }, [completeTutorial, queryClient, startTour]);
 
   // Automatischer Trigger für Feature-Tutorials
   const triggerTutorialForRoute = useCallback((pathname) => {

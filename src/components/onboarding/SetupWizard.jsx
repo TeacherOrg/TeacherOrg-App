@@ -126,7 +126,7 @@ export function SetupWizard({ isOpen, onComplete }) {
     }
   };
 
-  const handleComplete = async () => {
+  const handleComplete = async (startTour = false) => {
     setIsLoading(true);
     try {
       const currentUserId = pb.authStore.model?.id;
@@ -160,7 +160,7 @@ export function SetupWizard({ isOpen, onComplete }) {
       }
 
       toast.success('Einrichtung abgeschlossen!');
-      onComplete();
+      onComplete(startTour);
     } catch (error) {
       console.error('Error completing setup:', error);
       toast.error('Fehler beim Speichern der Einstellungen.');
@@ -842,9 +842,9 @@ export function SetupWizard({ isOpen, onComplete }) {
               animate={{ y: 0, opacity: 1 }}
               transition={{ duration: 0.5, delay: 0.3 }}
             >
-              <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Alles bereit!</h2>
+              <h2 className="text-2xl font-bold text-slate-900 dark:text-white">🎉 Gratuliere!</h2>
               <p className="text-slate-600 dark:text-slate-400 mt-2 text-sm">
-                Sie können jetzt mit der Planung beginnen.
+                Deine Klasse ist bereit!
               </p>
             </motion.div>
 
@@ -861,6 +861,20 @@ export function SetupWizard({ isOpen, onComplete }) {
                 <li>✓ {students.length} Schüler</li>
                 <li>✓ Stundenplan: {scheduleType === 'flexible' ? 'Flexibel' : 'Fest'}</li>
               </ul>
+            </motion.div>
+
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.9 }}
+              className="pt-2 space-y-2"
+            >
+              <p className="text-slate-700 dark:text-slate-300 text-sm font-medium">
+                Möchtest du eine interaktive Tour machen?
+              </p>
+              <p className="text-slate-600 dark:text-slate-400 text-xs px-4">
+                Wir führen dich durch die wichtigsten Funktionen und du erstellst dabei dein erstes Thema und deine ersten Lektionen.
+              </p>
             </motion.div>
           </div>
         );
@@ -948,25 +962,39 @@ export function SetupWizard({ isOpen, onComplete }) {
               </Button>
             )}
 
-            <Button
-              onClick={handleNext}
-              disabled={!canProceed() || isLoading}
-              className="bg-blue-600 hover:bg-blue-700"
-            >
-              {isLoading ? (
-                'Lädt...'
-              ) : isLastStep ? (
-                <>
-                  Los geht's!
-                  <Sparkles className="w-4 h-4 ml-1" />
-                </>
-              ) : (
-                <>
-                  Weiter
-                  <ChevronRight className="w-4 h-4 ml-1" />
-                </>
-              )}
-            </Button>
+            {isLastStep ? (
+              <>
+                <Button
+                  variant="outline"
+                  onClick={() => handleComplete(false)}
+                  disabled={!canProceed() || isLoading}
+                  className="flex-1"
+                >
+                  Nein, später
+                </Button>
+                <Button
+                  onClick={() => handleComplete(true)}
+                  disabled={!canProceed() || isLoading}
+                  className="flex-1 bg-blue-600 hover:bg-blue-700"
+                >
+                  {isLoading ? 'Lädt...' : (
+                    <>
+                      Ja, Tour starten
+                      <Sparkles className="w-4 h-4 ml-1" />
+                    </>
+                  )}
+                </Button>
+              </>
+            ) : (
+              <Button
+                onClick={handleNext}
+                disabled={!canProceed() || isLoading}
+                className="bg-blue-600 hover:bg-blue-700"
+              >
+                Weiter
+                <ChevronRight className="w-4 h-4 ml-1" />
+              </Button>
+            )}
           </div>
         </div>
       </DialogContent>

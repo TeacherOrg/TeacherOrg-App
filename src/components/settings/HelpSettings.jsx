@@ -2,9 +2,11 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { MessageCircle, ChevronDown, ChevronRight, Settings, Calendar, GraduationCap, BookOpen, LayoutDashboard, ClipboardList, Globe, Keyboard } from 'lucide-react';
+import { MessageCircle, ChevronDown, ChevronRight, Settings, Calendar, GraduationCap, BookOpen, LayoutDashboard, ClipboardList, Globe, Keyboard, Play, Check } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { createPageUrl } from '@/utils';
+import { useTour } from '@/components/onboarding/TourProvider';
+import { toast } from 'sonner';
 
 const guides = [
     {
@@ -211,10 +213,23 @@ const GuideItem = ({ item }) => {
 
 export default function HelpSettings() {
     const navigate = useNavigate();
+    const { startTour, completedTours } = useTour();
 
     const handleFeedback = () => {
         window.open('mailto:support@timegrid.app?subject=TimeGrid Feedback', '_blank');
     };
+
+    const handleStartTour = () => {
+        try {
+            startTour('INTERACTIVE_ONBOARDING');
+            toast.success('Tour gestartet!');
+        } catch (error) {
+            console.error('Error starting tour:', error);
+            toast.error('Fehler beim Starten der Tour');
+        }
+    };
+
+    const isTourCompleted = completedTours.includes('INTERACTIVE_ONBOARDING');
 
     return (
         <div className="space-y-6 pr-2">
@@ -224,6 +239,34 @@ export default function HelpSettings() {
                     Kurzanleitungen und Tipps für die Nutzung von TimeGrid.
                 </p>
             </div>
+
+            {/* Interactive Tour Section */}
+            <Card className="bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-950/30 dark:to-indigo-950/30 border-blue-200 dark:border-blue-800">
+                <CardHeader>
+                    <CardTitle className="text-slate-900 dark:text-white flex items-center gap-2">
+                        <Play className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                        Interaktive Tour
+                    </CardTitle>
+                    <CardDescription className="text-slate-700 dark:text-slate-300">
+                        Lernen Sie die wichtigsten Funktionen von TeacherOrg kennen, indem Sie durch eine geführte Tour geführt werden.
+                    </CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <Button
+                        onClick={handleStartTour}
+                        className="bg-blue-600 hover:bg-blue-700 text-white"
+                    >
+                        <Play className="w-4 h-4 mr-2" />
+                        {isTourCompleted ? 'Tour wiederholen' : 'Tour starten'}
+                    </Button>
+                    {isTourCompleted && (
+                        <div className="flex items-center gap-2 mt-3 text-sm text-green-600 dark:text-green-400">
+                            <Check className="w-4 h-4" />
+                            <span>Tour abgeschlossen</span>
+                        </div>
+                    )}
+                </CardContent>
+            </Card>
 
             <div className="grid gap-4 md:grid-cols-2">
                 {guides.map((guide) => (

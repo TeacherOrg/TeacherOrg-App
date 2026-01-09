@@ -95,7 +95,6 @@ export default function LessonModal({
   const [validationError, setValidationError] = useState(null);
   const [integratedOriginalData, setIntegratedOriginalData] = useState({});
   const [wasAllerlei, setWasAllerlei] = useState(lesson?.collectionName === 'allerlei_lessons');
-  const [isUnifiedDouble, setIsUnifiedDouble] = useState(false);
   const [dissolvingPrimaryId, setDissolvingPrimaryId] = useState(null);
   const [topicMaterials, setTopicMaterials] = useState([]);
 
@@ -482,12 +481,9 @@ export default function LessonModal({
     setAddSecondLesson(lessonToLoad.is_double_lesson && !!lessonToLoad.second_yearly_lesson_id);
     setSelectedSecondLesson(lessonToLoad.second_yearly_lesson_id || "");
 
-    // In fixed schedule mode, double lessons are treated as unified 90-minute blocks
+    // In fixed schedule mode, double lessons are template-based (no second lesson editing in timetable)
     if (settings?.scheduleType === 'fixed' && lessonToLoad.is_double_lesson) {
-      setIsUnifiedDouble(true);
       setAddSecondLesson(false);
-    } else {
-      setIsUnifiedDouble(false);
     }
 
     if (lessonToLoad.is_double_lesson && lessonToLoad.second_yearly_lesson_id) {
@@ -571,9 +567,9 @@ export default function LessonModal({
     setFormData(prev => ({ ...prev, is_double_lesson: checked }));
 
     if (checked) {
-      // In fixed schedule mode, double lessons are unified 90-minute blocks
+      // In fixed schedule mode, double lessons are template-based (no manual second lesson)
+      // In flexible mode, double lessons always link two separate lessons
       if (settings?.scheduleType === 'fixed') {
-        setIsUnifiedDouble(true);
         setAddSecondLesson(false);
       } else {
         setAddSecondLesson(true);
@@ -610,7 +606,6 @@ export default function LessonModal({
       setAddSecondLesson(false);
       setSecondSteps([]);
       setSelectedSecondLesson("");
-      setIsUnifiedDouble(false);
     }
   };
 
@@ -922,9 +917,9 @@ export default function LessonModal({
             ],
             subject: finalSubject,
             yearly_lesson_id: lesson.yearly_lesson_id,
-            second_yearly_lesson_id: (preparedFormData.is_double_lesson && addSecondLesson && selectedSecondLesson && !isUnifiedDouble) ? selectedSecondLesson : null,
+            second_yearly_lesson_id: (preparedFormData.is_double_lesson && addSecondLesson && selectedSecondLesson) ? selectedSecondLesson : null,
             topic_id: preparedFormData.topic_id === 'no_topic' ? undefined : preparedFormData.topic_id,
-            period_span: (preparedFormData.is_double_lesson && addSecondLesson && !isUnifiedDouble) ? 2 : 1,
+            period_span: (preparedFormData.is_double_lesson && addSecondLesson) ? 2 : 1,
           };
           await Lesson.update(lesson.id, lessonData);
           if (lessonData.yearly_lesson_id) {
@@ -965,10 +960,10 @@ export default function LessonModal({
             end_time: timeSlotForNewLesson?.end,
             topic_id: preparedFormData.topic_id === 'no_topic' ? undefined : preparedFormData.topic_id,
             yearly_lesson_id: copiedLesson?.yearly_lesson_id || null,
-            second_yearly_lesson_id: (preparedFormData.is_double_lesson && addSecondLesson && selectedSecondLesson && !isUnifiedDouble) ? selectedSecondLesson : null,
+            second_yearly_lesson_id: (preparedFormData.is_double_lesson && addSecondLesson && selectedSecondLesson) ? selectedSecondLesson : null,
             user_id: pb.authStore.model.id,
             is_hidden: false,
-            period_span: (preparedFormData.is_double_lesson && addSecondLesson && !isUnifiedDouble) ? 2 : 1
+            period_span: (preparedFormData.is_double_lesson && addSecondLesson) ? 2 : 1
           };
           if (!lessonData.yearly_lesson_id) {
             const subjectYearlyLessons = allYearlyLessons
@@ -1153,9 +1148,11 @@ export default function LessonModal({
             />
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className={`grid gap-4 ${formData.is_double_lesson && addSecondLesson ? 'grid-cols-1 md:grid-cols-2' : 'grid-cols-1 md:grid-cols-2'}`}>
             <div className="space-y-2">
-              <Label className="text-sm font-semibold text-slate-900 dark:text-white">Titel (Lektion)</Label>
+              <Label className="text-sm font-semibold text-slate-900 dark:text-white">
+                {formData.is_double_lesson && addSecondLesson ? 'Titel (1. Lektion)' : 'Titel (Lektion)'}
+              </Label>
               <Input
                 id="name"
                 value={formData.name || ''}
@@ -1165,80 +1162,23 @@ export default function LessonModal({
                 maxLength={30}
               />
             </div>
-          </div>
 
-          {formData.is_double_lesson && addSecondLesson && (
-            <div className="grid grid-cols-4 items-center gap-4 mt-4">
-              <Label htmlFor="second_name" className="text-right text-sm font-semibold text-slate-900 dark:text-white">Titel (Zweite Lektion)</Label>
-              <Input
-                id="second_name"
-                value={formData.second_name || ''}
-                onChange={(e) => setFormData(prev => ({ ...prev, second_name: e.target.value }))}
-                className="col-span-3 bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white"
-                placeholder={`Lektion ${Number(lesson?.yearly_lesson_id ? allYearlyLessons.find(yl => yl.id === lesson.yearly_lesson_id)?.lesson_number || slotInfo?.period || 1 : 1) + 1}`}
-                maxLength={30}
-              />
-            </div>
-          )}
-
-          {/* Double lesson section for non-Allerlei - only in flexible mode */}
-          {formData.is_double_lesson && !isAllerlei && settings?.scheduleType !== 'fixed' && (
-            <div className="space-y-4 p-4 rounded-lg bg-slate-100/50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700">
-              <div className="flex items-center gap-2 mb-3">
-                <input
-                  type="checkbox"
-                  id="add-second-lesson"
-                  checked={addSecondLesson}
-                  onChange={(e) => handleAddSecondLessonToggle(e.target.checked)}
-                  className="rounded"
-                />
-                <Label htmlFor="add-second-lesson" className="text-sm font-semibold text-slate-900 dark:text-white cursor-pointer">
-                  Zusätzliche Lektion hinzufügen
+            {formData.is_double_lesson && addSecondLesson && (
+              <div className="space-y-2">
+                <Label htmlFor="second_name" className="text-sm font-semibold text-slate-900 dark:text-white">
+                  Titel (2. Lektion)
                 </Label>
+                <Input
+                  id="second_name"
+                  value={formData.second_name || ''}
+                  onChange={(e) => setFormData(prev => ({ ...prev, second_name: e.target.value }))}
+                  className="bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white"
+                  placeholder={`Lektion ${Number(lesson?.yearly_lesson_id ? allYearlyLessons.find(yl => yl.id === lesson.yearly_lesson_id)?.lesson_number || slotInfo?.period || 1 : 1) + 1}`}
+                  maxLength={30}
+                />
               </div>
-
-              {addSecondLesson && (
-                <div className="space-y-2">
-                  <Label className="text-sm font-semibold text-slate-900 dark:text-white">Zweite Lektion auswählen</Label>
-                  <Select
-                    value={selectedSecondLesson}
-                    onValueChange={handleSecondLessonSelection}
-                  >
-                    <SelectTrigger className="bg-slate-200 dark:bg-slate-700 border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white">
-                      <SelectValue placeholder="Lektion zum Hinzufügen auswählen" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {availableSecondLessons.length > 0 ? (
-                        availableSecondLessons.map(yl => {
-                          const isScheduled = allLessons.some(l => l.yearly_lesson_id === yl.id && l.week_number === currentWeek && !l.is_hidden);
-                          return (
-                            <SelectItem key={yl.id} value={yl.id}>
-                              {yl.name || `Lektion ${yl.lesson_number}`}
-                              {yl.notes ? ` - ${yl.notes}` : ''}
-                              {isScheduled ? ' (bereits geplant)' : ''}
-                            </SelectItem>
-                          );
-                        })
-                      ) : (
-                        <SelectItem disabled value="none">Keine verfügbaren Lektionen</SelectItem>
-                      )}
-                    </SelectContent>
-                  </Select>
-                  {availableSecondLessons.length === 0 && (
-                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                      Alle nachfolgenden Lektionen für {subjects.find(s => s.id === selectedSubject)?.name} sind bereits geplant oder nicht verfügbar.
-                    </p>
-                  )}
-                </div>
-              )}
-
-              {!addSecondLesson && (
-                <p className="text-sm text-slate-500 dark:text-slate-400">
-                  Die aktuelle Lektion wird einfach als Doppellektion (90 Min) geführt, ohne zusätzliche Inhalte.
-                </p>
-              )}
-            </div>
-          )}
+            )}
+          </div>
 
           {/* Allerlei secondary subjects section */}
           {isAllerlei && (
@@ -1344,7 +1284,6 @@ export default function LessonModal({
                   topicMaterials={topicMaterials}
                   topicColor={topicColor}
                   isLast={index === primarySteps.length - 1}
-                  isUnifiedDouble={isUnifiedDouble}
                   lessonDuration={settings?.lessonDuration || 45}
                 />
               ))}
@@ -1369,7 +1308,7 @@ export default function LessonModal({
           </div>
 
           {/* Second lesson steps section */}
-          {addSecondLesson && !isUnifiedDouble && (
+          {addSecondLesson && (
             <div className="space-y-4">
               <div className="flex items-center gap-2">
                 <Label className="font-semibold text-slate-900 dark:text-white">Zweite Lektion Schritte</Label>
@@ -1392,7 +1331,6 @@ export default function LessonModal({
                     topicMaterials={topicMaterials}
                     topicColor={topicColor}
                     isLast={true}
-                    isUnifiedDouble={isUnifiedDouble}
                     lessonDuration={settings?.lessonDuration || 45}
                   />
                 ) : (
@@ -1405,7 +1343,6 @@ export default function LessonModal({
                       topicMaterials={topicMaterials}
                       topicColor={topicColor}
                       isLast={index === secondSteps.length - 1}
-                      isUnifiedDouble={isUnifiedDouble}
                       lessonDuration={settings?.lessonDuration || 45}
                     />
                   ))

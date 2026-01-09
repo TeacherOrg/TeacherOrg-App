@@ -19,7 +19,6 @@ import LessonTemplatePopover from '@/components/lesson-planning/LessonTemplatePo
  * @param {string} [props.subjectId] - Subject ID for template filtering
  * @param {Array} [props.topicMaterials] - Materials from current topic
  * @param {string} [props.topicColor] - Color from current topic
- * @param {boolean} [props.isUnifiedDouble] - Whether unified double mode is active
  * @param {string} [props.buttonLabel] - Custom label for add button
  * @param {boolean} [props.showSaveAsTemplate] - Whether to show save as template button
  * @param {Function} [props.onSaveAsTemplate] - Handler for save as template
@@ -36,7 +35,6 @@ export function StepsSection({
   subjectId,
   topicMaterials = [],
   topicColor = '#3b82f6',
-  isUnifiedDouble = false,
   buttonLabel = 'Schritt hinzufügen',
   showSaveAsTemplate = false,
   onSaveAsTemplate,
@@ -44,7 +42,7 @@ export function StepsSection({
   lessonDuration = 45
 }) {
   return (
-    <div className="space-y-4">
+    <div className="lesson-steps-section space-y-4">
       <div className="flex items-center gap-2">
         <Label className="font-semibold text-slate-900 dark:text-white">
           {label}
@@ -66,7 +64,6 @@ export function StepsSection({
             topicMaterials={topicMaterials}
             topicColor={topicColor}
             isLast={index === steps.length - 1}
-            isUnifiedDouble={isUnifiedDouble}
             lessonDuration={lessonDuration}
           />
         ))}

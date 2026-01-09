@@ -122,12 +122,35 @@ const useDragAndDrop = (lessonsForCurrentWeek, allLessons, allerleiLessons, curr
       let masterYL = availableYearly;
       let slaveYL = null;
 
-      if (availableYearly.second_yearly_lesson_id) {
-        slaveYL = yearlyLessons.find(yl => yl.id === availableYearly.second_yearly_lesson_id);
-        if (slaveYL && Number(slaveYL.lesson_number) < Number(availableYearly.lesson_number)) {
-          // Tausche
-          masterYL = slaveYL;
-          slaveYL = availableYearly;
+      // Check if this is part of a double lesson (either as master or slave)
+      // WICHTIG: Prüfe ALLE drei Bedingungen, nicht nur is_double_lesson!
+      const isPartOfDoubleLesson = availableYearly.is_double_lesson ||
+                                    availableYearly.second_yearly_lesson_id ||
+                                    yearlyLessons.some(yl => yl.second_yearly_lesson_id === availableYearly.id);
+
+      if (isPartOfDoubleLesson) {
+        // Fall 1: availableYearly hat second_yearly_lesson_id
+        if (availableYearly.second_yearly_lesson_id) {
+          slaveYL = yearlyLessons.find(yl => yl.id === availableYearly.second_yearly_lesson_id);
+
+          // Wenn Slave gefunden wurde und eine niedrigere lesson_number hat: tauschen
+          if (slaveYL && Number(slaveYL.lesson_number) < Number(availableYearly.lesson_number)) {
+            // Die niedrigere lesson_number ist immer Master
+            [masterYL, slaveYL] = [slaveYL, availableYearly];
+          }
+        }
+        // Fall 2: Eine andere YearlyLesson referenziert availableYearly als Slave
+        else {
+          const potentialMaster = yearlyLessons.find(yl =>
+            yl.second_yearly_lesson_id === availableYearly.id &&
+            yl.subject === availableYearly.subject &&
+            yl.week_number === availableYearly.week_number
+          );
+
+          if (potentialMaster && Number(potentialMaster.lesson_number) < Number(availableYearly.lesson_number)) {
+            masterYL = potentialMaster;
+            slaveYL = availableYearly;
+          }
         }
       }
 

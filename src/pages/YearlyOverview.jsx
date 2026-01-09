@@ -924,15 +924,19 @@ function InnerYearlyOverviewPage() {
 
       if (primaryId) {
         // Update bestehende Lektion
+        // Remove secondSteps and second_name from cleanLessonData (these belong to the slave lesson)
+        const { secondSteps, second_name, ...primaryLessonData } = cleanLessonData;
+
         const updatePayload = {
-          ...cleanLessonData,
-          steps: cleanLessonData.steps,
+          ...primaryLessonData,
+          steps: primaryLessonData.steps,
           subject: originalLesson.subject,
           class_id: originalLesson.class_id || activeClassId,
           user_id: originalLesson.user_id || pb.authStore.model?.id,
-          name: cleanLessonData.name || originalLesson.name,
+          name: primaryLessonData.name || originalLesson.name,
           school_year: originalLesson.school_year || currentYear
         };
+
         await YearlyLesson.update(primaryId, updatePayload);
         optimisticUpdate({ id: primaryId, ...updatePayload }, false);
 
@@ -1060,7 +1064,7 @@ function InnerYearlyOverviewPage() {
 
       // Invalidiere Query und warte auf Refetch um TopicLessonsModal zu aktualisieren
       await queryClientLocal.refetchQueries({
-        queryKey: ['allYearlyLessons'],
+        queryKey: ['allYearlyLessons', userId, currentYear],
         type: 'active' // Nur aktive Queries neu laden
       });
 
@@ -1478,7 +1482,7 @@ function InnerYearlyOverviewPage() {
         subject={selectedTopicInfo?.subject}
         week={selectedTopicInfo?.week}
         activeTopicId={activeTopicId}
-        subjectColor={subjects.find(s => s.name === selectedTopicInfo?.subject)?.color}
+        subjectColor={subjects.find(s => s.id === selectedTopicInfo?.subject)?.color}
         allYearlyLessons={allYearlyLessons}
         onSaveLesson={handleSaveLesson}
         onDeleteLesson={handleDeleteLesson}

@@ -32,7 +32,6 @@ export const useDoubleLessonLogic = ({
   // State
   const [isDoubleLesson, setIsDoubleLesson] = useState(false);
   const [addSecondLesson, setAddSecondLesson] = useState(false);
-  const [isUnifiedDouble, setIsUnifiedDouble] = useState(false);
   const [secondYearlyLessonId, setSecondYearlyLessonId] = useState('');
   const [secondName, setSecondName] = useState('');
 
@@ -46,15 +45,14 @@ export const useDoubleLessonLogic = ({
     setIsDoubleLesson(isDouble);
     setSecondYearlyLessonId(currentLesson.second_yearly_lesson_id || '');
 
-    // Determine mode based on settings and lesson state
+    // Determine mode based on lesson state
+    // In fixed mode (template), no second lesson editing
+    // In flexible mode, always use separate second lesson linking
     if (isTemplateDoubleLesson) {
-      setIsUnifiedDouble(true);
       setAddSecondLesson(false);
-    } else if (hasSecondLesson) {
-      setIsUnifiedDouble(false);
+    } else if (hasSecondLesson || isDouble) {
       setAddSecondLesson(true);
     } else {
-      setIsUnifiedDouble(false);
       setAddSecondLesson(false);
     }
 
@@ -74,7 +72,7 @@ export const useDoubleLessonLogic = ({
 
   // Find available second lessons (next lesson number, not already scheduled)
   const availableSecondLessons = useMemo(() => {
-    if (!currentLesson?.subject || !isDoubleLesson || isUnifiedDouble) return [];
+    if (!currentLesson?.subject || !isDoubleLesson) return [];
 
     const currentNum = Number(currentLesson.lesson_number);
     const subjectLessons = allYearlyLessons
@@ -85,7 +83,7 @@ export const useDoubleLessonLogic = ({
       );
 
     return subjectLessons;
-  }, [currentLesson, allYearlyLessons, isDoubleLesson, isUnifiedDouble]);
+  }, [currentLesson, allYearlyLessons, isDoubleLesson]);
 
   // Handle double lesson toggle
   const handleDoubleLessonToggle = useCallback((checked) => {
@@ -111,7 +109,6 @@ export const useDoubleLessonLogic = ({
     } else {
       // Reset all double lesson state
       setAddSecondLesson(false);
-      setIsUnifiedDouble(false);
       setSecondYearlyLessonId('');
       setSecondName('');
       if (setSecondSteps) {
@@ -144,21 +141,6 @@ export const useDoubleLessonLogic = ({
       }
     }
   }, [availableSecondLessons, currentLesson, setSecondSteps]);
-
-  // Handle unified double toggle
-  const handleUnifiedDoubleToggle = useCallback((checked, primarySteps, setPrimarySteps) => {
-    setIsUnifiedDouble(checked);
-
-    if (checked && setSecondSteps && setPrimarySteps) {
-      // Merge second steps into primary
-      setPrimarySteps(prev => {
-        const currentSecondSteps = []; // This should come from parent component
-        return [...prev, ...currentSecondSteps.map(s => ({ ...s, id: generateId() }))];
-      });
-      setSecondSteps([]);
-      setAddSecondLesson(false);
-    }
-  }, [setSecondSteps]);
 
   // Handle second lesson selection
   const handleSecondLessonSelect = useCallback((yearlyLessonId) => {
@@ -194,16 +176,15 @@ export const useDoubleLessonLogic = ({
   const getDoubleLessonFormData = useCallback(() => {
     return {
       is_double_lesson: isDoubleLesson,
-      second_yearly_lesson_id: isUnifiedDouble || !addSecondLesson ? null : secondYearlyLessonId,
+      second_yearly_lesson_id: addSecondLesson ? secondYearlyLessonId : null,
       second_name: secondName
     };
-  }, [isDoubleLesson, isUnifiedDouble, addSecondLesson, secondYearlyLessonId, secondName]);
+  }, [isDoubleLesson, addSecondLesson, secondYearlyLessonId, secondName]);
 
   return {
     // State
     isDoubleLesson,
     addSecondLesson,
-    isUnifiedDouble,
     secondYearlyLessonId,
     secondName,
     availableSecondLessons,
@@ -211,14 +192,12 @@ export const useDoubleLessonLogic = ({
     // Setters (for external control if needed)
     setIsDoubleLesson,
     setAddSecondLesson,
-    setIsUnifiedDouble,
     setSecondYearlyLessonId,
     setSecondName,
 
     // Handlers
     handleDoubleLessonToggle,
     handleAddSecondLessonToggle,
-    handleUnifiedDoubleToggle,
     handleSecondLessonSelect,
     handleSecondNameChange,
 

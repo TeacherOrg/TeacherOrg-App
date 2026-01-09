@@ -27,6 +27,7 @@ import { toast } from "sonner";
 import { LehrplanKompetenz as CurriculumCompetency } from '@/api/entities';
 import { deleteTopicWithLessons } from '@/api/topicService';
 import { useSubjectResolver } from './hooks';
+import { emitTourEvent, TOUR_EVENTS } from '@/components/onboarding/tours/tourEvents';
 
 const PRESET_COLORS = [
   '#ef4444', '#f97316', '#eab308', '#84cc16', '#22c55e', '#10b981',
@@ -215,6 +216,13 @@ export default function TopicModal({ isOpen, onClose, onSave, onDelete, topic, s
 
     loadSubjectCompetencies();
   }, [isOpen, effectiveSubject?.name]);
+
+  // Emit tour event when modal opens
+  useEffect(() => {
+    if (isOpen) {
+      emitTourEvent(TOUR_EVENTS.TOPIC_MODAL_OPENED);
+    }
+  }, [isOpen]);
 
   // --- INITIAL LOAD ---
   useEffect(() => {
@@ -535,6 +543,10 @@ export default function TopicModal({ isOpen, onClose, onSave, onDelete, topic, s
     console.log('TopicModal sending payload:', payload);
 
     onSave(payload);
+
+    // Emit tour event when topic is created/updated
+    emitTourEvent(TOUR_EVENTS.TOPIC_CREATED, { topicId: payload.id || 'new' });
+
     localStorage.removeItem('draftTopic');
     onClose();
   };
@@ -675,7 +687,7 @@ export default function TopicModal({ isOpen, onClose, onSave, onDelete, topic, s
                       onChange={(e) => setFormData({...formData, name: e.target.value})}
                       placeholder="z.B. Quadratische Gleichungen"
                       required
-                      className="bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 text-sm md:text-base py-2 md:py-3"
+                      className="topic-name-input bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 text-sm md:text-base py-2 md:py-3"
                     />
                   </div>
                   

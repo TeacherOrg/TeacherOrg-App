@@ -26,7 +26,10 @@ const UpdateModal = ({ isOpen, onClose, version }) => {
             { text: 'Ämtli sind nun als Erledigt markierbar und zählen zu Erfolg', type: 'fixed' },
             { text: 'Einstellungsmenü überarbeitet', type: 'fixed' },
             { text: 'Löschfunktionen korrigiert', type: 'fixed' },
+            { text: 'Schülersortierung Vorname / Nachname', type: 'fixed' },
             { text: 'Technische Updates und Upgrades', type: 'mech' },
+            { text: 'Sicherer, besseres Login + Stundenplan lädt direkt. ', type: 'mech' },
+
           ],
         },
         {

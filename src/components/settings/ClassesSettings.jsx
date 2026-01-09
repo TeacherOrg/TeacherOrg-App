@@ -4,7 +4,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { Plus, Trash2, ChevronDown, ChevronUp, FileText, Loader2, UserPlus, KeyRound, Printer, Mail, Check, X } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Plus, Trash2, ChevronDown, ChevronUp, FileText, Loader2, UserPlus, KeyRound, Printer, Mail, Check, X, Users } from 'lucide-react';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import pb from '@/api/pb';
 import toast from 'react-hot-toast';
@@ -37,7 +38,7 @@ export default function ClassesSettings({ classes, refreshData, setActiveClassId
   const [newClassName, setNewClassName] = useState('');
   const [activeClassId, setLocalActiveClassId] = useState(classes.length > 0 ? classes[0].id : null);
   const [students, setStudents] = useState([]);
-  const [sortPreference] = useStudentSortPreference();
+  const [sortPreference, setStudentSortPreference] = useStudentSortPreference();
 
   // Sort students based on user preference
   const sortedStudents = useMemo(() => sortStudents(students, sortPreference), [students, sortPreference]);
@@ -697,7 +698,31 @@ export default function ClassesSettings({ classes, refreshData, setActiveClassId
   return (
     <div className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">
       <h3 className="text-xl font-bold mb-6 text-slate-900 dark:text-white">Klassenverwaltung</h3>
-      
+
+      {/* Global Student Sort Control */}
+      <div className="mb-6 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center gap-2">
+            <Users className="w-5 h-5 text-purple-600 dark:text-purple-400" />
+            <Label className="text-base font-semibold text-slate-900 dark:text-white">
+              Schülersortierung (Global)
+            </Label>
+          </div>
+          <Select value={sortPreference} onValueChange={setStudentSortPreference}>
+            <SelectTrigger className="w-48 bg-white dark:bg-slate-700 border-slate-300 dark:border-slate-600">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="firstName">Vorname (A-Z)</SelectItem>
+              <SelectItem value="lastName">Nachname (A-Z)</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <p className="text-xs text-slate-600 dark:text-slate-400 mt-2">
+          Diese Einstellung gilt für alle Schülerlisten in der gesamten App
+        </p>
+      </div>
+
       {/* Classes arranged vertically */}
       <div className="space-y-4">
         {classes.length === 0 ? (
