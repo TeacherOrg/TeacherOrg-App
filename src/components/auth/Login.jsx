@@ -1,11 +1,12 @@
 // src/components/auth/Login.jsx
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import pb from '@/api/pb';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import auditLogger from '@/services/auditLogger';
 import {
   Dialog,
   DialogContent,
@@ -16,7 +17,10 @@ import {
 
 export default function Login() {
   const navigate = useNavigate();
-  const [email, setEmail] = useState('');
+  const [searchParams] = useSearchParams();
+
+  // Pre-fill email from URL parameter (for QR-code login)
+  const [email, setEmail] = useState(searchParams.get('email') || '');
   const [password, setPassword] = useState('');
   const [username, setUsername] = useState('');
   const [name, setName] = useState(''); // Vollständiger Name für Anzeige
@@ -62,10 +66,18 @@ export default function Login() {
         setMessage('Registrierung erfolgreich! Bitte prüfe deine E-Mail zur Bestätigung.');
       } else {
         const authData = await pb.collection('users').authWithPassword(email, password);
+
+        // Audit-Logging: Erfolgreicher Login
+        await auditLogger.logLogin(authData.record.id, authData.record.email);
+
         const defaultPage = authData.record.default_start_page || 'Timetable';
         navigate(`/${defaultPage}`, { replace: true });
       }
     } catch (err) {
+      // Audit-Logging: Fehlgeschlagener Login
+      if (!isRegister) {
+        await auditLogger.logFailedLogin(email, err.message);
+      }
       setError(err.message || JSON.stringify(err.data));
     } finally {
       setLoading(false);
@@ -194,6 +206,18 @@ export default function Login() {
         >
           {isRegister ? '→ Zur Anmeldung' : 'Neu hier? Jetzt registrieren'}
         </Button>
+
+        {/* Link zur Datenschutzerklärung */}
+        <div className="mt-6 text-center">
+          <a
+            href="/privacy"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-sm text-slate-500 hover:text-slate-400 transition-colors"
+          >
+            Datenschutzerklärung
+          </a>
+        </div>
       </div>
 
       {/* ----------------- Passwort-Reset Dialog ----------------- */}

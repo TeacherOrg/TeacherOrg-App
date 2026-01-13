@@ -25,6 +25,7 @@ import useAllYearlyLessons from '@/hooks/useAllYearlyLessons';
 import { syncYearlyLessonToWeekly } from '@/hooks/useYearlyLessonSync';
 import { safeSortByName } from '@/utils/safeData';
 import { getCurrentSchoolYear } from '@/utils/weekYearUtils';
+import { emitTourEvent, TOUR_EVENTS } from '@/components/onboarding/tours/tourEvents';
 
 const ACADEMIC_WEEKS = 52;
 
@@ -391,8 +392,14 @@ function InnerYearlyOverviewPage() {
     queryClientLocal.invalidateQueries({ queryKey: ['topics'], refetchType: 'all' });
     queryClientLocal.invalidateQueries({ queryKey: ['yearlyLessons'], refetchType: 'all' });
 
-    navigate(-1);
+    // Navigate to Topics with modal open and lessons tab selected
+    navigate(`/Topics?topic=${assignTopicId}&openModal=true&modalTab=lessons`);
     toast.success("Lektionen erfolgreich zugewiesen!");
+
+    // Emit tour event after navigation
+    setTimeout(() => {
+      emitTourEvent(TOUR_EVENTS.RETURNED_TO_TOPIC_LESSONS, { topicId: assignTopicId });
+    }, 500);
   };
 
   const queryClientLocal = useQueryClient();
@@ -513,6 +520,7 @@ function InnerYearlyOverviewPage() {
   const handleViewChange = (view) => {
     setCurrentView(view);
     if (view === 'Woche') {
+      emitTourEvent(TOUR_EVENTS.VIEW_CHANGED_TO_WEEK);
       navigate(createPageUrl('Timetable'));
     } else if (view === 'Tag') {
       navigate('/Timetable?view=Tag');
@@ -1180,7 +1188,7 @@ function InnerYearlyOverviewPage() {
                 variant={currentView === view ? 'default' : 'ghost'}
                 size="sm"
                 onClick={() => handleViewChange(view)}
-                className={`px-4 py-2 rounded-lg transition-all duration-200 ${currentView === view ? 'bg-blue-600 text-white hover:bg-blue-700 shadow-inner' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 hover:shadow-md'}`}
+                className={`view-button-${view.toLowerCase()} px-4 py-2 rounded-lg transition-all duration-200 ${currentView === view ? 'bg-blue-600 text-white hover:bg-blue-700 shadow-inner' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 hover:shadow-md'}`}
               >
                 {view}
               </Button>

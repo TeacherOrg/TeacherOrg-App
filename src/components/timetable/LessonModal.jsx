@@ -1315,7 +1315,7 @@ export default function LessonModal({
                 <LessonTemplatePopover
                   subjectId={selectedSubject}
                   onInsert={(steps) => {
-                    const withNewIds = steps.map(s => ({ ...s, id: generateId() }));
+                    const withNewIds = steps.map(s => ({ ...s, id: `second-${generateId()}` }));
                     setSecondSteps(prev => [...prev, ...withNewIds]);
                   }}
                   currentSteps={secondSteps}

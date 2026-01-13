@@ -7,6 +7,7 @@ import { generateId } from '@/components/lesson-planning/utils';
 import { useStepManagement, useTemplateSaveModal } from '@/components/lesson-planning/hooks';
 import TemplateSaveModal from '@/components/lesson-planning/TemplateSaveModal';
 import { emitTourEvent, TOUR_EVENTS } from '@/components/onboarding/tours/tourEvents';
+import { useTour } from '@/components/onboarding/TourProvider';
 
 // Shared components
 import {
@@ -111,6 +112,9 @@ export default function LessonModal({
     openTemplateSave,
     closeTemplateSave
   } = useTemplateSaveModal();
+
+  // Tour-State für Prevent-Close während Tour
+  const { activeTour } = useTour();
 
   // Local state
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -419,6 +423,18 @@ export default function LessonModal({
       <DialogContent
         className="max-w-4xl border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 max-h-[80vh] overflow-y-auto"
         style={{ borderColor: modalColor + '40' }}
+        onInteractOutside={(e) => {
+          // Prevent closing during tour
+          if (activeTour) {
+            e.preventDefault();
+          }
+        }}
+        onEscapeKeyDown={(e) => {
+          // Prevent closing during tour
+          if (activeTour) {
+            e.preventDefault();
+          }
+        }}
       >
         <LessonModalHeader
           title={modalTitle}
@@ -524,22 +540,24 @@ export default function LessonModal({
           />
 
           {formData.is_double_lesson && addSecondLesson && (
-            <StepsSection
-              label="Zweite Lektion – Schritte"
-              steps={secondSteps}
-              onAddStep={handleAddSecondStep}
-              onUpdateStep={handleUpdateSecondStep}
-              onRemoveStep={handleRemoveSecondStep}
-              onInsertTemplate={(steps) => {
-                const withNewIds = steps.map(s => ({ ...s, id: generateId() }));
-                setSecondSteps(prev => [...prev, ...withNewIds]);
-              }}
-              subjectId={subjectId}
-              topicMaterials={currentTopic?.materials || []}
-              topicColor={topicColor}
-              buttonLabel="Schritt hinzufügen (2. Lektion)"
-              lessonDuration={settings?.lessonDuration || 45}
-            />
+            <div className="second-lesson-steps-section">
+              <StepsSection
+                label="Zweite Lektion – Schritte"
+                steps={secondSteps}
+                onAddStep={handleAddSecondStep}
+                onUpdateStep={handleUpdateSecondStep}
+                onRemoveStep={handleRemoveSecondStep}
+                onInsertTemplate={(steps) => {
+                  const withNewIds = steps.map(s => ({ ...s, id: generateId() }));
+                  setSecondSteps(prev => [...prev, ...withNewIds]);
+                }}
+                subjectId={subjectId}
+                topicMaterials={currentTopic?.materials || []}
+                topicColor={topicColor}
+                buttonLabel="Schritt hinzufügen (2. Lektion)"
+                lessonDuration={settings?.lessonDuration || 45}
+              />
+            </div>
           )}
 
           <LessonModalFooter

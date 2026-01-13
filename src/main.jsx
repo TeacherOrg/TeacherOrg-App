@@ -7,9 +7,15 @@ import { BrowserRouter } from 'react-router-dom';
 import { Profiler } from 'react';
 
 // TanStack React Query
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider } from '@tanstack/react-query';
 // Optional: Devtools – super hilfreich beim Debuggen von Queries, Refetch, Cache usw.
 // import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
+
+// Display Scaling für 4K-Displays
+import { initializeDisplayScaling } from '@/utils/displayScaling';
+
+// QueryClient (aus separater Datei um zirkuläre Imports zu vermeiden)
+import { queryClient } from '@/lib/queryClient';
 
 // ✅ PERFORMANCE PROFILER
 const enableProfiling = false; // 🔄 false = Logs deaktiviert, true = aktiviert (nur in dev)
@@ -40,16 +46,8 @@ const onRenderCallback = (id, phase, actualDuration, baseDuration, startTime, co
   }
 };
 
-// ✅ GLOBALER QUERYCLIENT (einmalig für die ganze App)
-export const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      staleTime: 1000 * 60 * 5, // 5 Minuten Standard-Cache
-      retry: 1,
-      refetchOnWindowFocus: false, // Optional: vermeidet unnötige Refetches beim Tab-Wechsel
-    },
-  },
-});
+// ✅ Display-Skalierung VOR React-Render initialisieren
+initializeDisplayScaling();
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <Profiler id="RootApp" onRender={onRenderCallback}>

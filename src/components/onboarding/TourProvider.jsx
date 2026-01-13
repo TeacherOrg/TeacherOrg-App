@@ -13,6 +13,7 @@ export function TourProvider({ children }) {
   const [completedTours, setCompletedTours] = useState([]);
   const [skipAllTours, setSkipAllTours] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [droppedDay, setDroppedDay] = useState(null);
 
   // Load from PocketBase on mount
   useEffect(() => {
@@ -64,7 +65,10 @@ export function TourProvider({ children }) {
         'tour_progress.current_tour': tourId,
         'tour_progress.current_step': 0,
         'tour_progress.last_visited': new Date().toISOString()
-      }).catch(err => console.error('[Tour] Error saving tour progress:', err));
+      }).catch(err => {
+        if (err?.message?.includes('autocancelled') || err?.name === 'AbortError') return;
+        console.error('[Tour] Error saving tour progress:', err);
+      });
     }
   }, [skipAllTours, completedTours]);
 
@@ -79,12 +83,21 @@ export function TourProvider({ children }) {
     } else {
       setCurrentStep(nextStepIndex);
 
+      // Emit step change event for components to react
+      const nextStepData = activeTour.steps[nextStepIndex];
+      window.dispatchEvent(new CustomEvent('tour-step-change', {
+        detail: { stepId: nextStepData.id, stepIndex: nextStepIndex }
+      }));
+
       // Save to PocketBase
       const user = pb.authStore.model;
       if (user) {
         pb.collection('users').update(user.id, {
           'tour_progress.current_step': nextStepIndex
-        }).catch(err => console.error('[Tour] Error saving step progress:', err));
+        }).catch(err => {
+          if (err?.message?.includes('autocancelled') || err?.name === 'AbortError') return;
+          console.error('[Tour] Error saving step progress:', err);
+        });
       }
     }
   }, [activeTour, currentStep]);
@@ -99,7 +112,10 @@ export function TourProvider({ children }) {
       if (user) {
         pb.collection('users').update(user.id, {
           'tour_progress.current_step': prevStepIndex
-        }).catch(err => console.error('[Tour] Error saving step progress:', err));
+        }).catch(err => {
+          if (err?.message?.includes('autocancelled') || err?.name === 'AbortError') return;
+          console.error('[Tour] Error saving step progress:', err);
+        });
       }
     }
   }, [currentStep]);
@@ -117,7 +133,10 @@ export function TourProvider({ children }) {
       pb.collection('users').update(user.id, {
         'tour_progress.current_tour': null,
         'tour_progress.current_step': 0
-      }).catch(err => console.error('[Tour] Error clearing tour progress:', err));
+      }).catch(err => {
+        if (err?.message?.includes('autocancelled') || err?.name === 'AbortError') return;
+        console.error('[Tour] Error clearing tour progress:', err);
+      });
     }
   }, [activeTour]);
 
@@ -137,7 +156,10 @@ export function TourProvider({ children }) {
         'tour_preferences.completed_tours': newCompleted,
         'tour_progress.current_tour': null,
         'tour_progress.current_step': 0
-      }).catch(err => console.error('[Tour] Error saving completed tour:', err));
+      }).catch(err => {
+        if (err?.message?.includes('autocancelled') || err?.name === 'AbortError') return;
+        console.error('[Tour] Error saving completed tour:', err);
+      });
     }
   }, [activeTour, completedTours]);
 
@@ -150,10 +172,10 @@ export function TourProvider({ children }) {
       console.log('[Tour] Auto-navigating to:', step.route);
       navigate(step.route);
 
-      // Auto-advance after navigation (small delay for page to load)
+      // Auto-advance after navigation (delay for page to fully render)
       setTimeout(() => {
         nextStep();
-      }, 800);
+      }, 600);
     }
   }, [activeTour, currentStep, navigate, nextStep]);
 
@@ -170,6 +192,11 @@ export function TourProvider({ children }) {
     const cleanup = listenForTourEvent(step.waitForAction, (data) => {
       console.log('[Tour] Action completed:', step.waitForAction, data);
 
+      // Capture dropped day for daily view navigation
+      if (step.waitForAction === 'double-lesson-placed' && data?.day) {
+        setDroppedDay(data.day);
+      }
+
       // Save completed action to progress
       const user = pb.authStore.model;
       if (user) {
@@ -178,13 +205,16 @@ export function TourProvider({ children }) {
             ...(user.tour_progress?.completed_actions || []),
             step.waitForAction
           ]
-        }).catch(err => console.error('[Tour] Error saving completed action:', err));
+        }).catch(err => {
+          if (err?.message?.includes('autocancelled') || err?.name === 'AbortError') return;
+          console.error('[Tour] Error saving completed action:', err);
+        });
       }
 
       // Auto-advance to next step after a short delay
       setTimeout(() => {
         nextStep();
-      }, 500);
+      }, 250);
     });
 
     return cleanup;
@@ -196,6 +226,7 @@ export function TourProvider({ children }) {
     completedTours,
     skipAllTours,
     isLoading,
+    droppedDay,
     startTour,
     nextStep,
     previousStep,

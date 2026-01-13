@@ -36,6 +36,8 @@ import { getCurrentWeek, getCurrentWeekYear, getWeeksInYear, getWeekInfo, genera
 import { isEqual } from 'lodash';
 import { createMixedSubjectGradient } from '@/utils/colorUtils';
 import useAllYearlyLessons from '@/hooks/useAllYearlyLessons';
+import { emitTourEvent, TOUR_EVENTS } from '@/components/onboarding/tours/tourEvents';
+import { useTour } from '@/components/onboarding/TourProvider';
 
 
 
@@ -46,6 +48,7 @@ export default function TimetablePage() {
 function InnerTimetablePage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const { droppedDay } = useTour();
   const allLessons = useLessonStore((state) => state.allLessons);
   const allerleiLessons = useLessonStore((state) => state.allerleiLessons);
   const {
@@ -106,7 +109,12 @@ function InnerTimetablePage() {
   // Call useTimetableData with currentYear and currentWeek
   const { data, isLoading: queryLoading, classes, subjects, settings, holidays, topics, refetch, activeClassId, setActiveClassId } = useTimetableData(currentYear, currentWeek);
 
-  const { allYearlyLessons } = useAllYearlyLessons(currentYear);
+  const { allYearlyLessons, refetch: refetchYearlyLessons } = useAllYearlyLessons(currentYear);
+
+  // Beim Mount: yearlyLessons aktualisieren (fuer den Fall dass in YearlyOverview geaendert)
+  useEffect(() => {
+    refetchYearlyLessons();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const memoizedSubjects = useMemo(() => subjects || [], [subjects]);
   const memoizedTopics = useMemo(() => topics || [], [topics]);
@@ -586,6 +594,15 @@ function InnerTimetablePage() {
       return;
     } else {
       setViewMode('day');
+      // Use droppedDay from tour to set correct date
+      if (droppedDay && weekInfo?.start) {
+        const dayMap = { monday: 0, tuesday: 1, wednesday: 2, thursday: 3, friday: 4 };
+        const dayOffset = dayMap[droppedDay] || 0;
+        const targetDate = new Date(weekInfo.start);
+        targetDate.setDate(targetDate.getDate() + dayOffset);
+        setCurrentDate(targetDate);
+      }
+      emitTourEvent(TOUR_EVENTS.VIEW_CHANGED_TO_DAILY);
     }
   };
 

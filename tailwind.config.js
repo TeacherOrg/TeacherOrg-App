@@ -4,6 +4,11 @@ module.exports = {
     content: ["./index.html", "./src/**/*.{ts,tsx,js,jsx}"],
   theme: {
   	extend: {
+  		screens: {
+  			'3xl': '2560px', // 1440p / 2K
+  			'4xl': '3840px', // 4K UHD
+  			'5xl': '5120px', // 5K
+  		},
   		borderRadius: {
   			lg: 'var(--radius)',
   			md: 'calc(var(--radius) - 2px)',

@@ -9,7 +9,7 @@ export const TOURS = {
         id: 'intro',
         type: 'dialog', // Zeigt Dialog statt Highlight
         title: 'Willkommen! 🎉',
-        content: 'Wir führen dich durch die wichtigsten Funktionen. Du wirst dabei ein Thema erstellen, Lektionen planen und eine Doppellektion anlegen.',
+        content: 'Wir führen dich durch die wichtigsten Funktionen. Du wirst dabei ein Demo-Thema erstellen, Lektionen planen und eine Doppellektion anlegen. Dieses Thema wird nach der Tour automatisch gelöscht.',
         actions: ['next'],
         placement: 'center'
       },
@@ -37,63 +37,98 @@ export const TOURS = {
         modalType: 'TopicModal',
         target: '.topic-name-input',
         title: 'Thema benennen',
-        content: 'Gib deinem Thema einen Namen (z.B. "Bruchrechnung") und wähle eine Farbe. Klicke dann auf Speichern.',
-        placement: 'right',
-        waitForAction: 'topic-created' // Warte bis Topic gespeichert
+        content: 'Gib deinem Thema einen Namen (z.B. "Bruchrechnung") und wähle eine Farbe.',
+        placement: 'right'
+        // Kein waitForAction - Benutzer klickt "Weiter"
       },
       {
-        id: 'topic-lesson-edit',
-        type: 'highlight',
-        target: '.topic-card:first-child',
-        title: 'Super! Thema erstellt',
-        content: 'Klicke jetzt auf dein Thema, um die erste Lektion zu bearbeiten.',
-        placement: 'bottom',
-        waitForAction: 'lesson-modal-opened'
-      },
-      {
-        id: 'lesson-modal-intro',
+        id: 'topic-lessons-tab',
         type: 'modal-highlight',
-        modalType: 'LessonModal',
-        target: '.lesson-title-input',
-        title: 'Lektionsdetails',
-        content: 'Hier kannst du Titel, Schritte, Notizen und Materialien für deine Lektion eintragen. Fülle mindestens den Titel aus.',
-        placement: 'right',
-        waitForAction: 'lesson-saved'
+        modalType: 'TopicModal',
+        target: '.lessons-tab-trigger',
+        title: 'Lektionen zuweisen',
+        content: 'Klicke auf den Lektionen-Tab, um Lektionen zu diesem Thema hinzuzufügen.',
+        placement: 'bottom',
+        offset: { y: 10 },
+        waitForAction: 'tab-lessons-clicked'
+      },
+      {
+        id: 'topic-assign-lessons-btn',
+        type: 'modal-highlight',
+        modalType: 'TopicModal',
+        target: '.assign-lessons-button',
+        title: 'In Jahresübersicht zuweisen',
+        content: 'Klicke hier, um Lektionen in der Jahresübersicht diesem Thema zuzuweisen.',
+        placement: 'top',
+        waitForAction: 'navigate-to-yearly-assign'
       },
 
-      // JAHRESANSICHT (Navigate to /YearlyOverview)
-      {
-        id: 'navigate-to-yearly',
-        type: 'navigate',
-        route: '/YearlyOverview',
-        title: 'Jahresplanung',
-        content: 'Jetzt gehen wir zur Jahresansicht, um eine zweite Lektion zu planen.',
-      },
+      // JAHRESANSICHT (Button navigiert bereits mit Assign-Modus Parametern)
       {
         id: 'yearly-grid-intro',
         type: 'highlight',
         target: '.yearly-grid-container',
-        title: 'Jahresansicht',
-        content: 'Hier siehst du alle 52 Wochen. Jede Zelle ist eine Woche für ein bestimmtes Fach.',
-        placement: 'center'
+        title: 'Lektionen zuweisen',
+        content: 'Du bist jetzt im Zuweisungsmodus. Klicke auf zwei leere Zellen, um sie deinem Thema zuzuweisen. Klicke dann auf "Zuweisen & Zurück".',
+        placement: 'right',
+        waitForAction: 'returned-to-topic-lessons'
+      },
+
+      // ZURÜCK ZUM TOPICMODAL (nach Zuweisung)
+      {
+        id: 'returned-to-lessons-tab',
+        type: 'modal-highlight',
+        modalType: 'TopicModal',
+        target: '.lesson-card',
+        title: 'Deine zugewiesenen Lektionen',
+        content: 'Hier siehst du die Lektionen, die du soeben zugewiesen hast. Klicke auf eine Lektion, um sie zu bearbeiten.',
+        placement: 'right',
+        waitForAction: 'lesson-clicked'
       },
       {
-        id: 'click-week-cell',
-        type: 'highlight',
-        target: '.week-cell:not(.has-lesson)', // Erste leere Zelle
-        title: 'Lektion hinzufügen',
-        content: 'Klicke auf eine leere Zelle, um eine zweite Lektion zu erstellen.',
-        placement: 'bottom',
-        waitForAction: 'lesson-modal-opened'
-      },
-      {
-        id: 'lesson-modal-yearly',
+        id: 'lesson-modal-steps',
         type: 'modal-highlight',
         modalType: 'LessonModal',
         target: '.lesson-steps-section',
-        title: 'Lektionsschritte',
-        content: 'Du kannst hier auch Schritte für den Unterricht definieren (z.B. "Einführung 10min", "Gruppenarbeit 20min").',
-        placement: 'left'
+        title: 'Arbeitsschritt hinzufügen',
+        content: 'Füge einen Arbeitsschritt hinzu. Du kannst Zeit, Arbeitsform, Arbeitsschritt und Material definieren.',
+        placement: 'right'
+      },
+      {
+        id: 'save-close-first-lesson',
+        type: 'modal-highlight',
+        modalType: 'LessonModal',
+        target: '.lesson-save-button',
+        title: 'Lektion speichern',
+        content: 'Speichere die Lektion mit den Schritten. Danach navigieren wir zur Jahresansicht für die zweite Lektion.',
+        placement: 'top',
+        waitForAction: 'lesson-saved'
+      },
+      {
+        id: 'navigate-to-yearly-for-double',
+        type: 'navigate',
+        route: '/yearlyoverview',
+        title: 'Zur Jahresansicht',
+        content: 'Navigiere zur Jahresansicht. Dort findest du deine Lektionen in den Themenzellen.'
+      },
+      {
+        id: 'yearly-topic-cell',
+        type: 'highlight',
+        target: '.yearly-topic-cell',
+        title: 'Deine Themenlektionen',
+        content: 'Hier siehst du deine Themenlektionen in der Jahresansicht. Auch hier können die Lektionen bearbeitet werden. Klicke darauf, um die Lektionen dieser Woche zu bearbeiten - wir machen die zwei Lektionen zu einer Doppellektion.',
+        placement: 'bottom',
+        waitForAction: 'topic-lessons-modal-opened'
+      },
+      {
+        id: 'topic-lessons-first-lesson',
+        type: 'modal-highlight',
+        modalType: 'TopicLessonsModal',
+        target: '.topic-lesson-cell.first-lesson',
+        title: 'Erste Lektion',
+        content: 'Klicke auf die erste Lektion, um sie zu bearbeiten und als Doppellektion zu markieren.',
+        placement: 'right',
+        waitForAction: 'lesson-modal-opened'
       },
       {
         id: 'double-lesson-toggle',
@@ -101,42 +136,91 @@ export const TOURS = {
         modalType: 'LessonModal',
         target: '.double-lesson-toggle',
         title: 'Doppellektion',
-        content: 'Aktiviere diesen Toggle, um eine 90-minütige Doppellektion zu erstellen. Speichere dann die Lektion.',
-        placement: 'right',
+        content: 'Aktiviere diesen Toggle, um diese Lektion als 90-minütige Doppellektion zu markieren.',
+        placement: 'bottom',
+        waitForAction: 'double-lesson-toggled'
+      },
+      {
+        id: 'steps-edit-info',
+        type: 'modal-highlight',
+        modalType: 'LessonModal',
+        target: '.lesson-steps-section',
+        title: 'Erste Lektion – Schritte',
+        content: 'Hier sind die Schritte der ersten Lektion der Doppellektion.',
+        placement: 'right'
+      },
+      {
+        id: 'second-steps-info',
+        type: 'modal-highlight',
+        modalType: 'LessonModal',
+        target: '.second-lesson-steps-section',
+        title: 'Zweite Lektion – Schritte',
+        content: 'Und hier die Schritte der zweiten Lektion. Du kannst beide unabhängig bearbeiten.',
+        placement: 'right'
+      },
+      {
+        id: 'toggles-info',
+        type: 'modal-highlight',
+        modalType: 'LessonModal',
+        target: '.lesson-toggles-row',
+        title: 'Weitere Optionen',
+        content: 'Mit "Prüfung" wird ein (!) Symbol angezeigt. "Halbklasse"-Lektionen können im Stundenplan zwei Mal geplant werden (werden kopiert).',
+        placement: 'bottom'
+      },
+      {
+        id: 'lesson-title-info',
+        type: 'modal-highlight',
+        modalType: 'LessonModal',
+        target: '.lesson-title-input',
+        title: 'Lektionstitel',
+        content: 'Gib deiner Lektion einen aussagekräftigen Titel für bessere Übersicht.',
+        placement: 'bottom'
+      },
+      {
+        id: 'save-template-hint',
+        type: 'modal-highlight',
+        modalType: 'LessonModal',
+        target: '.save-template-button',
+        title: 'Tipp: Vorlage speichern',
+        content: 'Du kannst deine Schritte als Vorlage speichern und später wiederverwenden.',
+        placement: 'left',
+        optional: true
+      },
+      {
+        id: 'save-and-weekly',
+        type: 'modal-highlight',
+        modalType: 'LessonModal',
+        target: '.lesson-save-button',
+        title: 'Speichern',
+        content: 'Speichere die Doppellektion.',
+        placement: 'top',
         waitForAction: 'lesson-saved'
       },
       {
-        id: 'topic-manager-highlight',
+        id: 'week-view-button',
         type: 'highlight',
-        target: '.topic-manager-sidebar',
-        title: 'Themen-Manager',
-        content: 'Hier kannst du Themen auswählen und dann mehrere Zellen auf einmal zuweisen.',
-        placement: 'left'
+        target: '.view-button-woche',
+        title: 'Zur Wochenansicht',
+        content: 'Klicke auf "Woche", um zur Wochenansicht zu wechseln. Dort siehst du deine Doppellektion im Stundenplan.',
+        placement: 'bottom',
+        waitForAction: 'view-changed-to-week'
       },
 
-      // WOCHENANSICHT (Navigate to /Timetable)
+      // WOCHENANSICHT (User klickt auf Woche-Button)
       {
-        id: 'navigate-to-timetable',
-        type: 'navigate',
-        route: '/Timetable',
+        id: 'welcome-to-timetable',
+        type: 'dialog',
         title: 'Wochenplanung',
-        content: 'Jetzt schauen wir uns den wöchentlichen Stundenplan an.',
-      },
-      {
-        id: 'lesson-pool',
-        type: 'highlight',
-        target: '.lesson-pool-container',
-        title: 'Lektionenpool',
-        content: 'Hier erscheinen alle Lektionen, die du in der Jahresansicht erstellt hast.',
-        placement: 'right'
+        content: 'Willkommen in der Wochenansicht! Hier kannst du Lektionen aus dem Pool in den Stundenplan ziehen.',
+        placement: 'center'
       },
       {
         id: 'drag-lessons',
         type: 'highlight',
-        target: '.timetable-grid',
-        title: 'Lektionen platzieren',
-        content: 'Ziehe die Doppellektion in den Stundenplan. Sie belegt automatisch zwei Zeitslots (90 Minuten).',
-        placement: 'center',
+        target: '.timetable-pool-container',
+        title: 'Lektionenpool',
+        content: 'Hier siehst du alle erstellten Lektionen. Ziehe eine Lektion aus dem Pool in den Stundenplan. Doppellektionen belegen automatisch zwei Slots.',
+        placement: 'bottom',
         waitForAction: 'double-lesson-placed'
       },
       {
@@ -144,43 +228,62 @@ export const TOURS = {
         type: 'highlight',
         target: '.timetable-cell.is-double',
         title: 'Doppellektion im Stundenplan',
-        content: 'Siehst du? Die Doppellektion belegt zwei aufeinanderfolgende Slots. Perfekt für längere Unterrichtseinheiten!',
+        content: 'Deine Doppellektion ist jetzt eingeplant und belegt zwei Slots. Du kannst Lektionen jederzeit per Drag & Drop im Stundenplan verschieben oder in den Pool zurückziehen.',
         placement: 'bottom',
         optional: true
       },
       {
         id: 'allerlei-hint',
         type: 'dialog',
-        title: 'Tipp: Allerlei-Lektionen 💡',
+        title: 'Tipp: Allerlei-Lektionen 🌈',
         content: 'Du kannst auch Lektionen verschiedener Fächer kombinieren: Halte Alt, ziehe eine Lektion auf eine andere. Das erstellt eine "Allerlei-Lektion" mit gemischten Fächern. Probiere es später aus!',
         placement: 'center',
         optional: true
       },
+      {
+        id: 'weekly-complete',
+        type: 'dialog',
+        title: 'Wochenansicht verstanden!',
+        content: 'Perfekt! Du hast gelernt, wie du Lektionen aus dem Pool in den Stundenplan ziehst. Lass uns nun kurz die Tagesansicht ansehen.',
+        placement: 'center'
+      },
 
-      // TAGESANSICHT (Navigate to /Timetable?view=Tag)
+      // TAGESANSICHT (User klickt auf Tag-Button)
       {
-        id: 'navigate-to-daily',
-        type: 'navigate',
-        route: '/Timetable?view=Tag',
-        title: 'Tagesansicht',
-        content: 'Zum Schluss schauen wir uns die Tagesansicht an - deine Ansicht für den Unterricht.',
+        id: 'daily-view-button',
+        type: 'highlight',
+        target: '.view-button-tag',
+        title: 'Zur Tagesansicht',
+        content: 'Klicke auf "Tag", um die Tagesansicht zu öffnen - deine Ansicht für den Unterricht.',
+        placement: 'bottom',
+        waitForAction: 'view-changed-to-daily'
+      },
+
+      // TAGESANSICHT - Lektionsübersicht
+      {
+        id: 'daily-lesson-sequence',
+        type: 'highlight',
+        target: '.lesson-overview-panel',
+        title: 'Lektionsabfolge',
+        content: 'Hier siehst du die Lektionen des Tages in der geplanten Reihenfolge.',
+        placement: 'right',
+        waitForAction: 'daily-lesson-clicked'
       },
       {
-        id: 'daily-view-intro',
+        id: 'daily-detail-view',
         type: 'highlight',
-        target: '.daily-view-current-lesson',
-        title: 'Unterrichtsansicht',
-        content: 'Hier siehst du die aktuell laufende Lektion mit Live-Timer und Fortschrittsanzeige.',
-        placement: 'top',
-        optional: true
-      },
-      {
-        id: 'lesson-steps-daily',
-        type: 'highlight',
-        target: '.lesson-steps-list',
-        title: 'Lektionsschritte abarbeiten',
-        content: 'Im Unterricht arbeitest du Schritt für Schritt deine Lektion ab und kannst Schritte abhaken.',
+        target: '.lesson-detail-panel',
+        title: 'Lektionsdetails',
+        content: 'Hier siehst du und deine Klasse alle Informationen zur ausgewählten Lektion: Arbeitsschritte, Materialien, Zeit und Arbeitsform.',
         placement: 'left'
+      },
+      {
+        id: 'daily-controls-hint',
+        type: 'highlight',
+        target: '.daily-view-controls',
+        title: 'Praktische Funktionen',
+        content: 'Nutze diese Buttons für: Einstellungen, Ämtli-Zuweisung, Pausentimer und Vollbildmodus.',
+        placement: 'bottom'
       },
 
       // ABSCHLUSS
@@ -188,7 +291,7 @@ export const TOURS = {
         id: 'completion',
         type: 'dialog',
         title: 'Gratuliere! 🎉',
-        content: 'Du kennst jetzt die wichtigsten Funktionen von TeacherOrg! Du kannst jederzeit in den Einstellungen Tours wiederholen oder die Hilfe aufrufen.',
+        content: 'Du hast die Grundlagen gemeistert! Das Demo-Thema wird nun automatisch gelöscht. Du kannst jetzt deine eigenen Themen erstellen.',
         placement: 'center',
         actions: ['finish']
       }

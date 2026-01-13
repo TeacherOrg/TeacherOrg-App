@@ -2,7 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
-import { Calendar, LayoutGrid } from 'lucide-react';
+import { Calendar, LayoutGrid, Monitor, Maximize2 } from 'lucide-react';
+import {
+  calculateScaleFactor,
+  applyDisplayScaling,
+  resetDisplayScaling,
+  SCALING_PRESETS,
+  isLargeClassroomDisplay
+} from '@/utils/displayScaling';
 
 const SliderWithPreview = ({
   id, label, value, min, max, step, onChange,
@@ -98,6 +105,88 @@ export default function SizeSettings({ settings, setSettings }) {
             </div>
 
             <Separator className="bg-slate-200 dark:bg-slate-700" />
+
+            {/* === DISPLAY-SKALIERUNG CARD (4K) === */}
+            <Card className="bg-gradient-to-br from-purple-50 to-blue-50 dark:from-purple-900/20 dark:to-blue-900/20 border-purple-200 dark:border-purple-800 shadow-sm">
+                <CardHeader>
+                    <CardTitle className="flex items-center gap-3 text-slate-900 dark:text-white">
+                        <Monitor className="w-5 h-5 text-purple-600 dark:text-purple-400" />
+                        Display-Skalierung (4K Klassenzimmer)
+                    </CardTitle>
+                    <CardDescription className="text-slate-600 dark:text-slate-400">
+                        Automatische Anpassung für große Bildschirme
+                    </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                    {/* Erkennungs-Info */}
+                    <div className="p-3 bg-white dark:bg-slate-800 rounded-lg border border-purple-200 dark:border-purple-700">
+                        <div className="flex items-start gap-3">
+                            <Maximize2 className="w-5 h-5 text-purple-600 dark:text-purple-400 mt-0.5" />
+                            <div className="flex-1">
+                                <div className="font-medium text-slate-900 dark:text-white">
+                                    Erkannte Auflösung: {window.innerWidth}×{window.innerHeight}
+                                </div>
+                                <div className="text-sm text-slate-600 dark:text-slate-400 mt-1">
+                                    Empfohlene Skalierung: {calculateScaleFactor()}x
+                                    {isLargeClassroomDisplay() && (
+                                        <span className="ml-2 px-2 py-0.5 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-xs rounded-full">
+                                            Großer Display erkannt
+                                        </span>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Preset-Buttons */}
+                    <div className="space-y-3">
+                        <Label className="text-slate-900 dark:text-white font-medium">
+                            Skalierungs-Profil
+                        </Label>
+                        <div className="grid grid-cols-2 gap-2">
+                            {Object.entries(SCALING_PRESETS).map(([key, preset]) => {
+                                const isCurrent = (settings.displayScale || calculateScaleFactor()) === preset.scale;
+                                return (
+                                    <button
+                                        key={key}
+                                        onClick={() => {
+                                            applyDisplayScaling(preset.scale, true);
+                                            setSettings(prev => ({ ...prev, displayScale: preset.scale }));
+                                        }}
+                                        className={`px-4 py-3 rounded-lg text-sm font-medium transition-all ${
+                                            isCurrent
+                                                ? 'bg-purple-600 text-white shadow-md ring-2 ring-purple-400'
+                                                : 'bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-600 border border-slate-200 dark:border-slate-600'
+                                        }`}
+                                    >
+                                        <div className="font-semibold">{preset.label}</div>
+                                        <div className="text-xs opacity-80">{preset.scale}x</div>
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    </div>
+
+                    {/* Reset-Button */}
+                    <button
+                        onClick={() => {
+                            resetDisplayScaling();
+                            setSettings(prev => ({ ...prev, displayScale: calculateScaleFactor() }));
+                        }}
+                        className="w-full px-4 py-2 bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg text-sm font-medium hover:bg-slate-300 dark:hover:bg-slate-600 transition-all"
+                    >
+                        🔄 Automatisch erkennen
+                    </button>
+
+                    {/* Hilfetext */}
+                    <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
+                        <p className="text-xs text-slate-600 dark:text-slate-400">
+                            <strong>Hinweis:</strong> Für 65" 4K-Klassenzimmer-Displays wird automatisch 2x-Skalierung angewendet.
+                            Sie können die Skalierung jederzeit manuell anpassen.
+                        </p>
+                    </div>
+                </CardContent>
+            </Card>
 
             {/* === WOCHENSTUNDENPLAN CARD === */}
             <Card className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 shadow-sm">

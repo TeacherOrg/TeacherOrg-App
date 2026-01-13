@@ -26,6 +26,8 @@ const UpdateModal = ({ isOpen, onClose, version }) => {
             { text: 'Ämtli sind nun als Erledigt markierbar und zählen zu Erfolg', type: 'fixed' },
             { text: 'Einstellungsmenü überarbeitet', type: 'fixed' },
             { text: 'Löschfunktionen korrigiert', type: 'fixed' },
+            { text: 'Tourguide eingeführt ', type: 'fixed' },
+            { text: 'Neue Schülerverwaltung - BESCHTE EU', type: 'fixed' },
             { text: 'Schülersortierung Vorname / Nachname', type: 'fixed' },
             { text: 'Technische Updates und Upgrades', type: 'mech' },
             { text: 'Sicherer, besseres Login + Stundenplan lädt direkt. ', type: 'mech' },
@@ -87,6 +89,7 @@ const UpdateModal = ({ isOpen, onClose, version }) => {
           items: [
             { text: 'Zeigt Überblick der Schüler mit den Stärken und Schwächen', type: 'fixed' },
             { text: 'Notenschnittberechnungen korrigiert', type: 'fixed' },
+            { text: 'Dashboard mit Erfolgen, Zielen, etc. Ist voll kewl', type: 'fixed' },
           ],
         },
         {
@@ -143,7 +146,7 @@ const UpdateModal = ({ isOpen, onClose, version }) => {
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>TeacherOrg Update: Version Alpha 6.9.2 - nice </DialogTitle>
+          <DialogTitle>TeacherOrg Update: Version Alpha 6.9.4 - nice </DialogTitle>
           <DialogDescription>
             Hier sind die neuesten Änderungen:
           </DialogDescription>

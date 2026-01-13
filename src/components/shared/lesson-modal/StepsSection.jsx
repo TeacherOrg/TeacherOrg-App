@@ -84,7 +84,7 @@ export function StepsSection({
               type="button"
               variant="outline"
               onClick={onSaveAsTemplate}
-              className="flex-[2] border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white bg-white dark:bg-slate-700 hover:bg-slate-100 dark:hover:bg-slate-600"
+              className="save-template-button flex-[2] border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white bg-white dark:bg-slate-700 hover:bg-slate-100 dark:hover:bg-slate-600"
             >
               <Copy className="w-4 h-4 mr-2" />
               <span className="text-slate-900 dark:text-white">Als Vorlage speichern</span>

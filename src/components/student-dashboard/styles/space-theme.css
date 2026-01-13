@@ -186,7 +186,7 @@
   backdrop-filter: blur(10px);
   padding: 1.5rem;
   position: relative;
-  overflow: hidden;
+  overflow: visible; /* GEÄNDERT von hidden → visible für Achievement viewport scrolling */
   transition: all 0.3s ease;
 }
 
@@ -243,7 +243,7 @@
 /* === Rocket Progress === */
 .rocket-container {
   position: relative;
-  height: 300px;
+  height: calc(300px * var(--scale-factor, 1));
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -435,6 +435,47 @@
   text-align: center;
   transition: all 0.3s ease;
   overflow: hidden;
+  /* Skalierbare Höhe für 4K-Displays */
+  height: calc(260px * var(--scale-factor, 1));
+  display: flex;
+  flex-direction: column;
+}
+
+/* Content-Bereich scrollbar bei Bedarf */
+.achievement-card > * {
+  flex-shrink: 0;
+}
+
+/* Beschreibung mit Ellipsis bei Überlauf */
+.achievement-card p {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* === Better text contrast on gradient backgrounds === */
+.achievement-card .achievement-icon {
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.5));
+}
+
+.achievement-card p,
+.achievement-card h3,
+.achievement-card h4 {
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+}
+
+.achievement-rare.earned p,
+.achievement-rare.earned h3 {
+  color: #f1f5f9;
+}
+
+.achievement-epic.earned p,
+.achievement-epic.earned h3 {
+  color: #f1f5f9;
+}
+
+.achievement-legendary.earned p,
+.achievement-legendary.earned h3 {
+  color: #f1f5f9;
 }
 
 /* === Common Tier (Green) === */
@@ -455,14 +496,24 @@
 
 /* === Rare Tier (Blue) === */
 .achievement-rare {
-  border: 2px solid #3b82f6;
-  background: linear-gradient(135deg, rgba(59, 130, 246, 0.25), rgba(59, 130, 246, 0.08));
+  background: linear-gradient(135deg,
+    rgba(59, 130, 246, 0.25) 0%,
+    rgba(37, 99, 235, 0.35) 50%,
+    rgba(29, 78, 216, 0.25) 100%
+  );
+  border: 2px solid rgba(59, 130, 246, 0.6);
+  backdrop-filter: blur(10px);
 }
 
 .achievement-rare.earned {
-  box-shadow: 0 0 20px rgba(59, 130, 246, 0.5),
-              0 0 40px rgba(59, 130, 246, 0.3);
-  animation: medium-pulse 2.5s ease-in-out infinite;
+  background: linear-gradient(135deg,
+    rgba(59, 130, 246, 0.4) 0%,
+    rgba(37, 99, 235, 0.5) 50%,
+    rgba(29, 78, 216, 0.4) 100%
+  );
+  border: 2px solid rgba(59, 130, 246, 0.8);
+  box-shadow: 0 0 8px rgba(59, 130, 246, 0.3);
+  animation: shimmer-rare 3s ease-in-out infinite;
 }
 
 .achievement-rare .achievement-icon {
@@ -471,15 +522,24 @@
 
 /* === Epic Tier (Purple) === */
 .achievement-epic {
-  border: 2px solid #a855f7;
-  background: linear-gradient(135deg, rgba(168, 85, 247, 0.3), rgba(168, 85, 247, 0.1));
+  background: linear-gradient(135deg,
+    rgba(168, 85, 247, 0.25) 0%,
+    rgba(147, 51, 234, 0.35) 50%,
+    rgba(126, 34, 206, 0.25) 100%
+  );
+  border: 2px solid rgba(168, 85, 247, 0.6);
+  backdrop-filter: blur(10px);
 }
 
 .achievement-epic.earned {
-  box-shadow: 0 0 25px rgba(168, 85, 247, 0.6),
-              0 0 50px rgba(168, 85, 247, 0.4),
-              inset 0 0 20px rgba(168, 85, 247, 0.1);
-  animation: strong-pulse 2s ease-in-out infinite;
+  background: linear-gradient(135deg,
+    rgba(168, 85, 247, 0.4) 0%,
+    rgba(147, 51, 234, 0.5) 50%,
+    rgba(126, 34, 206, 0.4) 100%
+  );
+  border: 2px solid rgba(168, 85, 247, 0.8);
+  box-shadow: 0 0 8px rgba(168, 85, 247, 0.3);
+  animation: shimmer-epic 3s ease-in-out infinite;
 }
 
 .achievement-epic .achievement-icon {
@@ -488,17 +548,25 @@
 
 /* === Legendary Tier (Orange) === */
 .achievement-legendary {
-  border: 3px solid #f97316;
-  background: linear-gradient(135deg, rgba(249, 115, 22, 0.35), rgba(249, 115, 22, 0.12));
+  background: linear-gradient(135deg,
+    rgba(249, 115, 22, 0.25) 0%,
+    rgba(234, 88, 12, 0.35) 50%,
+    rgba(194, 65, 12, 0.25) 100%
+  );
+  border: 2px solid rgba(249, 115, 22, 0.6);
+  backdrop-filter: blur(10px);
   position: relative;
 }
 
 .achievement-legendary.earned {
-  box-shadow: 0 0 30px rgba(249, 115, 22, 0.7),
-              0 0 60px rgba(249, 115, 22, 0.5),
-              0 0 90px rgba(249, 115, 22, 0.3),
-              inset 0 0 30px rgba(249, 115, 22, 0.15);
-  animation: legendary-pulse 1.5s ease-in-out infinite, sparkle 3s linear infinite;
+  background: linear-gradient(135deg,
+    rgba(249, 115, 22, 0.4) 0%,
+    rgba(234, 88, 12, 0.5) 50%,
+    rgba(194, 65, 12, 0.4) 100%
+  );
+  border: 2px solid rgba(249, 115, 22, 0.8);
+  box-shadow: 0 0 8px rgba(249, 115, 22, 0.3);
+  animation: shimmer-legendary 3s ease-in-out infinite;
 }
 
 .achievement-legendary .achievement-icon {
@@ -507,6 +575,13 @@
 
 /* === Locked Achievement Styles === */
 .achievement-locked {
+  background: linear-gradient(135deg,
+    rgba(71, 85, 105, 0.15) 0%,
+    rgba(51, 65, 85, 0.25) 50%,
+    rgba(30, 41, 59, 0.15) 100%
+  );
+  border: 2px solid rgba(100, 116, 139, 0.3);
+  backdrop-filter: blur(10px);
   opacity: 0.5;
   filter: grayscale(0.6);
   cursor: help;
@@ -704,39 +779,30 @@
   }
 }
 
-@keyframes medium-pulse {
+@keyframes shimmer-rare {
   0%, 100% {
-    box-shadow: 0 0 20px rgba(59, 130, 246, 0.5),
-                0 0 40px rgba(59, 130, 246, 0.3);
+    box-shadow: 0 0 8px rgba(59, 130, 246, 0.3);
   }
   50% {
-    box-shadow: 0 0 35px rgba(59, 130, 246, 0.6),
-                0 0 60px rgba(59, 130, 246, 0.4);
+    box-shadow: 0 0 12px rgba(59, 130, 246, 0.5);
   }
 }
 
-@keyframes strong-pulse {
+@keyframes shimmer-epic {
   0%, 100% {
-    box-shadow: 0 0 25px rgba(168, 85, 247, 0.6),
-                0 0 50px rgba(168, 85, 247, 0.4),
-                inset 0 0 20px rgba(168, 85, 247, 0.1);
+    box-shadow: 0 0 8px rgba(168, 85, 247, 0.3);
   }
   50% {
-    box-shadow: 0 0 50px rgba(168, 85, 247, 0.8),
-                0 0 80px rgba(168, 85, 247, 0.6),
-                inset 0 0 30px rgba(168, 85, 247, 0.2);
+    box-shadow: 0 0 12px rgba(168, 85, 247, 0.5);
   }
 }
 
-@keyframes legendary-pulse {
+@keyframes shimmer-legendary {
   0%, 100% {
-    box-shadow: 0 0 30px rgba(249, 115, 22, 0.7),
-                0 0 60px rgba(249, 115, 22, 0.5);
+    box-shadow: 0 0 8px rgba(249, 115, 22, 0.3);
   }
   50% {
-    box-shadow: 0 0 40px rgba(249, 115, 22, 0.9),
-                0 0 80px rgba(249, 115, 22, 0.7),
-                0 0 120px rgba(249, 115, 22, 0.4);
+    box-shadow: 0 0 12px rgba(249, 115, 22, 0.5);
   }
 }
 
@@ -822,6 +888,312 @@
 .next-tier-indicator .next-tier-arrow {
   margin: 0 0.25rem;
   font-weight: bold;
+}
+
+/* === Transforming Achievement Cards === */
+.achievement-transforming {
+  position: relative;
+  transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.achievement-transforming.earned {
+  transform: scale(1.02);
+}
+
+/* Achievement Earned Badge */
+.achievement-earned-badge {
+  position: absolute;
+  top: -10px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: linear-gradient(135deg, #22c55e, #16a34a);
+  color: white;
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 10px;
+  font-weight: bold;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  box-shadow: 0 4px 12px rgba(34, 197, 94, 0.5);
+  z-index: 15;
+  animation: badge-appear 0.5s ease-out;
+}
+
+@keyframes badge-appear {
+  0% { transform: translateX(-50%) scale(0); opacity: 0; }
+  50% { transform: translateX(-50%) scale(1.2); }
+  100% { transform: translateX(-50%) scale(1); opacity: 1; }
+}
+
+/* Next Tier Preview */
+.next-tier-preview {
+  padding: 0.75rem;
+  background: rgba(168, 85, 247, 0.1);
+  border: 1px solid rgba(168, 85, 247, 0.3);
+  border-radius: 0.5rem;
+  text-align: left;
+}
+
+/* Completion Badge */
+.completion-badge {
+  padding: 0.5rem;
+  background: linear-gradient(135deg, rgba(249, 115, 22, 0.2), rgba(249, 115, 22, 0.1));
+  border: 1px solid rgba(249, 115, 22, 0.5);
+  border-radius: 0.5rem;
+  text-align: center;
+  animation: sparkle 2s ease-in-out infinite;
+}
+
+@keyframes sparkle {
+  0%, 100% { box-shadow: 0 0 10px rgba(249, 115, 22, 0.5); }
+  50% { box-shadow: 0 0 20px rgba(249, 115, 22, 0.8); }
+}
+
+/* Progression Dots */
+.progression-dots {
+  display: flex;
+  gap: 0.25rem;
+  justify-content: center;
+  align-items: center;
+  margin-top: auto; /* Push dots to bottom of card */
+  padding-bottom: 0.25rem; /* Extra space at bottom */
+}
+
+/* Base dot styling */
+.progression-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: rgba(100, 116, 139, 0.3);
+  transition: all 0.3s ease;
+}
+
+/* Earned dots - Color from tier data (tier-based, not position-based) */
+.progression-dot.earned {
+  background: linear-gradient(135deg, var(--dot-color), var(--dot-color));
+  box-shadow: 0 0 6px var(--dot-glow);
+}
+
+/* Active dot (current tier) - larger and highlighted */
+.progression-dot.active {
+  width: 10px;
+  height: 10px;
+  transform: scale(1.2);
+}
+
+@keyframes pulse-dot {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.2); }
+}
+
+/* Main Category Section */
+.main-category-section {
+  margin-bottom: 3rem;
+}
+
+.main-category-title {
+  font-size: 1.5rem;
+  font-weight: bold;
+  color: #a78bfa;
+  margin-bottom: 1.5rem;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.main-category-title::before {
+  content: '';
+  width: 6px;
+  height: 2rem;
+  background: linear-gradient(180deg, #a855f7, #3b82f6);
+  border-radius: 3px;
+}
+
+/* === Achievements Viewport Container - ENHANCED === */
+.achievements-viewport {
+  /* Height - DYNAMIC: Calculated via ResizeObserver in AchievementWall.jsx */
+  max-height: var(--available-height, 600px);
+  min-height: 300px;
+  /* height: auto; ENTFERNT - überschrieb max-height */
+
+  /* Overflow */
+  overflow-y: auto;
+  overflow-x: hidden;
+
+  /* Scrollbar Space + prevent left clipping */
+  padding-right: 0.5rem;
+  padding-left: 0.25rem;
+
+  /* Ensure box-sizing */
+  box-sizing: border-box;
+}
+
+/* Scrollbar Styling for Viewport */
+.achievements-viewport::-webkit-scrollbar {
+  width: 10px;
+}
+
+.achievements-viewport::-webkit-scrollbar-track {
+  background: rgba(100, 116, 139, 0.2);
+  border-radius: 5px;
+}
+
+.achievements-viewport::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, #a855f7, #3b82f6);
+  border-radius: 5px;
+}
+
+.achievements-viewport::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, #9333ea, #2563eb);
+}
+
+/* === Subcategories Container mit Flex-Wrap === */
+.subcategories-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2rem;
+  margin-bottom: 2rem;
+  padding-left: 0.25rem; /* Prevent left clipping of first card */
+}
+
+/* Subcategory Column - fixe Breite für automatische Anordnung */
+.subcategory-column {
+  flex: 0 0 calc(25% - 1.5rem);
+  min-width: 250px;
+}
+
+/* Cards within a subcategory (stacked vertically) */
+.subcategory-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+/* Progression Grid - 3-4 Cards per row */
+.progression-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1.5rem;
+  width: 100%;
+  padding-left: 0.25rem; /* Prevent left clipping of first card */
+}
+
+/* Responsive breakpoints */
+@media (max-width: 1400px) {
+  .progression-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .subcategory-column {
+    flex: 0 0 calc(33.333% - 1.33rem);
+  }
+
+  .achievements-viewport {
+    max-height: calc(100vh - 380px);
+  }
+}
+
+@media (max-width: 1024px) {
+  .progression-grid {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1.25rem;
+  }
+
+  .subcategory-column {
+    flex: 0 0 calc(50% - 1rem);
+  }
+
+  .achievements-viewport {
+    min-height: 250px;
+  }
+}
+
+@media (max-width: 768px) {
+  .progression-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1rem;
+  }
+
+  .main-category-title {
+    font-size: 1.25rem;
+  }
+
+  .main-category-title::before {
+    height: 1.5rem;
+  }
+
+  .achievement-filter-tabs {
+    gap: 0.5rem;
+    justify-content: center;
+  }
+
+  .achievement-filter-tab {
+    padding: 0.4rem 0.75rem;
+    font-size: 0.75rem;
+    flex: 1 1 auto;
+    min-width: fit-content;
+  }
+
+  .subcategory-column {
+    flex: 0 0 calc(50% - 1rem);
+    min-width: 220px;
+  }
+
+  .subcategories-container {
+    gap: 1.5rem;
+  }
+
+  .achievements-viewport {
+    min-height: 200px;
+  }
+
+  .achievement-card {
+    height: calc(240px * var(--scale-factor, 1));
+  }
+}
+
+@media (max-width: 480px) {
+  .progression-grid {
+    grid-template-columns: repeat(1, 1fr);
+    gap: 1rem;
+  }
+
+  .achievement-card {
+    max-width: 100%;
+    height: calc(260px * var(--scale-factor, 1));
+  }
+
+  .achievement-filter-tabs {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .achievement-filter-tab {
+    width: 100%;
+    text-align: center;
+  }
+
+  .achievement-stats-panel {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.75rem;
+  }
+
+  .subcategory-column {
+    flex: 0 0 100%;
+    min-width: auto;
+  }
+
+  .subcategories-container {
+    gap: 1rem;
+  }
+
+  .achievements-viewport {
+    min-height: 180px;
+  }
+
+  .achievement-card {
+    height: 220px;
+  }
 }
 
 /* === Statistics Panel === */

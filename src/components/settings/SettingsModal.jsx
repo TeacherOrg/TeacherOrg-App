@@ -868,7 +868,7 @@ const SettingsModal = ({ isOpen, onClose }) => {
       case 'Stundenplan': return { settings, setSettings, classes, subjects };
       case 'Ferien': return { holidays, refreshData: loadAllData };
       case 'Größe': return { settings, setSettings };
-      case 'Hilfe': return {};
+      case 'Hilfe': return { onClose };
       case 'Profil': return {
         pendingEmail, setPendingEmail,
         pendingName, setPendingName,

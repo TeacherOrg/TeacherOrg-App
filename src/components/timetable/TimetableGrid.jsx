@@ -89,9 +89,9 @@ const DraggableItem = ({ id, data, children, onClick }) => {
     const moved = Math.max(deltaX, deltaY);
 
     // Click erkannt wenn:
-    // - Wenig bewegt (< 5px) - auch bei längerer Haltezeit
-    // - ODER schnell geklickt (< 200ms)
-    const isClick = (moved < 5) || (elapsed < 200);
+    // - Wenig bewegt (< 15px) - erhöht für bessere Touch/Touchpad-Kompatibilität
+    // - ODER schnell geklickt (< 400ms)
+    const isClick = (moved < 15) || (elapsed < 400);
 
     if (isClick && !isDragging) {
       e.stopPropagation();
@@ -337,8 +337,8 @@ const TimetableGrid = React.forwardRef(
               return (
                 <div
                   className="h-full w-full relative"
-                  onMouseEnter={(e) => onShowHover(lesson, e)}
-                  onMouseLeave={onHideHover}
+                  onPointerEnter={(e) => onShowHover(lesson, e)}
+                  onPointerLeave={onHideHover}
                 >
                   {/* Immer die normale LessonCard rendern */}
                   {isAltPressed ? (

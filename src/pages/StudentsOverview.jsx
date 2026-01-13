@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { Student, Performance, UeberfachlichKompetenz, Class } from "@/api/entities";
-import { Users, TrendingDown, Award, AlertCircle, ChevronRight, Search, Star, LayoutDashboard } from "lucide-react";
+import { Users, TrendingDown, Award, AlertCircle, ChevronRight, Search, Star, LayoutDashboard, Scroll } from "lucide-react";
 import { motion } from "framer-motion";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -11,6 +11,7 @@ import { useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { toast } from "sonner";
 import { calculateWeightedGrade } from '@/components/grades/utils/calculateWeightedGrade';
+import BountiesStoreTab from '@/components/grades/BountiesStoreTab/BountiesStoreTab';
 
 export default function StudentsOverview() {
   const [students, setStudents] = useState([]);
@@ -21,6 +22,7 @@ export default function StudentsOverview() {
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [sortBy, setSortBy] = useState("name");
+  const [activeTab, setActiveTab] = useState("students"); // "students" | "bounties-store"
 
   const navigate = useNavigate();
 
@@ -218,21 +220,50 @@ export default function StudentsOverview() {
           className="mb-6"
         >
           <div className="flex flex-col gap-4">
-            <div className="flex items-center gap-4">
-              <div className="w-14 h-14 bg-gradient-to-br from-purple-600 to-pink-600 dark:from-purple-500 dark:to-pink-500 rounded-2xl flex items-center justify-center shadow-lg">
-                <Users className="w-7 h-7 text-white" />
+            <div className="flex items-center justify-between flex-wrap gap-4">
+              <div className="flex items-center gap-4">
+                <div className="w-14 h-14 bg-gradient-to-br from-purple-600 to-pink-600 dark:from-purple-500 dark:to-pink-500 rounded-2xl flex items-center justify-center shadow-lg">
+                  <Users className="w-7 h-7 text-white" />
+                </div>
+                <div>
+                  <h1 className="text-3xl md:text-4xl font-bold text-gray-900 dark:text-white tracking-tight">
+                    Schülerübersicht
+                  </h1>
+                  <p className="text-gray-600 dark:text-gray-400 text-sm font-medium mt-1">
+                    {activeTab === "students" ? "Kompakte Übersicht über alle Schüler" : "Bounties & Store verwalten"}
+                  </p>
+                </div>
               </div>
-              <div>
-                <h1 className="text-3xl md:text-4xl font-bold text-gray-900 dark:text-white tracking-tight">
-                  Schülerübersicht
-                </h1>
-                <p className="text-gray-600 dark:text-gray-400 text-sm font-medium mt-1">
-                  Kompakte Übersicht über alle Schüler
-                </p>
+
+              {/* Tab Navigation */}
+              <div className="flex bg-white/60 dark:bg-slate-800/60 backdrop-blur-sm rounded-xl p-1 border border-slate-200/50 dark:border-slate-700/50">
+                <button
+                  onClick={() => setActiveTab("students")}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                    activeTab === "students"
+                      ? "bg-white dark:bg-slate-700 text-purple-600 dark:text-purple-400 shadow-sm"
+                      : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+                  }`}
+                >
+                  <Users className="w-4 h-4" />
+                  <span className="hidden sm:inline">Schüler</span>
+                </button>
+                <button
+                  onClick={() => setActiveTab("bounties-store")}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                    activeTab === "bounties-store"
+                      ? "bg-white dark:bg-slate-700 text-amber-600 dark:text-amber-400 shadow-sm"
+                      : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+                  }`}
+                >
+                  <Scroll className="w-4 h-4" />
+                  <span className="hidden sm:inline">Bounties & Store</span>
+                </button>
               </div>
             </div>
 
-            {/* Filter und Suche */}
+            {/* Filter und Suche - nur im Schüler-Tab */}
+            {activeTab === "students" && (
             <div className="flex flex-col sm:flex-row gap-3">
               {/* Klassen-Auswahl */}
               <Select value={activeClassId || ''} onValueChange={setActiveClassId}>
@@ -271,9 +302,23 @@ export default function StudentsOverview() {
                 </SelectContent>
               </Select>
             </div>
+            )}
           </div>
         </motion.div>
 
+        {/* Bounties & Store Tab */}
+        {activeTab === "bounties-store" && (
+          <BountiesStoreTab
+            students={students.filter(s => String(s.class_id) === String(activeClassId))}
+            classes={classes}
+            activeClassId={activeClassId}
+            onClassChange={setActiveClassId}
+          />
+        )}
+
+        {/* Statistik-Bar - nur im Schüler-Tab */}
+        {activeTab === "students" && (
+        <>
         {/* Statistik-Bar */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -481,6 +526,8 @@ export default function StudentsOverview() {
             })}
           </div>
           </div>
+        )}
+        </>
         )}
       </div>
     </div>

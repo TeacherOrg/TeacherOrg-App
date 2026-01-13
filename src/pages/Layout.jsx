@@ -2,9 +2,11 @@ import React, { useState, useEffect, useRef } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { User } from "@/api/entities";
 import { createPageUrl } from '@/utils/index.js';
+import auditLogger from '@/services/auditLogger';
+import pb from '@/api/pb';
 import {
   Calendar, Users, Settings, GraduationCap, LogOut,
-  ClipboardList, Sun, Moon, BookOpen
+  ClipboardList, Sun, Moon, BookOpen, UserRound
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -23,9 +25,9 @@ import { useTutorial } from '@/hooks/useTutorial';
 
 const navigationItems = [
   { title: "Stundenplan", url: createPageUrl("Timetable"), icon: Calendar },
-  { title: "Schüler", url: createPageUrl("StudentsOverview"), icon: Users },
   { title: "Themenansicht", url: createPageUrl("Topics"), icon: BookOpen },
   { title: "Leistung", url: createPageUrl("Grades"), icon: GraduationCap },
+  { title: "Schüler", url: createPageUrl("StudentsOverview"), icon: UserRound },
   { title: "Gruppen", url: createPageUrl("Groups"), icon: Users },
   { title: "Ämtliplan", url: createPageUrl("Chores"), icon: ClipboardList },
 ];
@@ -73,6 +75,12 @@ export default function Layout({ children }) {
 
   const handleLogout = async () => {
     try {
+      // Audit-Logging: Logout vor dem tatsächlichen Logout
+      const userId = pb.authStore.model?.id;
+      if (userId) {
+        await auditLogger.logLogout(userId);
+      }
+
       await User.logout();
       // Navigation erfolgt automatisch durch ProtectedRoute
     } catch (error) {

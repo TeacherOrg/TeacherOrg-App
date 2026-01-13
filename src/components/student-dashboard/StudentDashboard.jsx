@@ -1,14 +1,24 @@
-import React, { useState } from 'react';
-import { Rocket, Target, Calendar, Trophy, Star, TrendingUp, TrendingDown, Loader2 } from 'lucide-react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
+import { Rocket, Target, Calendar, Trophy, Star, TrendingUp, TrendingDown, Loader2, ShoppingBag, BarChart3 } from 'lucide-react';
 import SpaceBackground, { SpaceCard, Planet, Asteroid, RocketProgress } from './components/SpaceBackground';
 import { SpaceThemeProvider } from './SpaceThemeProvider';
 import { useStudentData } from './hooks/useStudentData';
 import { useSelfAssessments } from './hooks/useSelfAssessments';
 import { useCompetencyGoals } from './hooks/useCompetencyGoals';
+import { useCurrency } from './hooks/useCurrency';
+import { useStore } from './hooks/useStore';
+import { useBounties } from './hooks/useBounties';
 import SelfAssessmentStars from './components/SelfAssessmentStars';
 import ComparisonGauge from './components/ComparisonGauge';
 import GoalsList from './components/GoalsList';
 import AchievementWall from './components/AchievementWall';
+import { useAchievements } from './hooks/useAchievements';
+import LeistungTab from './components/LeistungTab';
+import StoreTab from './components/StoreTab';
+import BountyBoard from './components/BountyBoard';
+import CurrencyDisplay from './components/CurrencyDisplay';
+import { AchievementCoinsAwarded } from '@/api/entities';
+import { useAchievementRewards } from '@/components/grades/BountiesStoreTab/hooks/useAchievementRewards';
 
 /**
  * Main Student Dashboard Component
@@ -35,14 +45,121 @@ export default function StudentDashboard({ studentId = null }) {
     loading,
     error,
     isStudent,
-    refresh
+    refresh,
+    performances,
+    subjects,
+    students
   } = studentData;
 
   // Self-assessment operations
   const selfAssessmentOps = useSelfAssessments(student?.id, refresh);
 
-  // Goal operations
-  const goalOps = useCompetencyGoals(student?.id, refresh);
+  // Currency system (needs to be before goalOps for callback)
+  const currencyData = useCurrency(student?.id);
+
+  // Goal operations (with currency award on completion)
+  const handleGoalCompleted = async (goalId, goalText) => {
+    if (currencyData.awardCurrency) {
+      await currencyData.awardCurrency(1, 'goal', goalId, `Ziel erreicht: ${goalText?.substring(0, 50) || 'Ziel'}`);
+    }
+  };
+  const goalOps = useCompetencyGoals(student?.id, refresh, { onGoalCompleted: handleGoalCompleted });
+
+  // Store system
+  const storeData = useStore(student?.id);
+
+  // Bounty system
+  const bountyData = useBounties(student?.id, classInfo?.id);
+
+  // Achievement rewards configuration (teacher's custom rewards)
+  const { getReward } = useAchievementRewards();
+
+  // Ref to track sync status and prevent duplicate sync calls
+  const syncedAchievementsRef = useRef(false);
+
+  // Callback for achievement coin awarding (called when new achievements are earned)
+  const handleAchievementEarned = useCallback(async (achievement, tier, studentId) => {
+    if (!studentId || !currencyData.awardCurrency) return;
+
+    try {
+      // Check if coins already awarded for this achievement (with unique cancel key)
+      const existing = await AchievementCoinsAwarded.filter({
+        student_id: studentId,
+        achievement_id: achievement.id,
+        $cancelKey: `check_${achievement.id}_${studentId}`
+      });
+
+      if (existing.length > 0) return; // Already awarded
+
+      // Get reward amount (custom or default)
+      const coins = getReward(achievement.id, tier);
+
+      // Award coins
+      await currencyData.awardCurrency(
+        coins,
+        'achievement',
+        achievement.id,
+        `Achievement: ${achievement.name}`
+      );
+
+      // Track that coins were awarded
+      await AchievementCoinsAwarded.create({
+        student_id: studentId,
+        achievement_id: achievement.id,
+        tier: tier,
+        coins_awarded: coins,
+        $cancelKey: `create_${achievement.id}_${studentId}`
+      });
+
+    } catch (error) {
+      // Ignore auto-cancellation errors
+      if (error?.message?.includes('autocancelled')) {
+        return;
+      }
+      console.error('Failed to award achievement coins:', error);
+    }
+  }, [currencyData, getReward]);
+
+  // Achievements (with coin awarding callback)
+  const achievements = useAchievements(studentData, {
+    onAchievementEarned: handleAchievementEarned,
+    studentId: student?.id
+  });
+
+  // Sync existing achievements on mount (for already earned achievements)
+  useEffect(() => {
+    let isCancelled = false;
+
+    const syncExistingAchievements = async () => {
+      if (!student?.id || !achievements?.achievements || syncedAchievementsRef.current) return;
+
+      syncedAchievementsRef.current = true;
+
+      const earnedAchievements = achievements.achievements.filter(a => a.earned);
+
+      // Process sequentially with small delay to prevent rate limiting
+      for (const ach of earnedAchievements) {
+        if (isCancelled) break;
+
+        try {
+          await handleAchievementEarned(ach, ach.tier, student.id);
+          // Small delay between requests to avoid overwhelming the server
+          await new Promise(resolve => setTimeout(resolve, 100));
+        } catch {
+          // Continue with next achievement
+        }
+      }
+    };
+
+    // Only sync when achievements data is loaded
+    if (achievements?.achievements?.length > 0) {
+      syncExistingAchievements();
+    }
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [student?.id, achievements?.achievements?.length, handleAchievementEarned]);
 
   if (loading) {
     return (
@@ -72,9 +189,11 @@ export default function StudentDashboard({ studentId = null }) {
 
   const tabs = [
     { id: 'overview', label: 'Übersicht', icon: Rocket },
+    { id: 'leistung', label: 'Leistung', icon: BarChart3 },
     { id: 'competencies', label: 'Kompetenzen', icon: Target },
     { id: 'goals', label: 'Ziele', icon: Trophy },
     { id: 'achievements', label: 'Erfolge', icon: Star },
+    { id: 'store', label: 'Store', icon: ShoppingBag },
   ];
 
   return (
@@ -95,7 +214,7 @@ export default function StudentDashboard({ studentId = null }) {
               </div>
 
               {/* Quick Stats */}
-              <div className="flex gap-4">
+              <div className="flex gap-4 items-center">
                 <div className="text-center">
                   <div className="text-2xl font-bold text-yellow-400">
                     {gradeAverage?.toFixed(1) || '-'}
@@ -108,6 +227,8 @@ export default function StudentDashboard({ studentId = null }) {
                   </div>
                   <div className="text-xs text-slate-400">Ziele erreicht</div>
                 </div>
+                {/* Currency Display */}
+                <CurrencyDisplay balance={currencyData.balance} />
               </div>
             </div>
           </header>
@@ -134,6 +255,25 @@ export default function StudentDashboard({ studentId = null }) {
                 strengths={strengths}
                 weaknesses={weaknesses}
                 stats={stats}
+                bountyData={bountyData}
+                achievements={achievements}
+              />
+            )}
+
+            {activeTab === 'leistung' && (
+              <LeistungTab
+                student={student}
+                performances={performances}
+                subjects={subjects}
+                students={students || [student]}
+              />
+            )}
+
+            {activeTab === 'store' && (
+              <StoreTab
+                studentId={student?.id}
+                currencyData={currencyData}
+                storeData={storeData}
               />
             )}
 
@@ -172,7 +312,7 @@ export default function StudentDashboard({ studentId = null }) {
 
 // === Tab Components ===
 
-function OverviewTab({ gradeAverage, strengths, weaknesses, stats }) {
+function OverviewTab({ gradeAverage, strengths, weaknesses, stats, bountyData, achievements }) {
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
       {/* Rocket Progress */}
@@ -248,13 +388,20 @@ function OverviewTab({ gradeAverage, strengths, weaknesses, stats }) {
       <SpaceCard className="lg:col-span-2">
         <h3 className="text-lg font-semibold text-white mb-4">Statistiken</h3>
         <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
-          <StatItem label="Bewertungen" value={stats.totalPerformances} color="blue" />
-          <StatItem label="Kompetenzen" value={`${stats.assessedCompetencies}/${stats.totalCompetencies}`} color="purple" />
-          <StatItem label="Aktive Ziele" value={stats.activeGoals} color="yellow" />
+          <StatItem label="Erfolge" value={achievements?.earnedCount || 0} color="yellow" />
+          <StatItem label="Aktive Ziele" value={stats.activeGoals} color="purple" />
           <StatItem label="Erreichte Ziele" value={stats.completedGoals} color="green" />
-          <StatItem label="Ämtlis erledigt" value={`${stats.completedChores || 0}/${stats.totalChores || 0}`} color="orange" />
+          <StatItem label="Ämtlis" value={`${stats.completedChores || 0}/${stats.totalChores || 0}`} color="orange" />
+          <StatItem label="Bounties" value={bountyData?.totalCompletedBounties || 0} color="blue" />
         </div>
       </SpaceCard>
+
+      {/* Bounty Board */}
+      {bountyData?.activeBounties?.length > 0 && (
+        <div className="lg:col-span-3">
+          <BountyBoard bountyData={bountyData} />
+        </div>
+      )}
     </div>
   );
 }

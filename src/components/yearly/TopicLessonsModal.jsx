@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import {
   Dialog,
   DialogContent,
@@ -12,6 +12,8 @@ import YearLessonCell from "./YearLessonCell";
 import LessonModal from "./LessonModal";
 import TopicProgressBar from "../daily/TopicProgressBar";
 import { useTopicProgress } from "@/hooks/useTopicProgress";
+import { useTour } from '@/components/onboarding/TourProvider';
+import { emitTourEvent, TOUR_EVENTS } from '@/components/onboarding/tours/tourEvents';
 
 // Ultra-safe string conversion
 const ultraSafeString = (value) => {
@@ -51,6 +53,27 @@ export default function TopicLessonsModal({
 }) {
   const [isLessonModalOpen, setIsLessonModalOpen] = useState(false);
   const [editingLesson, setEditingLesson] = useState(null);
+
+  // Tour-State für Prevent-Close während Tour
+  const { activeTour } = useTour();
+
+  // Emit tour event when modal opens
+  useEffect(() => {
+    if (isOpen) {
+      emitTourEvent(TOUR_EVENTS.TOPIC_LESSONS_MODAL_OPENED);
+    }
+  }, [isOpen]);
+
+  // Auto-close modal when tour advances to week-view-button step
+  useEffect(() => {
+    const handleStepChange = (e) => {
+      if (e.detail?.stepId === 'week-view-button' && isOpen) {
+        onClose();
+      }
+    };
+    window.addEventListener('tour-step-change', handleStepChange);
+    return () => window.removeEventListener('tour-step-change', handleStepChange);
+  }, [isOpen, onClose]);
 
   const safeTopicLessons = useMemo(() => {
     try {
@@ -253,10 +276,10 @@ export default function TopicLessonsModal({
           };
 
           cells.push(
-            <div 
-              key={safeLesson.id} 
-              style={{ gridColumn: `span ${span}` }} 
-              className="h-20 p-1"
+            <div
+              key={safeLesson.id}
+              style={{ gridColumn: `span ${span}` }}
+              className={`topic-lesson-cell h-20 p-1 ${cells.length === 0 ? 'first-lesson' : ''}`}
             >
               <YearLessonCell
                 lesson={safeLesson}
@@ -291,12 +314,25 @@ export default function TopicLessonsModal({
   try {
     return (
       <Dialog open={isOpen} onOpenChange={onClose}>
-        <DialogContent 
+        <DialogContent
           className="border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900"
-          style={{ 
+          modal={!activeTour}
+          style={{
             borderColor: '#3b82f640',
             width: `${modalWidth}px`,
             maxWidth: '90vw'
+          }}
+          onInteractOutside={(e) => {
+            // Prevent closing during tour
+            if (activeTour) {
+              e.preventDefault();
+            }
+          }}
+          onEscapeKeyDown={(e) => {
+            // Prevent closing during tour
+            if (activeTour) {
+              e.preventDefault();
+            }
           }}
         >
           <DialogHeader className="pb-4 border-b border-slate-200 dark:border-slate-700">

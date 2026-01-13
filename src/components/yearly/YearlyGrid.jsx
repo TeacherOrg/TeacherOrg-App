@@ -1028,7 +1028,7 @@ const YearlyGrid = ({
             cells.push(
               <div
                 key={`topic-${lesson.id}`}
-                className="p-0 border border-gray-200 dark:border-slate-700"
+                className="yearly-topic-cell p-0 border border-gray-200 dark:border-slate-700"
                 style={{ width: `${topicWidth}px`, height: `${rowHeight}px` }}
                 onMouseEnter={(e) => onShowHover({ ...lesson, topic_id: topic.id, color: topic.color || subjectColor, mergedLessons: topicLessons }, e)}
                 onMouseLeave={onHideHover}
@@ -1313,7 +1313,7 @@ const YearlyGrid = ({
   }, [isAssignMode, selectedLessons]);
 
   return (
-    <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm h-full flex flex-col relative w-full min-h-0 overflow-hidden"> {/* Container passt sich Parent an */}
+    <div className="yearly-grid-container bg-white dark:bg-slate-800 rounded-xl shadow-sm h-full flex flex-col relative w-full min-h-0 overflow-hidden"> {/* Container passt sich Parent an */}
       {/* 1. KLASSEN-SELECTION sticky */}
       <ClassSelectorBar
         classes={classes || []}

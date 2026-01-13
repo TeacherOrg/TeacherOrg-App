@@ -164,6 +164,33 @@ const MultilineXAxisTick = ({ x, y, payload }) => {
   );
 };
 
+// Trend line calculation using linear regression
+const calculateTrendLine = (data, dataKey) => {
+  if (!data || data.length < 2) return null;
+  const points = data.map((d, i) => ({ x: i, y: d[dataKey] })).filter(p => p.y != null);
+  if (points.length < 2) return null;
+
+  const xMean = points.reduce((sum, p) => sum + p.x, 0) / points.length;
+  const yMean = points.reduce((sum, p) => sum + p.y, 0) / points.length;
+
+  let numerator = 0, denominator = 0;
+  points.forEach(p => {
+    numerator += (p.x - xMean) * (p.y - yMean);
+    denominator += (p.x - xMean) ** 2;
+  });
+
+  const m = denominator !== 0 ? numerator / denominator : 0;
+  const b = yMean - m * xMean;
+
+  return {
+    slope: m,
+    intercept: b,
+    isImproving: m > 0.05,
+    isDeclining: m < -0.05,
+    isStable: Math.abs(m) <= 0.05
+  };
+};
+
 const Leistungscharts = ({ performances, students, subjects, selectedStudents, showClassAverage, selectedSubject, setSelectedSubject, activeClassId, onDataChange }) => {
   const [enlargedChart, setEnlargedChart] = useState(null);
   const [selectedFachbereich, setSelectedFachbereich] = useState(null);
@@ -177,6 +204,43 @@ const Leistungscharts = ({ performances, students, subjects, selectedStudents, s
     selectedFachbereich
   });
 
+  // Trend lines for each selected student (only for line chart / single subject)
+  const trendLines = useMemo(() => {
+    if (selectedSubject === 'all' || selectedSubject === 'kernfaecher' || lineData.length < 2) {
+      return {};
+    }
+
+    const trends = {};
+    selectedStudents.forEach(studentId => {
+      const student = students.find(s => s.id === studentId);
+      if (student) {
+        trends[student.name] = calculateTrendLine(lineData, student.name);
+      }
+    });
+
+    // Also for class average if enabled
+    if (showClassAverage) {
+      trends['Klassenschnitt'] = calculateTrendLine(lineData, 'Klassenschnitt');
+    }
+
+    return trends;
+  }, [lineData, selectedStudents, students, selectedSubject, showClassAverage]);
+
+  // Add trend data to lineData
+  const lineDataWithTrend = useMemo(() => {
+    if (Object.keys(trendLines).length === 0) return lineData;
+
+    return lineData.map((d, i) => {
+      const withTrend = { ...d };
+      Object.entries(trendLines).forEach(([name, trend]) => {
+        if (trend) {
+          withTrend[`${name}_trend`] = Math.round((trend.intercept + (trend.slope * i)) * 100) / 100;
+        }
+      });
+      return withTrend;
+    });
+  }, [lineData, trendLines]);
+
   // Berechne gewichteten Durchschnitt für ausgewählte Schüler/Fächer
   const averageGrade = useMemo(() => {
     const relevantStudents = selectedStudents.length > 0
@@ -184,14 +248,24 @@ const Leistungscharts = ({ performances, students, subjects, selectedStudents, s
       : students;
     const relevantPerformances = performances.filter(p => {
       const studentMatch = relevantStudents.some(s => s.id === p.student_id);
-      const subjectMatch = selectedSubject === 'all' || p.subject === selectedSubject;
+      let subjectMatch = false;
+      if (selectedSubject === 'all') {
+        subjectMatch = true;
+      } else if (selectedSubject === 'kernfaecher') {
+        const coreSubjectIds = subjects.filter(s => s.is_core_subject).map(s => s.id);
+        const perfSubjectId = typeof p.subject === 'object' ? p.subject.id : p.subject;
+        subjectMatch = coreSubjectIds.includes(perfSubjectId);
+      } else {
+        subjectMatch = p.subject === selectedSubject || (typeof p.subject === 'object' && p.subject.id === selectedSubject);
+      }
       return studentMatch && subjectMatch;
     });
     if (relevantPerformances.length === 0) return 0;
     return parseFloat(calculateWeightedGrade(relevantPerformances).toFixed(2));
-  }, [performances, students, selectedStudents, selectedSubject]);
+  }, [performances, students, subjects, selectedStudents, selectedSubject]);
 
-  const isAllSubjects = selectedSubject === 'all';
+  const isAllSubjects = selectedSubject === 'all' || selectedSubject === 'kernfaecher';
+  const isKernfaecher = selectedSubject === 'kernfaecher';
   const shouldUseBarChartForFachbereich = fachbereichData.length < 3 && fachbereichData.length > 0;
 
   const canRenderChart = (data) => {
@@ -534,6 +608,25 @@ const Leistungscharts = ({ performances, students, subjects, selectedStudents, s
                 />
               );
             })}
+            {/* Trend lines for each student/class average */}
+            {Object.entries(trendLines).map(([name, trend]) => {
+              if (!trend) return null;
+              const trendColor = trend.isImproving ? '#22c55e' : trend.isDeclining ? '#ef4444' : '#94a3b8';
+              return (
+                <Line
+                  key={`trend-${name}`}
+                  type="linear"
+                  dataKey={`${name}_trend`}
+                  stroke={trendColor}
+                  strokeWidth={2}
+                  strokeDasharray="8 4"
+                  dot={false}
+                  activeDot={false}
+                  name={`Trend ${name}`}
+                  legendType="none"
+                />
+              );
+            })}
           </LineChart>
         )}
       </ResponsiveContainer>
@@ -547,7 +640,7 @@ const Leistungscharts = ({ performances, students, subjects, selectedStudents, s
         <CardHeader className="pb-2">
           <CardTitle className="flex items-center justify-between">
             {isAllSubjects ? (
-              'Notenschnitte der Fächer'
+              isKernfaecher ? 'Notenschnitte der Kernfächer' : 'Notenschnitte der Fächer'
             ) : (
               <div className="flex items-center gap-2">
                 <Button variant="ghost" size="sm" onClick={() => { setSelectedSubject('all'); setSelectedFachbereich(null); }} className="text-slate-400 hover:text-white p-1">
@@ -565,7 +658,7 @@ const Leistungscharts = ({ performances, students, subjects, selectedStudents, s
           <div style={{ width: '100%', height: 320 }}>
             {renderChartContent(
               isAllSubjects ? 'bar' : 'line',
-              isAllSubjects ? subjectData : lineData,
+              isAllSubjects ? subjectData : lineDataWithTrend,
               [1, 6],
               true,
               false,
@@ -577,7 +670,11 @@ const Leistungscharts = ({ performances, students, subjects, selectedStudents, s
             {selectedStudents.length === 0 ? (
               <div className="text-center">
                 <p className="text-xs text-slate-600 dark:text-slate-400 mb-0.5">
-                  {selectedSubject !== 'all' ? `${subjects.find(s => s.id === selectedSubject)?.name || selectedSubject}-Schnitt` : 'Klassenschnitt'}
+                  {isKernfaecher
+                    ? 'Kernfachschnitt'
+                    : (selectedSubject !== 'all'
+                        ? `${subjects.find(s => s.id === selectedSubject)?.name || selectedSubject}-Schnitt`
+                        : 'Klassenschnitt')}
                 </p>
                 <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">
                   {averageGrade > 0 ? averageGrade.toFixed(2) : '—'}
@@ -585,7 +682,15 @@ const Leistungscharts = ({ performances, students, subjects, selectedStudents, s
               </div>
             ) : (
               (() => {
-                const allClassPerfs = performances.filter(p => selectedSubject === 'all' || p.subject === selectedSubject);
+                const allClassPerfs = performances.filter(p => {
+                  if (selectedSubject === 'all') return true;
+                  if (selectedSubject === 'kernfaecher') {
+                    const coreSubjectIds = subjects.filter(s => s.is_core_subject).map(s => s.id);
+                    const perfSubjectId = typeof p.subject === 'object' ? p.subject.id : p.subject;
+                    return coreSubjectIds.includes(perfSubjectId);
+                  }
+                  return p.subject === selectedSubject || (typeof p.subject === 'object' && p.subject.id === selectedSubject);
+                });
                 const classAvg = allClassPerfs.length > 0 ? calculateWeightedGrade(allClassPerfs).toFixed(2) : null;
                 const diff = classAvg && averageGrade > 0 ? (averageGrade - parseFloat(classAvg)).toFixed(2) : null;
                 const studentColor = selectedStudents.length === 1 ? getStudentColor(0) : '#3b82f6';
@@ -608,7 +713,9 @@ const Leistungscharts = ({ performances, students, subjects, selectedStudents, s
                       </div>
                     )}
                     <div className="text-center">
-                      <p className="text-xs text-blue-600 dark:text-blue-400 font-medium mb-0.5">Klassenschnitt</p>
+                      <p className="text-xs text-blue-600 dark:text-blue-400 font-medium mb-0.5">
+                        {isKernfaecher ? 'Kernfach-Ø' : 'Klassenschnitt'}
+                      </p>
                       <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">{classAvg || '—'}</p>
                     </div>
                   </div>
@@ -694,7 +801,7 @@ const Leistungscharts = ({ performances, students, subjects, selectedStudents, s
                   </Button>
                 )}
                 <h3 className="text-2xl font-bold text-slate-900 dark:text-white">
-                  {enlargedChart === 'left' && (isAllSubjects ? 'Notenschnitte der Fächer' : 'Leistungsverlauf')}
+                  {enlargedChart === 'left' && (isAllSubjects ? (isKernfaecher ? 'Notenschnitte der Kernfächer' : 'Notenschnitte der Fächer') : 'Leistungsverlauf')}
                   {enlargedChart === 'fachbereich' && (
                     selectedFachbereich
                       ? `Fachbereich: ${selectedFachbereich}`
@@ -713,7 +820,7 @@ const Leistungscharts = ({ performances, students, subjects, selectedStudents, s
             <div className="flex-1 min-h-0">
               {enlargedChart === 'left' && renderChartContent(
                 isAllSubjects ? 'bar' : 'line',
-                isAllSubjects ? subjectData : lineData,
+                isAllSubjects ? subjectData : lineDataWithTrend,
                 [1, 6],
                 true,
                 false,

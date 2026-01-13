@@ -211,7 +211,7 @@ const GuideItem = ({ item }) => {
     );
 };
 
-export default function HelpSettings() {
+export default function HelpSettings({ onClose }) {
     const navigate = useNavigate();
     const { startTour, completedTours } = useTour();
 
@@ -221,8 +221,12 @@ export default function HelpSettings() {
 
     const handleStartTour = () => {
         try {
-            startTour('INTERACTIVE_ONBOARDING');
-            toast.success('Tour gestartet!');
+            // Modal zuerst schließen
+            if (onClose) onClose();
+            // Tour nach kurzer Verzögerung starten (Modal-Animation abwarten)
+            setTimeout(() => {
+                startTour('INTERACTIVE_ONBOARDING');
+            }, 200);
         } catch (error) {
             console.error('Error starting tour:', error);
             toast.error('Fehler beim Starten der Tour');

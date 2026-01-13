@@ -43,7 +43,7 @@ const TimetableHeader = ({
               variant={currentView === view ? 'default' : 'ghost'}
               size="sm"
               onClick={() => handleViewChange(view)}
-              className={`px-4 py-2 rounded-lg transition-all duration-200 ${
+              className={`view-button-${view.toLowerCase()} px-4 py-2 rounded-lg transition-all duration-200 ${
                 currentView === view
                   ? isSpaceTheme
                     ? 'bg-purple-600 text-white hover:bg-purple-700 shadow-inner shadow-purple-500/50'

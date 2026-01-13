@@ -10,9 +10,12 @@ import toast from 'react-hot-toast';
  *
  * @param {string} studentId - The student ID
  * @param {Function} onUpdate - Callback after successful update
+ * @param {Object} options - Optional configuration
+ * @param {Function} options.onGoalCompleted - Callback when goal is completed (for currency award)
  * @returns {Object} Goal operations and state
  */
-export function useCompetencyGoals(studentId, onUpdate) {
+export function useCompetencyGoals(studentId, onUpdate, options = {}) {
+  const { onGoalCompleted } = options;
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
@@ -92,6 +95,17 @@ export function useCompetencyGoals(studentId, onUpdate) {
 
       if (newCompleted) {
         toast.success('Ziel erreicht!');
+
+        // Award currency for goal completion (if callback provided)
+        // Only award if this is a newly completed goal (not a bounty goal which handles its own currency)
+        if (onGoalCompleted && !goal.is_bounty) {
+          try {
+            await onGoalCompleted(goal.id, goal.goal_text);
+          } catch (currencyError) {
+            console.error('Error awarding currency:', currencyError);
+            // Don't fail the goal completion if currency fails
+          }
+        }
       } else {
         toast.success('Als offen markiert');
       }

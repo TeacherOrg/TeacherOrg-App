@@ -130,6 +130,16 @@ const useTimetableStates = (settings, currentYear, currentWeek) => {
     return () => document.removeEventListener('click', handleClick);
   }, [handleHideHover]);
 
+  // Overlay schließen beim Scrollen (capture phase für alle scroll events)
+  useEffect(() => {
+    const handleScroll = () => {
+      handleHideHover();
+    };
+
+    window.addEventListener('scroll', handleScroll, true);
+    return () => window.removeEventListener('scroll', handleScroll, true);
+  }, [handleHideHover]);
+
   // Overlay schließen wenn Modal geöffnet wird
   useEffect(() => {
     if (isModalOpen) {

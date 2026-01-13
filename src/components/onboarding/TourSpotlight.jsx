@@ -24,46 +24,83 @@ export function TourSpotlight() {
 
     if (!step.target) return;
 
-    const targetElement = document.querySelector(step.target);
-    if (!targetElement) {
-      console.warn(`[TourSpotlight] Target not found: ${step.target}`);
-      if (step.optional) {
-        console.log('[TourSpotlight] Auto-skipping optional step');
-        nextStep(); // Auto-skip optional steps
-      }
-      return;
-    }
+    let attempts = 0;
+    const maxAttempts = 20;
+    let retryInterval = null;
+    let cleanupFunctions = [];
 
-    // Scroll into view
-    targetElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-
-    // Call onEnter callback
-    if (step.onEnter) {
-      step.onEnter(targetElement);
-    }
-
-    // Update position
-    const updatePosition = () => {
+    const setupTarget = (targetElement) => {
+      // Nur scrollen wenn Element nicht im sichtbaren Bereich
       const rect = targetElement.getBoundingClientRect();
-      setTargetRect(rect);
+      const isInView = rect.top >= 0 && rect.bottom <= window.innerHeight;
+      if (!isInView) {
+        targetElement.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
 
-      const tooltipPos = calculateTooltipPosition(rect, step.placement);
-      setTooltipPosition(tooltipPos);
+      // Call onEnter callback
+      if (step.onEnter) {
+        step.onEnter(targetElement);
+      }
+
+      // Update position
+      const updatePosition = () => {
+        const rect = targetElement.getBoundingClientRect();
+        setTargetRect(rect);
+
+        const tooltipPos = calculateTooltipPosition(rect, step.placement, step.offset);
+        setTooltipPosition(tooltipPos);
+      };
+
+      updatePosition();
+
+      // Observe element for changes
+      observerRef.current = new ResizeObserver(updatePosition);
+      observerRef.current.observe(targetElement);
+
+      window.addEventListener('scroll', updatePosition, true);
+      window.addEventListener('resize', updatePosition);
+
+      cleanupFunctions.push(() => {
+        observerRef.current?.disconnect();
+        window.removeEventListener('scroll', updatePosition, true);
+        window.removeEventListener('resize', updatePosition);
+      });
     };
 
-    updatePosition();
+    const tryFindTarget = () => {
+      const targetElement = document.querySelector(step.target);
+      if (targetElement) {
+        if (retryInterval) clearInterval(retryInterval);
+        console.log(`[TourSpotlight] Target found: ${step.target}`);
+        setupTarget(targetElement);
+        return true;
+      }
+      return false;
+    };
 
-    // Observe element for changes
-    observerRef.current = new ResizeObserver(updatePosition);
-    observerRef.current.observe(targetElement);
-
-    window.addEventListener('scroll', updatePosition, true);
-    window.addEventListener('resize', updatePosition);
+    // Try immediately first
+    if (!tryFindTarget()) {
+      // If not found, retry with interval
+      console.log(`[TourSpotlight] Target not found immediately, retrying: ${step.target}`);
+      retryInterval = setInterval(() => {
+        attempts++;
+        if (tryFindTarget()) {
+          return;
+        }
+        if (attempts >= maxAttempts) {
+          clearInterval(retryInterval);
+          console.warn(`[TourSpotlight] Target not found after ${maxAttempts} attempts: ${step.target}`);
+          if (step.optional) {
+            console.log('[TourSpotlight] Auto-skipping optional step');
+            nextStep();
+          }
+        }
+      }, 150);
+    }
 
     return () => {
-      observerRef.current?.disconnect();
-      window.removeEventListener('scroll', updatePosition, true);
-      window.removeEventListener('resize', updatePosition);
+      if (retryInterval) clearInterval(retryInterval);
+      cleanupFunctions.forEach(fn => fn());
     };
   }, [step, nextStep]);
 
@@ -75,16 +112,20 @@ export function TourSpotlight() {
       <Portal>
         <AnimatePresence>
           <motion.div
+            key="dialog-overlay"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
+            transition={{ duration: 0.15 }}
             className="fixed inset-0 z-[9999] bg-black/50 flex items-center justify-center"
             style={{ pointerEvents: 'auto' }}
           >
             <motion.div
-              initial={{ opacity: 0, scale: 0.9 }}
+              key="dialog-content"
+              initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.9 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              transition={{ duration: 0.15 }}
               className="bg-white dark:bg-slate-800 rounded-lg shadow-2xl p-6 max-w-md w-full mx-4"
             >
               <button
@@ -122,10 +163,12 @@ export function TourSpotlight() {
                       <ChevronLeft className="w-4 h-4 mr-1" /> Zurück
                     </Button>
                   )}
-                  <Button size="sm" onClick={nextStep}>
-                    {currentStep === activeTour.steps.length - 1 ? 'Fertig' : 'Weiter'}
-                    <ChevronRight className="w-4 h-4 ml-1" />
-                  </Button>
+                  {!step.waitForAction && (
+                    <Button size="sm" onClick={nextStep}>
+                      {currentStep === activeTour.steps.length - 1 ? 'Fertig' : 'Weiter'}
+                      <ChevronRight className="w-4 h-4 ml-1" />
+                    </Button>
+                  )}
                 </div>
               </div>
             </motion.div>
@@ -143,40 +186,46 @@ export function TourSpotlight() {
       <AnimatePresence>
         {/* Dark overlay with spotlight cutout */}
         <motion.div
+          key="spotlight-overlay"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
+          transition={{ duration: 0.15 }}
           className="fixed inset-0 z-[9999]"
           style={{
             pointerEvents: 'none',
             background: `radial-gradient(
               circle at ${targetRect.left + targetRect.width / 2}px ${targetRect.top + targetRect.height / 2}px,
               transparent ${Math.max(targetRect.width, targetRect.height) / 2 + 10}px,
-              rgba(0, 0, 0, 0.7) ${Math.max(targetRect.width, targetRect.height) / 2 + 50}px
+              rgba(0, 0, 0, 0.4) ${Math.max(targetRect.width, targetRect.height) / 2 + 50}px
             )`
           }}
         />
 
         {/* Highlight border around target */}
         <motion.div
-          initial={{ scale: 0.9, opacity: 0 }}
+          key="spotlight-highlight"
+          initial={{ scale: 0.95, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
-          exit={{ scale: 0.9, opacity: 0 }}
+          exit={{ scale: 0.95, opacity: 0 }}
+          transition={{ duration: 0.12 }}
           className="fixed border-4 border-blue-500 rounded-lg pointer-events-none z-[10000]"
           style={{
             top: targetRect.top - 4,
             left: targetRect.left - 4,
             width: targetRect.width + 8,
             height: targetRect.height + 8,
-            boxShadow: '0 0 0 9999px rgba(0, 0, 0, 0.5), 0 0 20px rgba(59, 130, 246, 0.8)'
+            boxShadow: '0 0 0 9999px rgba(0, 0, 0, 0.3), 0 0 20px rgba(59, 130, 246, 0.8)'
           }}
         />
 
         {/* Tooltip */}
         <motion.div
-          initial={{ opacity: 0, y: 20 }}
+          key="spotlight-tooltip"
+          initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: 20 }}
+          exit={{ opacity: 0, y: 10 }}
+          transition={{ duration: 0.15 }}
           className="fixed z-[10001] bg-white dark:bg-slate-800 rounded-lg shadow-2xl p-6 max-w-md pointer-events-auto"
           style={{
             top: tooltipPosition.top,
@@ -218,10 +267,12 @@ export function TourSpotlight() {
                   <ChevronLeft className="w-4 h-4 mr-1" /> Zurück
                 </Button>
               )}
-              <Button size="sm" onClick={nextStep}>
-                {currentStep === activeTour.steps.length - 1 ? 'Fertig' : 'Weiter'}
-                <ChevronRight className="w-4 h-4 ml-1" />
-              </Button>
+              {!step.waitForAction && (
+                <Button size="sm" onClick={nextStep}>
+                  {currentStep === activeTour.steps.length - 1 ? 'Fertig' : 'Weiter'}
+                  <ChevronRight className="w-4 h-4 ml-1" />
+                </Button>
+              )}
             </div>
           </div>
         </motion.div>
@@ -230,42 +281,44 @@ export function TourSpotlight() {
   );
 }
 
-function calculateTooltipPosition(rect, placement) {
+function calculateTooltipPosition(rect, placement, offset = { x: 0, y: 0 }) {
   const padding = 20;
   const tooltipWidth = 400; // max-w-md
   const tooltipHeight = 200; // estimated
+  const offsetX = offset?.x || 0;
+  const offsetY = offset?.y || 0;
 
   switch (placement) {
     case 'top':
       return {
-        top: Math.max(padding, rect.top - tooltipHeight - padding),
+        top: Math.max(padding, rect.top - tooltipHeight - padding) + offsetY,
         left: Math.max(padding, Math.min(
           window.innerWidth - tooltipWidth - padding,
           rect.left + rect.width / 2 - tooltipWidth / 2
-        ))
+        )) + offsetX
       };
     case 'bottom':
       return {
-        top: Math.min(window.innerHeight - tooltipHeight - padding, rect.bottom + padding),
+        top: Math.min(window.innerHeight - tooltipHeight - padding, rect.bottom + padding) + offsetY,
         left: Math.max(padding, Math.min(
           window.innerWidth - tooltipWidth - padding,
           rect.left + rect.width / 2 - tooltipWidth / 2
-        ))
+        )) + offsetX
       };
     case 'left':
       return {
-        top: Math.max(padding, rect.top + rect.height / 2 - tooltipHeight / 2),
-        left: Math.max(padding, rect.left - tooltipWidth - padding)
+        top: Math.max(padding, rect.top + rect.height / 2 - tooltipHeight / 2) + offsetY,
+        left: Math.max(padding, rect.left - tooltipWidth - padding) + offsetX
       };
     case 'right':
       return {
-        top: Math.max(padding, rect.top + rect.height / 2 - tooltipHeight / 2),
-        left: Math.min(window.innerWidth - tooltipWidth - padding, rect.right + padding)
+        top: Math.max(padding, rect.top + rect.height / 2 - tooltipHeight / 2) + offsetY,
+        left: Math.min(window.innerWidth - tooltipWidth - padding, rect.right + padding) + offsetX
       };
     case 'center':
       return {
-        top: window.innerHeight / 2 - tooltipHeight / 2,
-        left: window.innerWidth / 2 - tooltipWidth / 2
+        top: window.innerHeight / 2 - tooltipHeight / 2 + offsetY,
+        left: window.innerWidth / 2 - tooltipWidth / 2 + offsetX
       };
     default:
       return {

@@ -71,10 +71,16 @@ const KPICards = ({ performances, students, subjects, selectedSubject = 'all', s
       };
     }
 
+    // Get core subject IDs for filtering (reused in multiple places)
+    const coreSubjectIds = subjects.filter(s => s.is_core_subject).map(s => s.id);
+
     // Filter performances by selected subject if not "all"
-    let relevantPerformances = selectedSubject === 'all'
-      ? performances
-      : performances.filter(p => p.subject === selectedSubject);
+    let relevantPerformances = performances;
+    if (selectedSubject === 'kernfaecher') {
+      relevantPerformances = performances.filter(p => coreSubjectIds.includes(p.subject));
+    } else if (selectedSubject !== 'all') {
+      relevantPerformances = performances.filter(p => p.subject === selectedSubject);
+    }
 
     // SINGLE STUDENT MODE: Filter performances to only selected student
     if (isSingleStudent && selectedStudentId) {
@@ -88,9 +94,17 @@ const KPICards = ({ performances, students, subjects, selectedSubject = 'all', s
 
     // Calculate per-subject averages (filtered for single student if applicable)
     const subjectAverages = {};
-    const perfsForSubjectCalc = isSingleStudent && selectedStudentId
-      ? performances.filter(p => p.student_id === selectedStudentId)
-      : performances;
+
+    let perfsForSubjectCalc = performances;
+    if (isSingleStudent && selectedStudentId) {
+      perfsForSubjectCalc = performances.filter(p => p.student_id === selectedStudentId);
+    }
+    // Filter for Kernfächer if selected
+    if (selectedSubject === 'kernfaecher') {
+      perfsForSubjectCalc = perfsForSubjectCalc.filter(p => coreSubjectIds.includes(p.subject));
+    } else if (selectedSubject !== 'all') {
+      perfsForSubjectCalc = perfsForSubjectCalc.filter(p => p.subject === selectedSubject);
+    }
 
     perfsForSubjectCalc.forEach(p => {
       if (!subjectAverages[p.subject]) {

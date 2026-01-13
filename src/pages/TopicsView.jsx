@@ -59,6 +59,7 @@ const TopicsView = () => {
   const [activeTab, setActiveTab] = useState('topics');
   const [selectedTopic, setSelectedTopic] = useState(null);  // Neu: Für Bearbeiten eines Topics
   const [isModalOpen, setIsModalOpen] = useState(false);  // Neu: Für Modal-Öffnung
+  const [modalInitialTab, setModalInitialTab] = useState('general');  // Für Tab-Auswahl bei Modal-Öffnung
   const [showCompetencySelection, setShowCompetencySelection] = useState(false);  // Neu: Für konditionale Anzeige
   const [assignTopicId, setAssignTopicId] = useState(null);  // Für Kompetenz-Zuweisung
   const [selectedCompetencyIds, setSelectedCompetencyIds] = useState([]);  // Ausgewählte Kompetenzen
@@ -892,6 +893,8 @@ const TopicsView = () => {
     const searchParams = new URLSearchParams(location.search);
     const selectMode = searchParams.get('select') === 'true';
     const topicIdParam = searchParams.get('topic');
+    const openModal = searchParams.get('openModal') === 'true';
+    const modalTab = searchParams.get('modalTab');
 
     if (selectMode) {
       setShowCompetencySelection(true);
@@ -917,11 +920,23 @@ const TopicsView = () => {
       setAssignTopicId(null);
     }
 
+    // Handle openModal parameter (from YearlyOverview assign-back)
+    if (openModal && topicIdParam && allTopics.length > 0) {
+      const topic = allTopics.find(t => t.id === topicIdParam);
+      if (topic) {
+        setSelectedTopic(topic);
+        setModalInitialTab(modalTab || 'general');
+        setIsModalOpen(true);
+        // Clear URL params to prevent re-opening on refresh
+        navigate('/Topics', { replace: true });
+      }
+    }
+
     // Handle direct tab navigation
     if (searchParams.get('tab') === 'curriculum') {
       setActiveTab('curriculum');
     }
-  }, [location]);
+  }, [location, allTopics, navigate]);
 
   const loadData = async () => {
     setIsLoading(true);
@@ -1415,7 +1430,10 @@ const TopicsView = () => {
       {selectedTopic && (
         <TopicModal
           isOpen={isModalOpen}
-          onClose={() => setIsModalOpen(false)}
+          onClose={() => {
+            setIsModalOpen(false);
+            setModalInitialTab('general'); // Reset to default tab when closing
+          }}
           onSave={(topicData) => handleSaveTopic(topicData, selectedTopic.subject?.id || selectedTopic.subject || selectedTopic.subject_id)}
           onDelete={handleDeleteTopic}
           topic={selectedTopic}
@@ -1424,6 +1442,7 @@ const TopicsView = () => {
           subjects={subjects}
           topics={allTopics}
           curriculumCompetencies={curriculumCompetencies.filter(c => c.fach_name === subjects.find(s => s.id === getSubjectId(selectedTopic))?.name)}
+          initialTab={modalInitialTab}
         />
       )}
 

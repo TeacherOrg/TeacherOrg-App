@@ -22,10 +22,11 @@ import {
   UserPlus,
   Edit3,
 } from 'lucide-react';
-import { Class, Subject, Student, Setting } from '@/api/entities';
+import { Class, Subject, Student, Setting, User } from '@/api/entities';
 import pb from '@/api/pb';
 import toast from 'react-hot-toast';
 import TemplateEditorModal from '@/components/settings/TemplateEditorModal';
+import CredentialsPrintModal from '@/components/settings/CredentialsPrintModal';
 
 // Preset colors for subjects
 const PRESET_COLORS = [
@@ -63,6 +64,11 @@ export function SetupWizard({ isOpen, onComplete }) {
   const [newStudent, setNewStudent] = useState({ first_name: '', last_name: '' });
   const [studentList, setStudentList] = useState('');
   const [showImportDialog, setShowImportDialog] = useState(false);
+  // Auto-Email & Account-Erstellung
+  const [autoEmailEnabled, setAutoEmailEnabled] = useState(true);
+  const [emailDomain, setEmailDomain] = useState('');
+  const [showCredentialsModal, setShowCredentialsModal] = useState(false);
+  const [createdCredentials, setCreatedCredentials] = useState([]);
   const [scheduleType, setScheduleType] = useState('flexible');
   const [fixedScheduleTemplate, setFixedScheduleTemplate] = useState({});
   const [isTemplateEditorOpen, setIsTemplateEditorOpen] = useState(false);
@@ -248,6 +254,7 @@ export function SetupWizard({ isOpen, onComplete }) {
         class_id: createdClassId,
         user_id: currentUserId,
         email: generatedEmail,
+        account_id: null,  // Explizit null setzen (Schüler ohne Account erstellen)
       });
 
       setStudents(prev => [...prev, { ...created, name: fullName }]);
@@ -261,15 +268,18 @@ export function SetupWizard({ isOpen, onComplete }) {
     }
   };
 
-  // Import students from list
+  // Import students from list with optional auto-email and account creation
   const handlePasteStudents = async () => {
     if (!createdClassId || !studentList.trim()) return;
 
     setIsLoading(true);
+    const credentials = [];
+
     try {
       const lines = studentList.split('\n').filter(line => line.trim());
       const currentUserId = pb.authStore.model?.id;
       const newStudents = [];
+      const shouldCreateAccounts = autoEmailEnabled && emailDomain.trim();
 
       for (const line of lines) {
         const trimmed = line.trim();
@@ -281,24 +291,71 @@ export function SetupWizard({ isOpen, onComplete }) {
             name = `${parts[0]} ${parts[1]}`;
           }
 
-          const email = `${name.replace(/\s+/g, '.').toLowerCase()}@school.example.com`;
+          // Email generieren
+          let email = null;
+          if (autoEmailEnabled && emailDomain.trim()) {
+            // Echte Email mit Domain: vorname.nachname@domain
+            const emailBase = name
+              .toLowerCase()
+              .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // Umlaute entfernen
+              .replace(/ä/g, 'ae').replace(/ö/g, 'oe').replace(/ü/g, 'ue').replace(/ß/g, 'ss')
+              .replace(/\s+/g, '.')
+              .replace(/[^a-z0-9.]/g, '');
+            email = `${emailBase}@${emailDomain.trim()}`;
+          } else if (autoEmailEnabled) {
+            // Placeholder Email ohne Domain
+            email = `${name.replace(/\s+/g, '.').toLowerCase()}@school.example.com`;
+          }
 
           const created = await Student.create({
             name: name,
             class_id: createdClassId,
             user_id: currentUserId,
-            email,
+            email: email,
+            account_id: null,
           });
 
-          newStudents.push({ ...created, name });
-          await new Promise(resolve => setTimeout(resolve, 100)); // Rate limiting
+          // Account erstellen wenn Domain angegeben
+          if (shouldCreateAccounts && email) {
+            try {
+              const result = await User.createStudentAccount({
+                studentId: created.id,
+                email: email,
+                name: name,
+              });
+
+              if (result.success) {
+                credentials.push({
+                  name: name,
+                  email: email,
+                  password: result.password,
+                });
+                // Update student mit account_id
+                created.account_id = result.user.id;
+                created.generated_password = result.password;
+              }
+            } catch (accountError) {
+              console.error(`Error creating account for ${name}:`, accountError);
+            }
+          }
+
+          newStudents.push({ ...created, name, email });
+          await new Promise(resolve => setTimeout(resolve, 150)); // Rate limiting
         }
       }
 
       setStudents(prev => [...prev, ...newStudents]);
       setStudentList('');
       setShowImportDialog(false);
-      toast.success(`${newStudents.length} Schüler erfolgreich hinzugefügt!`);
+
+      // Zeige Credentials Modal wenn Accounts erstellt wurden
+      if (credentials.length > 0) {
+        setCreatedCredentials(credentials);
+        setShowCredentialsModal(true);
+        toast.success(`${newStudents.length} Schüler mit Accounts erstellt!`);
+      } else {
+        toast.success(`${newStudents.length} Schüler erfolgreich hinzugefügt!`);
+      }
     } catch (error) {
       console.error('Error importing students:', error);
       toast.error('Fehler beim Importieren der Schüler.');
@@ -560,24 +617,73 @@ export function SetupWizard({ isOpen, onComplete }) {
               </div>
             </div>
 
-            {/* Import Dialog */}
+            {/* Import Dialog with Auto-Email Options */}
             {showImportDialog && (
               <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-                <div className="bg-white dark:bg-slate-800 rounded-lg p-4 w-80 max-w-[90vw]">
+                <div className="bg-white dark:bg-slate-800 rounded-lg p-4 w-96 max-w-[95vw]">
                   <h4 className="text-lg font-semibold mb-3">Schülerliste importieren</h4>
+
                   <Textarea
                     value={studentList}
                     onChange={(e) => setStudentList(e.target.value)}
                     placeholder="Max Mustermann&#10;Anna Schmidt&#10;..."
-                    className="bg-white dark:bg-slate-700 border-slate-300 dark:border-slate-600 h-24"
+                    className="bg-white dark:bg-slate-700 border-slate-300 dark:border-slate-600 h-20"
                   />
                   <p className="text-xs text-slate-500 mt-1">Ein Name pro Zeile</p>
-                  <div className="flex gap-2 mt-3">
-                    <Button variant="outline" onClick={() => { setShowImportDialog(false); setStudentList(''); }} className="flex-1">
+
+                  {/* Auto-Email Options */}
+                  <div className="mt-3 p-3 bg-slate-50 dark:bg-slate-700/50 rounded-lg space-y-2">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={autoEmailEnabled}
+                        onChange={(e) => setAutoEmailEnabled(e.target.checked)}
+                        className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                      />
+                      <span className="text-sm text-slate-700 dark:text-slate-300">
+                        E-Mail automatisch generieren
+                      </span>
+                    </label>
+
+                    {autoEmailEnabled && (
+                      <div className="flex items-center gap-2 ml-6">
+                        <span className="text-sm text-slate-500">vorname.nachname@</span>
+                        <Input
+                          value={emailDomain}
+                          onChange={(e) => setEmailDomain(e.target.value)}
+                          placeholder="schule.ch"
+                          className="flex-1 h-8 text-sm bg-white dark:bg-slate-700 border-slate-300 dark:border-slate-600"
+                        />
+                      </div>
+                    )}
+
+                    {autoEmailEnabled && emailDomain.trim() && (
+                      <p className="text-xs text-green-600 dark:text-green-400 ml-6">
+                        Accounts werden automatisch erstellt. Zugangskarten erscheinen nach dem Import.
+                      </p>
+                    )}
+
+                    {autoEmailEnabled && !emailDomain.trim() && (
+                      <p className="text-xs text-slate-500 ml-6">
+                        Ohne Domain werden Platzhalter-E-Mails erstellt (keine Accounts).
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="flex gap-2 mt-4">
+                    <Button
+                      variant="outline"
+                      onClick={() => { setShowImportDialog(false); setStudentList(''); }}
+                      className="flex-1"
+                    >
                       Abbrechen
                     </Button>
-                    <Button onClick={handlePasteStudents} disabled={!studentList.trim() || isLoading} className="flex-1 bg-green-600 hover:bg-green-700">
-                      Importieren
+                    <Button
+                      onClick={handlePasteStudents}
+                      disabled={!studentList.trim() || isLoading}
+                      className="flex-1 bg-green-600 hover:bg-green-700"
+                    >
+                      {isLoading ? 'Importiert...' : 'Importieren'}
                     </Button>
                   </div>
                 </div>
@@ -1009,6 +1115,14 @@ export function SetupWizard({ isOpen, onComplete }) {
       classes={createdClassId ? [{ id: createdClassId, name: className }] : []}
       subjects={subjects}
       lessonsPerDay={timeSettings.lessonsPerDay}
+    />
+
+    {/* Credentials Print Modal - zeigt Zugangskarten nach Account-Erstellung */}
+    <CredentialsPrintModal
+      isOpen={showCredentialsModal}
+      onClose={() => setShowCredentialsModal(false)}
+      credentials={createdCredentials}
+      className={className}
     />
   </>
   );

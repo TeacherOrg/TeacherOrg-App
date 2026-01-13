@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { motion } from "framer-motion";
 import {
   User,
@@ -31,16 +31,17 @@ export default function LessonDetailPanel({
   lesson,
   currentItem,
   nextLesson,
+  previousLesson, // Lektion VOR der aktuellen Pause (für Doppellektion-Erkennung)
   customization,
   currentTime,
   selectedDate,
   manualStepIndex,
   onManualStepChange,
-  onStepComplete, // Callback wenn ein Step abgeschlossen wird
+  onStepComplete, // Callback wenn ein Step abgeschlossen wird (lessonId, stepIndex)
+  playedStepSounds, // Set der bereits abgespielten Step-Sounds (vom Parent verwaltet)
 }) {
   const [currentStepIndex, setCurrentStepIndex] = useState(-1);
   const [manualStepControl, setManualStepControl] = useState(false);
-  const completedStepsRef = useRef(new Set()); // Track welche Steps bereits als complete gemeldet wurden
 
   // Anzuzeigende Lektion (ausgewählt oder aktuell laufend)
   const displayLesson = lesson || (currentItem?.type === "lesson" ? currentItem : null);
@@ -170,22 +171,19 @@ export default function LessonDetailPanel({
   }, [displayLesson, currentTime, selectedDate]);
 
   // Trigger onStepComplete callback when a step reaches 100%
+  // Das Tracking ob ein Sound bereits gespielt wurde passiert jetzt im Parent (DailyView)
   useEffect(() => {
     if (!onStepComplete || !displayLesson?.id || !stepProgress.length) return;
 
     stepProgress.forEach((progress, index) => {
       const stepKey = `${displayLesson.id}-step-${index}`;
-      if (progress >= 100 && !completedStepsRef.current.has(stepKey)) {
-        completedStepsRef.current.add(stepKey);
-        onStepComplete(index);
+      // Prüfe ob dieser Sound bereits gespielt wurde (vom Parent verwaltet)
+      if (progress >= 100 && playedStepSounds && !playedStepSounds.has(stepKey)) {
+        // Rufe Parent-Handler auf mit lessonId und stepIndex
+        onStepComplete(displayLesson.id, index);
       }
     });
-  }, [stepProgress, displayLesson?.id, onStepComplete]);
-
-  // Reset completed steps ref when lesson changes
-  useEffect(() => {
-    completedStepsRef.current = new Set();
-  }, [displayLesson?.id]);
+  }, [stepProgress, displayLesson?.id, onStepComplete, playedStepSounds]);
 
   // Pause-Ansicht mit Live-Countdown
   if (isPause) {
@@ -205,14 +203,15 @@ export default function LessonDetailPanel({
     // Dynamische Farbe basierend auf dem nächsten Fach (Fallback: Orange)
     const nextSubjectColor = nextLesson?.subject?.color || '#f97316';
 
-    // Prüfe ob es eine Doppellektions-Pause ist (gleiche Lektion nach der Pause)
-    const isDoubleLessonBreak = displayLesson?.is_double_lesson &&
-      nextLesson?.id === displayLesson?.id;
+    // Prüfe ob es eine Doppellektions-Pause ist (interne Pause zwischen Teil 1 und Teil 2)
+    // Korrigiert: Verwende previousLesson (die Lektion VOR der Pause), nicht displayLesson
+    const isDoubleLessonBreak = previousLesson?.is_double_lesson &&
+      nextLesson?.id === previousLesson?.id;
 
     // Theme-abhängige Transparenz und Textfarben für Pause-Ansicht
     const isSpaceTheme = customization.theme === 'space';
     const pauseBgClass = isSpaceTheme
-      ? 'bg-white/30 dark:bg-slate-900/30 border border-white/20 dark:border-white/10'
+      ? 'bg-transparent border border-purple-500/30 dark:border-purple-400/30'
       : 'bg-white/95 dark:bg-slate-900/95';
     const pauseTextClass = isSpaceTheme ? 'text-white' : 'text-slate-800 dark:text-slate-200';
     const pauseSubtextClass = isSpaceTheme ? 'text-white/80' : 'text-slate-700 dark:text-slate-300';
@@ -316,7 +315,7 @@ export default function LessonDetailPanel({
   // Haupt-Detail-Ansicht
   return (
     <div
-      className={`flex h-full min-h-0 flex-col overflow-hidden rounded-2xl shadow-2xl ${getBgClass()}`}
+      className={`lesson-detail-panel flex h-full min-h-0 flex-col overflow-hidden rounded-2xl shadow-2xl ${getBgClass()}`}
     >
       {/* Header mit Fachfarben-Gradient */}
       <div
@@ -364,7 +363,7 @@ export default function LessonDetailPanel({
 
 
       {/* Inhaltsbereich */}
-      <div className={`flex-1 min-h-0 overflow-y-auto ${isThemedBackground ? 'bg-white/20 dark:bg-slate-900/20' : 'bg-white/95 dark:bg-slate-900/95'}`}>
+      <div className={`flex-1 min-h-0 overflow-y-auto ${isThemedBackground ? 'bg-transparent' : 'bg-white/95 dark:bg-slate-900/95'}`}>
         <div className={contentPadding}>
           {/* Schrittsteuerung */}
           <div className="flex justify-between items-center mb-6">
@@ -381,7 +380,7 @@ export default function LessonDetailPanel({
                 </Button>
               )}
             </div>
-            <span className="text-sm text-slate-600 dark:text-slate-400">
+            <span className={`text-sm ${isThemedBackground ? 'text-white' : 'text-slate-600 dark:text-slate-400'}`}>
               Schritt {Math.max(0, currentStepIndex + 1)} von {displayLesson.steps.length}
             </span>
           </div>
@@ -430,16 +429,16 @@ export default function LessonDetailPanel({
                           <text x="20" y="24" textAnchor="middle" fill="#22c55e" fontSize="14" className="rotate-90" style={{ transformOrigin: '20px 20px' }}>✓</text>
                         )}
                       </svg>
-                      <span className="font-semibold text-lg">{step.time} Min</span>
+                      <span className={`font-semibold text-lg ${isThemedBackground ? 'text-white' : ''}`}>{step.time} Min</span>
                     </div>
                     <div className="flex items-center">
-                      <WorkFormIcon className="h-6 w-6" />
+                      <WorkFormIcon className={`h-6 w-6 ${isThemedBackground ? 'text-white/70' : ''}`} />
                     </div>
                   </div>
-                  <div className={`${customization.fontSize?.steps || 'text-sm'}`}>
+                  <div className={`${customization.fontSize?.steps || 'text-sm'} whitespace-pre-wrap ${isThemedBackground ? 'text-white' : ''}`}>
                     <span className="font-medium">Ablauf:</span> {step.activity || "–"}
                   </div>
-                  <div className={`${customization.fontSize?.steps || 'text-sm'} mt-1`}>
+                  <div className={`${customization.fontSize?.steps || 'text-sm'} mt-1 whitespace-pre-wrap ${isThemedBackground ? 'text-white' : ''}`}>
                     <span className="font-medium">Material:</span> {step.material || "–"}
                   </div>
                 </div>
@@ -450,11 +449,11 @@ export default function LessonDetailPanel({
           {/* Desktop Grid-Layout */}
           <div className="hidden md:block">
             <div className="grid grid-cols-[80px_80px_140px_1fr_200px] gap-4">
-              <div className="text-xs font-semibold uppercase text-slate-600 dark:text-slate-400 py-3"> </div>
-              <div className="text-xs font-semibold uppercase text-slate-600 dark:text-slate-400 py-3">Zeit</div>
-              <div className="text-xs font-semibold uppercase text-slate-600 dark:text-slate-400 py-3">Form</div>
-              <div className="text-xs font-semibold uppercase text-slate-600 dark:text-slate-400 py-3">Ablauf</div>
-              <div className="text-xs font-semibold uppercase text-slate-600 dark:text-slate-400 py-3">Material</div>
+              <div className={`text-xs font-semibold uppercase py-3 ${isThemedBackground ? 'text-white/70' : 'text-slate-600 dark:text-slate-400'}`}> </div>
+              <div className={`text-xs font-semibold uppercase py-3 ${isThemedBackground ? 'text-white/70' : 'text-slate-600 dark:text-slate-400'}`}>Zeit</div>
+              <div className={`text-xs font-semibold uppercase py-3 ${isThemedBackground ? 'text-white/70' : 'text-slate-600 dark:text-slate-400'}`}>Form</div>
+              <div className={`text-xs font-semibold uppercase py-3 ${isThemedBackground ? 'text-white/70' : 'text-slate-600 dark:text-slate-400'}`}>Ablauf</div>
+              <div className={`text-xs font-semibold uppercase py-3 ${isThemedBackground ? 'text-white/70' : 'text-slate-600 dark:text-slate-400'}`}>Material</div>
 
               {displayLesson.steps.map((step, index) => {
                 const progress = stepProgress[index] || 0;
@@ -502,12 +501,12 @@ export default function LessonDetailPanel({
                         )}
                       </svg>
                     </div>
-                    <div className={`flex items-center ${customization.fontSize?.steps || 'text-sm'}`}>{step.time ? `${step.time} Min` : "–"}</div>
+                    <div className={`flex items-center ${customization.fontSize?.steps || 'text-sm'} ${isThemedBackground ? 'text-white' : ''}`}>{step.time ? `${step.time} Min` : "–"}</div>
                     <div className={`flex items-center ${customization.fontSize?.steps || 'text-sm'}`}>
-                      <WorkFormIcon className="h-5 w-5 text-slate-500" />
+                      <WorkFormIcon className={`h-5 w-5 ${isThemedBackground ? 'text-white/70' : 'text-slate-500'}`} />
                     </div>
-                    <div className={`break-words ${customization.fontSize?.steps || 'text-sm'}`}>{step.activity || "–"}</div>
-                    <div className={`break-words ${customization.fontSize?.steps || 'text-sm'}`}>{step.material || "–"}</div>
+                    <div className={`break-words whitespace-pre-wrap ${customization.fontSize?.steps || 'text-sm'} ${isThemedBackground ? 'text-white' : ''}`}>{step.activity || "–"}</div>
+                    <div className={`break-words whitespace-pre-wrap ${customization.fontSize?.steps || 'text-sm'} ${isThemedBackground ? 'text-white' : ''}`}>{step.material || "–"}</div>
                   </motion.div>
                 );
               })}

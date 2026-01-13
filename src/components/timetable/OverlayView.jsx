@@ -14,7 +14,7 @@ const OverlayView = forwardRef(({ lesson, schedule, overlayRef, disableHover, is
   const overlayContent = (
     <div
       ref={ref}
-      className="overlay fixed z-[200] p-2 rounded-lg shadow-lg min-w-[300px]"
+      className="overlay fixed z-[200] p-2 rounded-lg shadow-lg w-fit max-w-[500px]"
       style={{ 
         transition: 'transform 0.2s ease-out', 
         transformOrigin: 'center', 
@@ -51,13 +51,13 @@ const OverlayView = forwardRef(({ lesson, schedule, overlayRef, disableHover, is
         )}
       </h3>
       {lesson.steps?.length > 0 ? (
-        <table className="text-sm w-full border-collapse">
+        <table className="text-sm w-full border-collapse table-fixed">
           <thead>
             <tr>
-              <th className="px-2 py-1 text-left"><span className="mr-1">⏱️</span>Zeit</th>
-              <th className="px-2 py-1 text-left"><span className="mr-1">👥</span>Form</th>
+              <th className="px-2 py-1 text-left w-[60px]"><span className="mr-1">⏱️</span>Zeit</th>
+              <th className="px-2 py-1 text-left w-[60px]"><span className="mr-1">👥</span>Form</th>
               <th className="px-2 py-1 text-left"><span className="mr-1">✏️</span>Ablauf</th>
-              <th className="px-2 py-1 text-left"><span className="mr-1">📦</span>Material</th>
+              <th className="px-2 py-1 text-left w-[150px]"><span className="mr-1">📦</span>Material</th>
             </tr>
           </thead>
           <tbody>
@@ -69,16 +69,16 @@ const OverlayView = forwardRef(({ lesson, schedule, overlayRef, disableHover, is
             {lesson.steps.map((step, index) => (
                 <React.Fragment key={index}>
                     <tr className="bg-transparent">
-                        <td className="px-2 py-2 text-white font-medium">
+                        <td className="px-2 py-2 text-white font-medium align-top">
                             {step.time ? `${step.time}min` : ''}
                         </td>
-                        <td className="px-2 py-2 text-slate-200">
+                        <td className="px-2 py-2 text-slate-200 align-top">
                             {getWorkFormIcon(step.workForm)}
                         </td>
-                        <td className="px-2 py-2 text-white whitespace-pre-wrap">
+                        <td className="px-2 py-2 text-white whitespace-pre-wrap align-top">
                             {step.activity || ''}
                         </td>
-                        <td className="px-2 py-2 text-slate-200 whitespace-pre-wrap">
+                        <td className="px-2 py-2 text-slate-200 whitespace-pre-wrap align-top">
                             {step.material || ''}
                         </td>
                     </tr>

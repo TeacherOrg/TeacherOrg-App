@@ -4,7 +4,8 @@ import { sortableKeyboardCoordinates } from '@dnd-kit/sortable';
 import { Lesson } from "@/api/entities";
 import { getWeekYear } from '@/utils/weekYearUtils';
 import { toast } from 'react-hot-toast';
-import pb from '@/api/pb'; // Add this import
+import pb from '@/api/pb';
+import { emitTourEvent, TOUR_EVENTS } from '@/components/onboarding/tours/tourEvents';
 
 const useDragAndDrop = (lessonsForCurrentWeek, allLessons, allerleiLessons, currentWeek, yearlyLessons, timeSlots, currentYear, queryClientLocal, subjects, activeClassId, optimisticUpdateAllLessons, optimisticUpdateYearlyLessons, optimisticUpdateAllerleiLessons, reassignYearlyLessonLinks, updateYearlyLessonOrder, setAllLessons, setYearlyLessons, setAllerleiLessons, refetch, setActiveDragId) => {
   const sensors = useSensors(
@@ -284,6 +285,9 @@ const useDragAndDrop = (lessonsForCurrentWeek, allLessons, allerleiLessons, curr
 
         await refetch();
         queryClientLocal.invalidateQueries(['timetableData', currentYear, currentWeek]);
+
+        // Emit tour event for successful drop with day info
+        emitTourEvent(TOUR_EVENTS.DOUBLE_LESSON_PLACED, { day: finalTarget.day });
       } catch (error) {
         console.error('Error creating lesson from pool:', error);
         toast.error('Fehler beim Erstellen der Lektion: ' + (error.message || 'Unbekannter Fehler'));

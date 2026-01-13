@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { Student, Performance, UeberfachlichKompetenz, Competency, StudentSelfAssessment, CompetencyGoal, Class, ChoreAssignment } from '@/api/entities';
+import { Student, Performance, UeberfachlichKompetenz, Competency, StudentSelfAssessment, CompetencyGoal, Class, ChoreAssignment, Subject } from '@/api/entities';
 import { calculateWeightedGrade } from '@/components/grades/utils/calculateWeightedGrade';
 import { getFachbereichColor } from '@/utils/colorUtils';
 import pb from '@/api/pb';
@@ -22,6 +22,7 @@ export function useStudentData(studentId = null) {
   const [goals, setGoals] = useState([]);
   const [classInfo, setClassInfo] = useState(null);
   const [choreAssignments, setChoreAssignments] = useState([]);
+  const [subjects, setSubjects] = useState([]);
 
   const currentUser = pb.authStore.model;
   const isStudent = currentUser?.role === 'student';
@@ -74,14 +75,16 @@ export function useStudentData(studentId = null) {
         teacherAssessmentsData,
         selfAssessmentsData,
         goalsData,
-        choreAssignmentsData
+        choreAssignmentsData,
+        subjectsData
       ] = await Promise.all([
         Performance.filter({ student_id: studentData.id }),
         Competency.filter({ class_id: studentData.class_id }),
         UeberfachlichKompetenz.filter({ student_id: studentData.id }),
         StudentSelfAssessment.filter({ student_id: studentData.id }).catch(() => []),
         CompetencyGoal.filter({ student_id: studentData.id }).catch(() => []),
-        ChoreAssignment.filter({ student_id: studentData.id }).catch(() => [])
+        ChoreAssignment.filter({ student_id: studentData.id }).catch(() => []),
+        Subject.filter({ class_id: studentData.class_id }).catch(() => [])
       ]);
 
       setPerformances(performancesData);
@@ -90,6 +93,7 @@ export function useStudentData(studentId = null) {
       setSelfAssessments(selfAssessmentsData);
       setGoals(goalsData);
       setChoreAssignments(choreAssignmentsData);
+      setSubjects(subjectsData);
 
     } catch (err) {
       console.error('Error loading student data:', err);
@@ -520,6 +524,78 @@ export function useStudentData(studentId = null) {
     return completedGoalsCount + completedChoresCount + selfAssessmentCount;
   }, [goals, stats.completedChores, selfAssessments]);
 
+  // NEW: Calculate core subject average (subjects with is_core_subject = true)
+  const coreSubjectAverage = useMemo(() => {
+    if (performances.length === 0 || subjects.length === 0) return null;
+
+    // Get IDs of core subjects
+    const coreSubjectIds = subjects
+      .filter(s => s.is_core_subject)
+      .map(s => s.id);
+
+    if (coreSubjectIds.length === 0) return null;
+
+    // Get performances for core subjects (support both subject_id and subject fields)
+    const corePerformances = performances.filter(p => {
+      const subjectId = p.subject_id || p.subject;
+      return p.grade && p.grade > 0 && coreSubjectIds.includes(subjectId);
+    });
+
+    if (corePerformances.length === 0) return null;
+
+    const total = corePerformances.reduce((sum, p) => sum + p.grade, 0);
+    return total / corePerformances.length;
+  }, [performances, subjects]);
+
+  // NEW: Count subjects improved by >= 0.5 (same logic as conqueredCount but for subjects)
+  const improvedSubjectsCount = useMemo(() => {
+    if (performances.length === 0) return 0;
+
+    const now = new Date();
+    const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+    // Group by subject
+    const bySubject = {};
+
+    performances.forEach(p => {
+      if (!p.grade || p.grade === 0 || !p.subject_id) return;
+
+      const performanceDate = p.date ? new Date(p.date) : null;
+
+      if (!bySubject[p.subject_id]) {
+        bySubject[p.subject_id] = {
+          recentGrades: [],
+          olderGrades: []
+        };
+      }
+
+      if (performanceDate) {
+        if (performanceDate >= thirtyDaysAgo) {
+          bySubject[p.subject_id].recentGrades.push(p.grade);
+        } else {
+          bySubject[p.subject_id].olderGrades.push(p.grade);
+        }
+      }
+    });
+
+    // Count subjects with >= 0.5 improvement
+    let count = 0;
+
+    Object.values(bySubject).forEach(data => {
+      if (data.recentGrades.length > 0 && data.olderGrades.length > 0) {
+        const recentAvg = data.recentGrades.reduce((a, b) => a + b, 0) / data.recentGrades.length;
+        const olderAvg = data.olderGrades.reduce((a, b) => a + b, 0) / data.olderGrades.length;
+        const improvement = recentAvg - olderAvg;
+
+        if (improvement >= 0.5) {
+          count++;
+        }
+      }
+    });
+
+    return count;
+  }, [performances]);
+
   // Helper function to get completed goals
   const completedGoals = useMemo(() => {
     return goals.filter(g => g.is_completed);
@@ -535,6 +611,7 @@ export function useStudentData(studentId = null) {
     selfAssessments,
     goals,
     choreAssignments,
+    subjects,
 
     // Derived data
     gradeAverage,
@@ -558,6 +635,8 @@ export function useStudentData(studentId = null) {
     engagementScore,
     completedGoals,
     completedChores: stats.completedChores,
+    coreSubjectAverage,
+    improvedSubjectsCount,
 
     // State
     loading,

@@ -29,7 +29,14 @@ export const useLeistungsChartData = ({
       p && typeof p.date === 'string' && typeof p.assessment_name === 'string' && typeof p.grade === 'number'
     );
     const sortedPerformances = validPerformances
-      .filter(p => selectedSubject === 'all' || getSubjectId(p.subject) === selectedSubject)
+      .filter(p => {
+        if (selectedSubject === 'all') return true;
+        if (selectedSubject === 'kernfaecher') {
+          const coreSubjectIds = subjects.filter(s => s.is_core_subject).map(s => s.id);
+          return coreSubjectIds.includes(getSubjectId(p.subject));
+        }
+        return getSubjectId(p.subject) === selectedSubject;
+      })
       .sort((a, b) => new Date(a.date) - new Date(b.date));
 
     if (sortedPerformances.length === 0) return [];
@@ -78,9 +85,17 @@ export const useLeistungsChartData = ({
   const subjectData = useMemo(() => {
     if (!Array.isArray(performances) || !Array.isArray(students)) return [];
 
-    const filteredPerfs = performances.filter(p => 
-      p && (typeof p.subject === 'string' || (typeof p.subject === 'object' && p.subject.id))
-    );
+    const filteredPerfs = performances.filter(p => {
+      if (!p || !(typeof p.subject === 'string' || (typeof p.subject === 'object' && p.subject.id))) {
+        return false;
+      }
+      if (selectedSubject === 'all') return true;
+      if (selectedSubject === 'kernfaecher') {
+        const coreSubjectIds = subjects.filter(s => s.is_core_subject).map(s => s.id);
+        return coreSubjectIds.includes(getSubjectId(p.subject));
+      }
+      return getSubjectId(p.subject) === selectedSubject;
+    });
 
     if (filteredPerfs.length === 0) return [];
 
@@ -107,17 +122,30 @@ export const useLeistungsChartData = ({
       });
     });
 
-    return Object.values(subjectMap);
-  }, [performances, students, subjects, selectedStudents, showClassAverage]);
+    // Sort by subject sort_order (from subjects array)
+    const subjectOrder = new Map(subjects.map((s, index) => [s.name, s.sort_order ?? index]));
+    return Object.values(subjectMap).sort((a, b) => {
+      const orderA = subjectOrder.get(a.name) ?? 999;
+      const orderB = subjectOrder.get(b.name) ?? 999;
+      return orderA - orderB;
+    });
+  }, [performances, students, subjects, selectedSubject, selectedStudents, showClassAverage]);
 
   // Fachbereiche – DIE WICHTIGE KORREKTE VERSION
   const fachbereichData = useMemo(() => {
     if (!Array.isArray(performances) || !Array.isArray(students)) return [];
 
-    const filteredPerfs = performances.filter(p =>
-      p && (typeof p.subject === 'string' || (typeof p.subject === 'object' && p.subject.id)) &&
-      (selectedSubject === 'all' || getSubjectId(p.subject) === selectedSubject)
-    );
+    const filteredPerfs = performances.filter(p => {
+      if (!p || !(typeof p.subject === 'string' || (typeof p.subject === 'object' && p.subject.id))) {
+        return false;
+      }
+      if (selectedSubject === 'all') return true;
+      if (selectedSubject === 'kernfaecher') {
+        const coreSubjectIds = subjects.filter(s => s.is_core_subject).map(s => s.id);
+        return coreSubjectIds.includes(getSubjectId(p.subject));
+      }
+      return getSubjectId(p.subject) === selectedSubject;
+    });
 
     if (filteredPerfs.length === 0) return [];
 

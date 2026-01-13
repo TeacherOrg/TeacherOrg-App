@@ -28,6 +28,7 @@ import { LehrplanKompetenz as CurriculumCompetency } from '@/api/entities';
 import { deleteTopicWithLessons } from '@/api/topicService';
 import { useSubjectResolver } from './hooks';
 import { emitTourEvent, TOUR_EVENTS } from '@/components/onboarding/tours/tourEvents';
+import { useTour } from '@/components/onboarding/TourProvider';
 
 const PRESET_COLORS = [
   '#ef4444', '#f97316', '#eab308', '#84cc16', '#22c55e', '#10b981',
@@ -63,7 +64,7 @@ const getCurrentWeek = () => {
 
 const LessonCard = ({ lesson, onClick, color, isDouble = false }) => (
   <div
-    className={`${isDouble ? 'w-44' : 'w-20'} h-20 rounded-lg text-white flex items-center justify-center cursor-pointer hover:opacity-90 flex-shrink-0 text-sm font-medium shadow-md relative transition-all duration-200 hover:scale-105`}
+    className={`lesson-card ${isDouble ? 'w-44' : 'w-20'} h-20 rounded-lg text-white flex items-center justify-center cursor-pointer hover:opacity-90 flex-shrink-0 text-sm font-medium shadow-md relative transition-all duration-200 hover:scale-105`}
     style={{ backgroundColor: color || '#3b82f6' }}
     onClick={onClick}
   >
@@ -84,9 +85,12 @@ const LessonCard = ({ lesson, onClick, color, isDouble = false }) => (
   </div>
 );
 
-export default function TopicModal({ isOpen, onClose, onSave, onDelete, topic, subjectColor, subject, subjects = [], topics = [], curriculumCompetencies = [] }) {
+export default function TopicModal({ isOpen, onClose, onSave, onDelete, topic, subjectColor, subject, subjects = [], topics = [], curriculumCompetencies = [], initialTab = 'general' }) {
   // Subject-Auflösung mit Fallback-Strategien
   const { effectiveSubject, isValid: isSubjectValid } = useSubjectResolver(subject, topic, subjects);
+
+  // Tour-State für Prevent-Close während Tour
+  const { activeTour } = useTour();
 
   const [formData, setFormData] = useState({
     name: "",
@@ -110,7 +114,15 @@ export default function TopicModal({ isOpen, onClose, onSave, onDelete, topic, s
   const [loadedTopic, setLoadedTopic] = useState(topic);
   const [newLessonSlot, setNewLessonSlot] = useState(null);
   const [showColorPicker, setShowColorPicker] = useState(false);
+  const [activeTab, setActiveTab] = useState(initialTab);
   const queryClient = useQueryClient();
+
+  // Reset tab when modal opens with different initialTab
+  useEffect(() => {
+    if (isOpen) {
+      setActiveTab(initialTab);
+    }
+  }, [isOpen, initialTab]);
   const navigate = useNavigate();
 
   // Neue States für den Material-Tab
@@ -339,6 +351,9 @@ export default function TopicModal({ isOpen, onClose, onSave, onDelete, topic, s
   };
 
   const handleAssignLessons = async () => {
+    // Emit tour event for onboarding
+    emitTourEvent(TOUR_EVENTS.NAVIGATE_TO_YEARLY_ASSIGN);
+
     console.log('AssignLessons: effectiveSubject=', effectiveSubject, 'isSubjectValid=', isSubjectValid, 'loadedTopic=', loadedTopic);
 
     if (!effectiveSubject?.id || !effectiveSubject?.name) {
@@ -461,6 +476,9 @@ export default function TopicModal({ isOpen, onClose, onSave, onDelete, topic, s
   };
 
   const handleLessonClick = async (minimalLesson) => {
+    // Emit tour event for onboarding
+    emitTourEvent(TOUR_EVENTS.LESSON_CLICKED, { lessonId: minimalLesson.id });
+
     try {
       const fullLesson = await pb.collection('yearly_lessons').getOne(minimalLesson.id, {
         expand: 'subject,topic_id'
@@ -631,7 +649,21 @@ export default function TopicModal({ isOpen, onClose, onSave, onDelete, topic, s
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-[90vw] md:max-w-3xl max-h-[90vh] w-full overflow-y-auto bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white p-4 md:p-6">
+      <DialogContent
+        className="max-w-[90vw] md:max-w-3xl max-h-[90vh] w-full overflow-y-auto bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white p-4 md:p-6"
+        onInteractOutside={(e) => {
+          // Prevent closing during tour
+          if (activeTour) {
+            e.preventDefault();
+          }
+        }}
+        onEscapeKeyDown={(e) => {
+          // Prevent closing during tour
+          if (activeTour) {
+            e.preventDefault();
+          }
+        }}
+      >
         <DialogHeader className="mb-2 md:mb-4">
           <DialogTitle className="flex items-center gap-3 text-lg md:text-xl">
             <div 
@@ -654,7 +686,12 @@ export default function TopicModal({ isOpen, onClose, onSave, onDelete, topic, s
             transition={{ duration: 0.3 }}
             className="space-y-4"
           >
-            <Tabs defaultValue="general" className="w-full">
+            <Tabs value={activeTab} onValueChange={(value) => {
+              setActiveTab(value);
+              if (value === 'lessons') {
+                emitTourEvent(TOUR_EVENTS.TAB_LESSONS_CLICKED);
+              }
+            }} className="w-full">
               <TabsList className="grid w-full grid-cols-6 bg-slate-100 dark:bg-slate-800">
                 <TabsTrigger value="general">Allgemein</TabsTrigger>
                 <TabsTrigger value="content">Inhalt</TabsTrigger>
@@ -666,7 +703,7 @@ export default function TopicModal({ isOpen, onClose, onSave, onDelete, topic, s
                     </Badge>
                   )}
                 </TabsTrigger>
-                <TabsTrigger value="lessons">Lektionen</TabsTrigger>
+                <TabsTrigger value="lessons" className="lessons-tab-trigger">Lektionen</TabsTrigger>
                 <TabsTrigger value="material">
                   <Package className="w-4 h-4 mr-2" />
                   Material
@@ -988,7 +1025,7 @@ export default function TopicModal({ isOpen, onClose, onSave, onDelete, topic, s
                     type="button"
                     variant="outline"
                     onClick={handleAssignLessons}
-                    className="bg-slate-100 dark:bg-slate-700 border-slate-300 dark:border-slate-600 hover:bg-slate-200 dark:hover:bg-slate-600 text-sm md:text-base px-4 py-2 flex-1"
+                    className="assign-lessons-button bg-slate-100 dark:bg-slate-700 border-slate-300 dark:border-slate-600 hover:bg-slate-200 dark:hover:bg-slate-600 text-sm md:text-base px-4 py-2 flex-1"
                   >
                     <BookOpen className="w-4 h-4 mr-2" />
                     Lektionen in Jahresübersicht zuweisen

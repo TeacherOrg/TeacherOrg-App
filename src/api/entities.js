@@ -1,6 +1,7 @@
 import pb from '@/api/pb';
 import { prepareAllerleiForPersist } from '@/components/timetable/allerlei/AllerleiUtils';
 import { safeProcessArray } from '@/utils/safeData'; // Neu: Import für Batch
+import auditLogger from '@/services/auditLogger';
 
 class PbEntity {
   constructor(name) {
@@ -31,7 +32,16 @@ class PbEntity {
       chore_assignment: 'student_id,chore_id,class_id',
       group: 'student_ids,class_id,user_id',
       user_preference: 'user_id,class_id',
-      lehrplan_kompetenz: ''
+      lehrplan_kompetenz: '',
+      // Currency & Store System
+      student_currencie: 'student_id',
+      currency_transaction: 'student_id',
+      store_item: '',
+      store_purchase: 'student_id,item_id,reviewed_by',
+      bountie: '',
+      bounty_completion: 'bounty_id,student_id,approved_by',
+      achievement_reward: '',
+      achievement_coins_awarded: 'student_id'
     };
 
     this.expandFields = expandMap[this.name] || '';
@@ -129,6 +139,13 @@ class PbEntity {
     }
 
     if (['topic', 'subject', 'yearly_lesson', 'lesson', 'holiday', 'allerlei_lesson'].includes(this.name)) {
+      if (!prepared.user_id && pb.authStore.model?.id) {
+        prepared.user_id = pb.authStore.model.id;
+      }
+    }
+
+    // Currency & Store System - immer user_id setzen
+    if (['student_currencie', 'currency_transaction', 'store_item', 'store_purchase', 'bountie', 'bounty_completion', 'achievement_reward', 'achievement_coins_awarded'].includes(this.name)) {
       if (!prepared.user_id && pb.authStore.model?.id) {
         prepared.user_id = pb.authStore.model.id;
       }
@@ -267,8 +284,34 @@ class PbEntity {
       normalizedItem.account_email = normalizedItem.expand?.account_id?.email || null;
     }
 
+    // Currency & Store System Normalizations
+    if (this.name === 'student_currencie') {
+      normalizedItem.student_name = normalizedItem.expand?.student_id?.name || '';
+      normalizedItem.balance = normalizedItem.balance || 0;
+      normalizedItem.lifetime_earned = normalizedItem.lifetime_earned || 0;
+      normalizedItem.lifetime_spent = normalizedItem.lifetime_spent || 0;
+    }
+
+    if (this.name === 'currency_transaction') {
+      normalizedItem.student_name = normalizedItem.expand?.student_id?.name || '';
+    }
+
+    if (this.name === 'store_purchase') {
+      normalizedItem.student_name = normalizedItem.expand?.student_id?.name || '';
+      normalizedItem.item_name = normalizedItem.expand?.item_id?.name || '';
+      normalizedItem.item_icon = normalizedItem.expand?.item_id?.icon || '';
+      normalizedItem.reviewer_name = normalizedItem.expand?.reviewed_by?.name || '';
+    }
+
+    if (this.name === 'bounty_completion') {
+      normalizedItem.bounty_title = normalizedItem.expand?.bounty_id?.title || '';
+      normalizedItem.student_name = normalizedItem.expand?.student_id?.name || '';
+      normalizedItem.approver_name = normalizedItem.expand?.approved_by?.name || '';
+    }
+
     if (this.name === 'subject') {
       normalizedItem.emoji = item.emoji || '📚'; // Default-Emoji
+      normalizedItem.is_core_subject = item.is_core_subject || false;
     }
 
     delete normalizedItem.expand;
@@ -322,7 +365,16 @@ class PbEntity {
       if (!Array.isArray(items)) return [];
 
       const validItems = items.filter(Boolean);
-      return this.batchNormalize(validItems);
+      const results = this.batchNormalize(validItems);
+
+      // Audit-Logging für Zugriff auf sensible Daten
+      if (this.name === 'student' && results.length > 0) {
+        auditLogger.logViewStudentsOverview().catch(() => {});
+      } else if (this.name === 'performance' && results.length > 0) {
+        auditLogger.logViewGrades().catch(() => {});
+      }
+
+      return results;
     } catch (error) {
       if (!error.message?.includes('autocancelled')) {
         console.error(`Error listing ${this.name}s:`, error);
@@ -442,20 +494,28 @@ class PbEntity {
     
     try {
       const response = await pb.collection(this.collectionName).create(preparedData, params);
+
+      // Audit-Logging für sensible Daten-Erstellung
+      if (this.name === 'student' && response?.id) {
+        auditLogger.logCreateStudent(response.id, response.name || 'Unknown').catch(() => {});
+      } else if (this.name === 'performance' && response?.id) {
+        auditLogger.logCreateGrade(response.id, response.student_id, response.subject).catch(() => {});
+      }
+
       return response;
     } catch (error) {
       // Bessere Fehlerbehandlung: Unterscheide zwischen Autocancellation und Validierungsfehlern
       if (error.message?.includes('autocancelled')) {
         throw error; // Weiterwerfen, damit Retry-Logik im aufrufenden Code greifen kann
       }
-      
+
       // Spezifische Behandlung für Validierungsfehler
       if (error.status === 400 && error.data?.data) {
         console.error('Validation errors:', JSON.stringify(error.data.data, null, 2));
         // Kein Retry für yearly_lesson, da es wahrscheinlich ein Validierungsproblem ist
         throw error;
       }
-      
+
       // Allgemeine Fehlerbehandlung
       import('react-hot-toast').then(({ toast }) => {
         const message = error.message.includes('Missing or invalid collection context')
@@ -484,9 +544,17 @@ class PbEntity {
       }
       
       const currentUser = pb.authStore.model;
-      
+
       const updated = await this.collection.update(id, preparedUpdates, params);
       const fullUpdated = await this.collection.getOne(id, { expand: this.expandFields });
+
+      // Audit-Logging für sensible Daten-Updates
+      if (this.name === 'student' && fullUpdated?.id) {
+        auditLogger.logUpdateStudent(fullUpdated.id, preparedUpdates).catch(() => {});
+      } else if (this.name === 'performance' && fullUpdated?.id) {
+        auditLogger.logUpdateGrade(fullUpdated.id, fullUpdated.student_id, preparedUpdates).catch(() => {});
+      }
+
       return this.normalizeData(fullUpdated);
     } catch (error) {
       // ✅ BESSERE FEHLERBEHANDLUNG für Autocancellation
@@ -522,7 +590,25 @@ class PbEntity {
       const cancelKey = options.$cancelKey || `delete-${this.name}-${id}-${Date.now()}`;
       const params = { $cancelKey: cancelKey };
       try {
+          // Audit-Logging: Hole Daten VOR dem Löschen für besseres Logging
+          let recordData = null;
+          if (this.name === 'student' || this.name === 'performance') {
+            try {
+              recordData = await this.collection.getOne(id);
+            } catch (e) {
+              // Falls getOne fehlschlägt, fahre trotzdem fort
+            }
+          }
+
           await this.collection.delete(id, params);
+
+          // Audit-Logging für Löschungen
+          if (this.name === 'student' && recordData) {
+            auditLogger.logDeleteStudent(id, recordData.name || 'Unknown').catch(() => {});
+          } else if (this.name === 'performance' && recordData) {
+            auditLogger.logDeleteGrade(id, recordData.student_id).catch(() => {});
+          }
+
           return true;
       } catch (error) {
           console.error(`Error deleting ${this.name} with id ${id}:`, error.message, error.data, error.stack);
@@ -636,6 +722,29 @@ SharedTopic.collection = pb.collection('shared_topics');
 export const StudentSelfAssessment = new PbEntity('Student_self_assessment');
 export const CompetencyGoal = new PbEntity('Competency_goal');
 
+// Currency & Store System Entities
+export const StudentCurrency = new PbEntity('Student_currencie');
+StudentCurrency.collectionName = 'student_currencies';
+StudentCurrency.collection = pb.collection('student_currencies');
+
+export const CurrencyTransaction = new PbEntity('Currency_transaction');
+
+export const StoreItem = new PbEntity('Store_item');
+
+export const StorePurchase = new PbEntity('Store_purchase');
+
+export const Bounty = new PbEntity('Bountie');
+Bounty.collectionName = 'bounties';
+Bounty.collection = pb.collection('bounties');
+
+export const BountyCompletion = new PbEntity('Bounty_completion');
+
+// Achievement Rewards - Custom coin rewards per achievement
+export const AchievementReward = new PbEntity('Achievement_reward');
+
+// Achievement Coins Awarded - Tracks which achievements have awarded coins to prevent double-awarding
+export const AchievementCoinsAwarded = new PbEntity('Achievement_coins_awarded');
+
 export const User = {
   current: () => pb.authStore.model || null,
 
@@ -692,17 +801,36 @@ export const User = {
   },
 
   /**
+   * Generiert ein merkbares Fun-Passwort mit Tier/Planeten-Namen
+   * Format: Wort + Symbol + Zahl → z.B. "Tiger#42", "Venus+17"
+   * Alle Wörter haben mindestens 5 Buchstaben für 8+ Zeichen Passwörter
+   */
+  generateFunPassword: () => {
+    const words = [
+      // Planeten & Weltraum (5+ Buchstaben)
+      'Venus', 'Jupiter', 'Saturn', 'Neptun', 'Pluto', 'Komet', 'Stern', 'Orbit',
+      // Tiere (5+ Buchstaben)
+      'Tiger', 'Loewe', 'Adler', 'Delfin', 'Panda', 'Fuchs', 'Otter', 'Falke',
+      'Kondor', 'Kolibri', 'Pinguin', 'Drache', 'Phoenix', 'Zebra', 'Biber',
+      // Natur (5+ Buchstaben)
+      'Eiche', 'Tulpe', 'Blitz', 'Wolke', 'Sonne', 'Ozean', 'Blume', 'Sturm'
+    ];
+    const symbols = ['!', '#', '+', '*', '@', '&'];
+    const word = words[Math.floor(Math.random() * words.length)];
+    const symbol = symbols[Math.floor(Math.random() * symbols.length)];
+    const number = Math.floor(Math.random() * 90) + 10; // 10-99
+    return `${word}${symbol}${number}`;
+  },
+
+  /**
    * Erstellt einen Schüler-Account und verknüpft ihn mit dem Student-Record
    * @param {Object} params - { studentId, email, name }
    * @returns {Object} { success, user, password } oder { success: false, error }
    */
   createStudentAccount: async ({ studentId, email, name }) => {
     try {
-      // Generiere sicheres Passwort (ohne verwechselbare Zeichen)
-      const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
-      const password = Array.from({ length: 8 }, () =>
-        chars[Math.floor(Math.random() * chars.length)]
-      ).join('');
+      // Generiere merkbares Fun-Passwort
+      const password = User.generateFunPassword();
 
       // Erstelle User-Account mit Rolle 'student'
       const username = email.split('@')[0].replace(/[^a-zA-Z0-9]/g, '') + '_' + Date.now().toString(36);
@@ -718,8 +846,11 @@ export const User = {
 
       const newUser = await pb.collection('users').create(userData);
 
-      // Verknüpfe Student-Record mit dem neuen Account
-      await Student.update(studentId, { account_id: newUser.id });
+      // Verknüpfe Student-Record mit dem neuen Account und speichere Passwort
+      await Student.update(studentId, {
+        account_id: newUser.id,
+        generated_password: password
+      });
 
       return { success: true, user: newUser, password };
     } catch (error) {
@@ -733,26 +864,50 @@ export const User = {
   },
 
   /**
-   * Setzt das Passwort eines Schülers zurück
+   * Setzt das Passwort eines Schülers zurück durch Account-Regenerierung
+   * (PocketBase erlaubt keine direkte Passwort-Änderung ohne Admin-Auth)
    * @param {string} userId - Die User-ID des Schüler-Accounts
    * @returns {Object} { success, password } oder { success: false, error }
    */
   resetStudentPassword: async (userId) => {
     try {
-      const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
-      const newPassword = Array.from({ length: 8 }, () =>
-        chars[Math.floor(Math.random() * chars.length)]
-      ).join('');
+      // 1. Hole Student-Daten
+      const students = await Student.filter({ account_id: userId });
+      if (students.length === 0) {
+        return { success: false, error: 'Kein Student mit diesem Account gefunden' };
+      }
+      const student = students[0];
 
-      await pb.collection('users').update(userId, {
+      // 2. Hole User-Daten (für Email und Name)
+      const user = await pb.collection('users').getOne(userId);
+
+      // 3. Lösche alten Account
+      await pb.collection('users').delete(userId);
+
+      // 4. Erstelle neuen Account mit gleichem Email
+      const newPassword = User.generateFunPassword();
+      const username = user.email.split('@')[0].replace(/[^a-zA-Z0-9]/g, '') + '_' + Date.now().toString(36);
+
+      const newUser = await pb.collection('users').create({
+        username,
+        email: user.email,
         password: newPassword,
         passwordConfirm: newPassword,
+        role: 'student',
+        name: user.name,
+        emailVisibility: true,
       });
 
-      return { success: true, password: newPassword };
+      // 5. Update Student mit neuem Account
+      await Student.update(student.id, {
+        account_id: newUser.id,
+        generated_password: newPassword,
+      });
+
+      return { success: true, password: newPassword, newUserId: newUser.id };
     } catch (error) {
       console.error('Error resetting student password:', error);
-      return { success: false, error: 'Fehler beim Zurücksetzen des Passworts.' };
+      return { success: false, error: error.message || 'Fehler beim Zurücksetzen des Passworts.' };
     }
   },
 };

@@ -35,13 +35,24 @@ const FiltersSection = ({
 
   const subjectOptions = useMemo(() => {
     if (!Array.isArray(subjects)) return [{ value: 'all', label: 'Alle' }];
+
     const options = subjects
       .filter(s => s && s.id && s.name)
       .map(s => ({
         value: s.id,
         label: s.name
       }));
-    return [{ value: 'all', label: 'Alle' }, ...options];
+
+    // Prüfe ob Kernfächer vorhanden sind
+    const hasCoreSubjects = subjects.some(s => s.is_core_subject);
+
+    const baseOptions = [{ value: 'all', label: 'Alle' }];
+
+    if (hasCoreSubjects) {
+      baseOptions.push({ value: 'kernfaecher', label: '⭐ Kernfächer' });
+    }
+
+    return [...baseOptions, ...options];
   }, [subjects]);
 
   const handleStudentSelection = useCallback((studentId, checked) => {

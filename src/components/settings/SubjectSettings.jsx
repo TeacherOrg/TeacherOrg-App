@@ -3,7 +3,8 @@ import { Subject, Lesson, YearlyLesson, Topic, Performance, Fachbereich, Setting
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Plus, Trash2, Edit, Check, GripVertical } from 'lucide-react';
+import { Plus, Trash2, Edit, Check, GripVertical, Star } from 'lucide-react';
+import { Checkbox } from '@/components/ui/checkbox';
 import toast from 'react-hot-toast';
 import pb from '@/api/pb';
 import { DndContext, closestCenter, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
@@ -56,7 +57,7 @@ const SortableSubjectItem = ({ subject, children }) => {
 };
 
 const SubjectSettings = ({ subjects, classes, activeClassId, setActiveClassId, refreshData }) => {
-    const [newSubject, setNewSubject] = useState({ name: '', color: '#3b82f6', lessons_per_week: 4, emoji: '' });
+    const [newSubject, setNewSubject] = useState({ name: '', color: '#3b82f6', lessons_per_week: 4, emoji: '', is_core_subject: false });
     const [editingSubjectId, setEditingSubjectId] = useState(null);
     const [editingSubjectData, setEditingSubjectData] = useState(null);
     const [showColorPicker, setShowColorPicker] = useState(false);
@@ -65,6 +66,11 @@ const SubjectSettings = ({ subjects, classes, activeClassId, setActiveClassId, r
     const [editingShowEmojiPicker, setEditingShowEmojiPicker] = useState(false);
 
     const currentUserId = pb.authStore.model?.id;
+
+    // Zählung der Kernfächer für Validierung (max. 3)
+    const coreSubjectCount = useMemo(() => {
+        return subjects.filter(s => s.class_id === activeClassId && s.is_core_subject).length;
+    }, [subjects, activeClassId]);
 
     // DnD Sensors
     const sensors = useSensors(
@@ -123,7 +129,7 @@ const SubjectSettings = ({ subjects, classes, activeClassId, setActiveClassId, r
                 class_id: activeClassId,
                 user_id: currentUserId   // ← WICHTIG: Immer setzen!
             });
-            setNewSubject({ name: '', color: '#3b82f6', lessons_per_week: 4, emoji: '' });
+            setNewSubject({ name: '', color: '#3b82f6', lessons_per_week: 4, emoji: '', is_core_subject: false });
             setShowColorPicker(false);
             setShowEmojiPicker(false);
             await refreshData();
@@ -384,6 +390,18 @@ const SubjectSettings = ({ subjects, classes, activeClassId, setActiveClassId, r
                             )}
                         </div>
                     </div>
+                    <div className="flex items-center space-x-2">
+                        <Checkbox
+                            id="new-is-core"
+                            checked={newSubject.is_core_subject || false}
+                            disabled={coreSubjectCount >= 3 && !newSubject.is_core_subject}
+                            onCheckedChange={(checked) => setNewSubject({ ...newSubject, is_core_subject: checked })}
+                        />
+                        <Label htmlFor="new-is-core" className="text-slate-600 dark:text-slate-300 flex items-center gap-1">
+                            <Star className="w-4 h-4 text-amber-500" />
+                            Kernfach {coreSubjectCount >= 3 && !newSubject.is_core_subject && <span className="text-xs text-slate-400">(Max. 3 erreicht)</span>}
+                        </Label>
+                    </div>
                     <Button onClick={handleAddSubject} disabled={!activeClassId || !newSubject.name.trim()} className="w-full bg-blue-600 hover:bg-blue-700">
                         <Plus className="w-4 h-4 mr-2"/>
                         Hinzufügen
@@ -491,6 +509,18 @@ const SubjectSettings = ({ subjects, classes, activeClassId, setActiveClassId, r
                                                             )}
                                                         </div>
                                                     </div>
+                                                    <div className="flex items-center space-x-2">
+                                                        <Checkbox
+                                                            id={`edit-is-core-${subject.id}`}
+                                                            checked={editingSubjectData?.is_core_subject || false}
+                                                            disabled={coreSubjectCount >= 3 && !editingSubjectData?.is_core_subject}
+                                                            onCheckedChange={(checked) => handleLocalUpdate('is_core_subject', checked)}
+                                                        />
+                                                        <Label htmlFor={`edit-is-core-${subject.id}`} className="text-slate-600 dark:text-slate-300 flex items-center gap-1">
+                                                            <Star className="w-4 h-4 text-amber-500" />
+                                                            Kernfach {coreSubjectCount >= 3 && !editingSubjectData?.is_core_subject && <span className="text-xs text-slate-400">(Max. 3)</span>}
+                                                        </Label>
+                                                    </div>
                                                     <div className="flex justify-end gap-2">
                                                         <Button size="sm" onClick={async () => {
                                                             if (editingSubjectId && editingSubjectData) {
@@ -512,6 +542,12 @@ const SubjectSettings = ({ subjects, classes, activeClassId, setActiveClassId, r
                                                         <span className="font-medium text-black dark:text-white">{subject.name}</span>
                                                         <span className="text-sm text-slate-600 dark:text-slate-400">({subject.lessons_per_week} L/W)</span>
                                                         <span className="text-xl mr-2">{subject.emoji || '📚'}</span>
+                                                        {subject.is_core_subject && (
+                                                            <span className="px-1.5 py-0.5 text-xs bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 rounded font-medium flex items-center gap-1">
+                                                                <Star className="w-3 h-3" />
+                                                                Kernfach
+                                                            </span>
+                                                        )}
                                                     </div>
                                                     <div className="flex items-center gap-2">
                                                         <Button variant="ghost" size="icon" className="w-8 h-8 hover:bg-slate-200 dark:hover:bg-slate-700" onClick={() => {
@@ -520,7 +556,8 @@ const SubjectSettings = ({ subjects, classes, activeClassId, setActiveClassId, r
                                                                 name: subject.name,
                                                                 color: subject.color,
                                                                 emoji: subject.emoji || '',
-                                                                lessons_per_week: subject.lessons_per_week
+                                                                lessons_per_week: subject.lessons_per_week,
+                                                                is_core_subject: subject.is_core_subject || false
                                                             });
                                                             setEditingShowColorPicker(false);
                                                             setEditingShowEmojiPicker(false);

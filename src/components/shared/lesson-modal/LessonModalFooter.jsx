@@ -76,7 +76,7 @@ export function LessonModalFooter({
 
         <Button
           type="submit"
-          className="hover:opacity-90"
+          className="lesson-save-button hover:opacity-90"
           style={{
             background: saveButtonColor,
             color: saveButtonTextColor

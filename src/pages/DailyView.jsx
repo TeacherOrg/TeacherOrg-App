@@ -16,6 +16,8 @@ import pb from "@/api/pb";
 import { useLessonStore, useAllerleiLessons } from "@/store";
 import toast from "react-hot-toast";
 import { playSound } from "@/utils/audioSounds";
+import { useTour } from "@/components/onboarding/TourProvider";
+import { emitTourEvent, TOUR_EVENTS } from "@/components/onboarding/tours/tourEvents";
 
 // Utility functions
 function getCurrentWeek(date) {
@@ -109,6 +111,7 @@ function generateTimeSlotsWithBreaks(settings) {
 
 export default function DailyView({ currentDate, onDateChange, onThemeChange }) {
   const navigate = useNavigate();
+  const { activeTour } = useTour();
   const [selectedItem, setSelectedItem] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -164,6 +167,9 @@ export default function DailyView({ currentDate, onDateChange, onThemeChange }) 
 
   // Current time state
   const [currentTime, setCurrentTime] = useState(new Date());
+
+  // Track which step sounds have already been played (persists across view changes)
+  const [playedStepSounds, setPlayedStepSounds] = useState(new Set());
 
   // Calculate current week and day info
   const currentWeek = useMemo(() => getCurrentWeek(currentDate), [currentDate]);
@@ -673,6 +679,23 @@ export default function DailyView({ currentDate, onDateChange, onThemeChange }) 
     return combinedSchedule.find((item, index) => index > currentBreakIndex && item.type === 'lesson');
   }, [currentItem, combinedSchedule]);
 
+  // Find the previous lesson that came before the current break
+  // (needed for detecting internal double-lesson breaks)
+  const previousLessonBeforePause = useMemo(() => {
+    if (currentItem?.type !== 'break') return null;
+
+    const currentBreakIndex = combinedSchedule.findIndex(item =>
+      item.type === 'break' && item.timeSlot?.start === currentItem.timeSlot?.start
+    );
+    // Suche die letzte Lektion VOR diesem Break
+    for (let i = currentBreakIndex - 1; i >= 0; i--) {
+      if (combinedSchedule[i]?.type === 'lesson') {
+        return combinedSchedule[i];
+      }
+    }
+    return null;
+  }, [currentItem, combinedSchedule]);
+
   const todaysAssignments = useMemo(() => {
       const todayString = currentDate.toISOString().split('T')[0];
       return choreAssignments.filter(a => a.assignment_date === todayString);
@@ -744,6 +767,16 @@ export default function DailyView({ currentDate, onDateChange, onThemeChange }) 
     }
   }, [currentItem, selectedItem]);
 
+  // Auto-select first lesson when tour is active
+  useEffect(() => {
+    if (activeTour && lessonsForDate.length > 0 && !selectedItem) {
+      const firstLesson = lessonsForDate.find(item => item.type === 'lesson');
+      if (firstLesson) {
+        setSelectedItem(firstLesson);
+      }
+    }
+  }, [activeTour, lessonsForDate, selectedItem]);
+
   // Auto-switch aus forcePauseView wenn nächste Lektion beginnt
   useEffect(() => {
     if (!forcePauseView || !nextLessonAfterPause?.timeSlot?.start) return;
@@ -760,19 +793,31 @@ export default function DailyView({ currentDate, onDateChange, onThemeChange }) 
       if(item.type === 'lesson') {
         setSelectedItem(item);
         setManualStepIndex(null);
+        // Emit tour event when lesson is clicked
+        if (activeTour) {
+          emitTourEvent(TOUR_EVENTS.DAILY_LESSON_CLICKED);
+        }
       }
-  }, []);
+  }, [activeTour]);
 
   const handleManualStepChange = useCallback((index) => {
       setManualStepIndex(index);
   }, []);
 
-  // Handler für Step-Completion Sound
-  const handleStepComplete = useCallback((stepIndex) => {
+  // Handler für Step-Completion Sound - mit Tracking um Mehrfach-Abspielen zu verhindern
+  const handleStepComplete = useCallback((lessonId, stepIndex) => {
+      const stepKey = `${lessonId}-step-${stepIndex}`;
+
+      // Prüfe ob dieser Sound bereits gespielt wurde
+      if (playedStepSounds.has(stepKey)) return;
+
+      // Markiere als gespielt
+      setPlayedStepSounds(prev => new Set(prev).add(stepKey));
+
       if (customization.audio?.stepEndEnabled) {
           playSound(customization.audio.stepEndSound || 'ping', customization.audio.volume || 0.5);
       }
-  }, [customization.audio]);
+  }, [customization.audio, playedStepSounds]);
 
   // Handler für Ämtli-Completion
   const handleChoreCompletion = useCallback(async (assignmentIds, status) => {
@@ -1013,9 +1058,10 @@ export default function DailyView({ currentDate, onDateChange, onThemeChange }) 
             />
           ) : forcePauseView ? (
             (() => {
-              // Prüfe ob Doppellektions-Pause (gleiche Lektion nach der Pause)
-              const isDoubleLessonBreak = selectedItem?.is_double_lesson &&
-                nextLessonAfterPause?.id === selectedItem?.id;
+              // Prüfe ob Doppellektions-Pause (interne Pause zwischen Teil 1 und Teil 2)
+              // Korrigiert: Verwende previousLessonBeforePause statt selectedItem
+              const isDoubleLessonBreak = previousLessonBeforePause?.is_double_lesson &&
+                nextLessonAfterPause?.id === previousLessonBeforePause?.id;
 
               // Farbe der nächsten Lektion (Fallback: Orange)
               const nextSubjectColor = nextLessonAfterPause?.subject?.color || '#f97316';
@@ -1127,12 +1173,14 @@ export default function DailyView({ currentDate, onDateChange, onThemeChange }) 
               lesson={selectedItem}
               currentItem={currentItem}
               nextLesson={nextLessonAfterPause}
+              previousLesson={previousLessonBeforePause}
               customization={customization}
               currentTime={currentTime}
               selectedDate={currentDate}
               manualStepIndex={manualStepIndex}
               onManualStepChange={handleManualStepChange}
               onStepComplete={handleStepComplete}
+              playedStepSounds={playedStepSounds}
               theme={customization.theme || 'default'}
               isDark={isDark}
               onEndBreakEarly={() => {
@@ -1143,40 +1191,28 @@ export default function DailyView({ currentDate, onDateChange, onThemeChange }) 
               }}
             />
           ) : (
-            <div className="flex items-center justify-center h-full text-center bg-white/50 dark:bg-slate-800/50 rounded-2xl">
+            <div className={`flex items-center justify-center h-full text-center rounded-2xl ${
+              customization.theme === 'space' ? 'bg-transparent' : 'bg-white/50 dark:bg-slate-800/50'
+            }`}>
               <div>
-                <div className="text-6xl mb-4">👈</div>
-                <h2 className={`${customization.fontSize.title} font-bold text-slate-600 dark:text-slate-400 mb-2 font-[Inter]`}>
-                  Kein Element ausgewählt
+                <div className="text-6xl mb-4">{lessonsForDate.length > 0 ? '👈' : '📚'}</div>
+                <h2 className={`${customization.fontSize.title} font-bold mb-2 font-[Inter] ${
+                  customization.theme === 'space' ? 'text-white' : 'text-slate-600 dark:text-slate-400'
+                }`}>
+                  {lessonsForDate.length > 0 ? 'Wähle eine Lektion' : 'Keine Lektionen'}
                 </h2>
-                <p className={`${customization.fontSize.content} text-slate-500 dark:text-slate-500 font-[Poppins]`}>
-                  Wählen Sie eine Lektion aus der Übersicht, um Details anzuzeigen.
-                </p>
+                {lessonsForDate.length === 0 && (
+                  <p className={`${customization.fontSize.content} font-[Poppins] ${
+                    customization.theme === 'space' ? 'text-white/70' : 'text-slate-500 dark:text-slate-500'
+                  }`}>
+                    {dayName}, {formatDate(currentDate)}
+                  </p>
+                )}
               </div>
             </div>
           )}
         </div>
       </div>
-
-      {/* Empty State */}
-      {!currentHoliday && lessonsForDate.length === 0 && !isLoading && !showChoresView && (
-          <motion.div
-            className="absolute inset-0 flex items-center justify-center pointer-events-none"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.2 }}
-          >
-            <div className="text-center">
-              <div className="text-6xl mb-4">📚</div>
-              <h2 className={`${customization.fontSize.title} font-bold text-slate-600 dark:text-slate-400 mb-2 font-[Inter]`}>
-                Keine Lektionen geplant
-              </h2>
-              <p className={`${customization.fontSize.content} text-slate-500 dark:text-slate-500 font-[Poppins]`}>
-                Für {dayName}, {formatDate(currentDate)} sind keine Lektionen eingetragen.
-              </p>
-            </div>
-          </motion.div>
-      )}
 
       {/* Customization Slide-Panel */}
       <AnimatePresence>

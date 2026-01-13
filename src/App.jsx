@@ -10,10 +10,11 @@ import ErrorBoundary from '@/components/ErrorBoundary';
 import { Routes, Route } from 'react-router-dom';
 import ProtectedRoute from '@/components/auth/ProtectedRoute';
 import Landing from '@/pages/Landing';
+import Privacy from '@/pages/Privacy';
 import debounce from 'lodash/debounce';
 import { version } from '../package.json';
 import UpdateModal from '@/components/ui/UpdateModal';
-import { queryClient } from '@/main.jsx';
+import { queryClient } from '@/lib/queryClient';
 import { useLessonStore } from '@/store';
 // Onboarding imports
 import { OnboardingProvider, useOnboarding } from '@/components/onboarding/OnboardingProvider';
@@ -156,6 +157,9 @@ function App() {
 
         {/* Public Route: Landing */}
         <Route path="/landing" element={<Landing />} />
+
+        {/* Public Route: Datenschutzerklärung */}
+        <Route path="/privacy" element={<Privacy />} />
 
         {/* Protected Routes: Alle anderen Seiten */}
         <Route

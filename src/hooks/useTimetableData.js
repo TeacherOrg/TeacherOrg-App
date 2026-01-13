@@ -38,7 +38,7 @@ const useTimetableData = (currentYear, currentWeek) => {
     queryKey: ['timetableData', userId, currentYear, currentWeek],
     queryFn: async () => {
       if (!userId) {
-        console.error('No user ID available for query');
+        console.log('No user ID available for query');
         return {
           lessonsData: [],
           allerleiLessonsData: [],
@@ -105,12 +105,12 @@ const useTimetableData = (currentYear, currentWeek) => {
   useEffect(() => {
     const initializeData = async () => {
       if (!pb.authStore.isValid || !pb.authStore.model) {
-        console.error('No valid auth, cannot initialize data');
+        console.log('No valid auth, cannot initialize data');
         return;
       }
       const currentUserId = pb.authStore.model.id;
       if (!currentUserId) {
-        console.error('No user ID available');
+        console.log('No user ID available');
         return;
       }
       if (!data) return;

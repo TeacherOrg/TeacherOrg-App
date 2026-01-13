@@ -133,7 +133,7 @@ export default function LessonOverviewPanel({
 
   return (
     <motion.div
-      className={`${bgClass} ${blurClass} rounded-2xl shadow-xl border ${borderClass} overflow-hidden flex flex-col h-full min-h-0`}
+      className={`lesson-overview-panel ${bgClass} ${blurClass} rounded-2xl shadow-xl border ${borderClass} overflow-hidden flex flex-col h-full min-h-0`}
       initial={customization.reducedMotion ? false : { opacity: 0, x: -50 }}
       animate={customization.reducedMotion ? false : { opacity: 1, x: 0 }}
     >
@@ -145,7 +145,7 @@ export default function LessonOverviewPanel({
               Tagesübersicht
             </h3>
           </div>
-          <div className="flex gap-1">
+          <div className="daily-view-controls flex gap-1">
             <Button variant="ghost" size="icon" onClick={onSettingsClick} className={`h-7 w-7 rounded-lg ${buttonClass}`} title="Einstellungen">
               <Settings className="w-4 h-4" />
             </Button>

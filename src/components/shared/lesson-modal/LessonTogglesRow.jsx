@@ -1,6 +1,7 @@
 import React from 'react';
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
+import { emitTourEvent, TOUR_EVENTS } from '@/components/onboarding/tours/tourEvents';
 
 /**
  * Row of toggle switches for lesson properties.
@@ -27,7 +28,7 @@ export function LessonTogglesRow({
   className = ''
 }) {
   return (
-    <div className={`flex flex-wrap items-center justify-around gap-x-6 gap-y-4 p-3 rounded-lg bg-slate-100/50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 ${className}`}>
+    <div className={`lesson-toggles-row flex flex-wrap items-center justify-around gap-x-6 gap-y-4 p-3 rounded-lg bg-slate-100/50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 ${className}`}>
       <div className="flex items-center gap-2">
         <Switch
           id="half-class"
@@ -46,7 +47,12 @@ export function LessonTogglesRow({
         <Switch
           id="double-lesson"
           checked={isDoubleLesson}
-          onCheckedChange={onDoubleLessonChange}
+          onCheckedChange={(checked) => {
+            onDoubleLessonChange(checked);
+            if (checked) {
+              emitTourEvent(TOUR_EVENTS.DOUBLE_LESSON_TOGGLED);
+            }
+          }}
         />
         <Label
           htmlFor="double-lesson"

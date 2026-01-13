@@ -42,6 +42,37 @@
     --border-color: hsl(var(--border)); /* Fällt zurück auf --border */
     --cell-height: 80px; /* Globaler Default */
     --cell-width: 120px; /* Globaler Default */
+    --scale-factor: 1; /* Globaler Skalierungsfaktor für 4K-Displays */
+  }
+
+  /* === 4K DISPLAY SCALING === */
+  /* Automatische Skalierung für hochauflösende Displays */
+
+  /* 1440p/2K - leichte Vergrößerung */
+  @media (min-width: 2560px) and (max-width: 3839px) {
+    :root {
+      --scale-factor: 1.25;
+      --cell-height: 100px;  /* 80px * 1.25 */
+      --cell-width: 150px;   /* 120px * 1.25 */
+    }
+  }
+
+  /* 4K UHD (3840x2160) - Klassenzimmer-Displays */
+  @media (min-width: 3840px) and (max-width: 5119px) {
+    :root {
+      --scale-factor: 2;
+      --cell-height: 160px;  /* 80px * 2 */
+      --cell-width: 240px;   /* 120px * 2 */
+    }
+  }
+
+  /* 5K+ Displays */
+  @media (min-width: 5120px) {
+    :root {
+      --scale-factor: 2.5;
+      --cell-height: 200px;  /* 80px * 2.5 */
+      --cell-width: 300px;   /* 120px * 2.5 */
+    }
   }
   .dark {
     --background: 0 0% 3.9%;

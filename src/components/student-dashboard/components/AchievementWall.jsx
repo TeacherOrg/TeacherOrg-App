@@ -1,37 +1,73 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { Star, Sparkles, Target, ChevronRight } from 'lucide-react';
 import { useAchievements } from '../hooks/useAchievements';
-import { ACHIEVEMENT_CATEGORIES, getCategoryName } from '../config/achievements';
+import { MAIN_CATEGORIES, MAIN_CATEGORY_NAMES } from '../config/achievements';
 import AchievementCard from './AchievementCard';
 
 /**
- * Achievement Wall - 4-Tier Rarity System
- * Displays achievements grouped by category with progressive unlocking
+ * Achievement Wall - Progression System with 2 Main Categories
+ * Displays achievement progressions grouped by main category (Fächer, Kompetenzen)
+ * Each progression is ONE transforming card that changes as student progresses
  *
  * @param {Object} studentData - Data from useStudentData hook
  * @param {Array} completedGoals - List of completed goals (for timeline)
  * @param {Array} competencies - List of competencies (for timeline labels)
  */
 export default function AchievementWall({ studentData, completedGoals = [], competencies = [] }) {
-  const [filterCategory, setFilterCategory] = useState('all');
+  const [filterMainCategory, setFilterMainCategory] = useState('all');
+  const viewportRef = useRef(null);
+  const statsPanelRef = useRef(null);
+  const filterTabsRef = useRef(null);
 
-  // Get achievements data
+  // Get progressions data (NEW)
   const {
-    achievements,
-    groupedByCategory,
-    stats
+    progressions,
+    groupedByMainCategory,
+    groupedBySubCategory,
+    progressionStats
   } = useAchievements(studentData);
 
-  // Filter achievements by selected category
-  const filteredCategories = useMemo(() => {
-    if (filterCategory === 'all') {
-      return groupedByCategory;
-    }
+  // Calculate dynamic viewport height based on actual element measurements
+  useEffect(() => {
+    const calculateHeight = () => {
+      if (!viewportRef.current) return;
 
-    return {
-      [filterCategory]: groupedByCategory[filterCategory]
+      // Measure actual heights
+      const statsHeight = statsPanelRef.current?.offsetHeight || 0;
+      const tabsHeight = filterTabsRef.current?.offsetHeight || 0;
+
+      // Fixed overhead: space-card padding, margins, safety buffer
+      const containerPadding = 32; // 2rem top + bottom from space-card
+      const additionalMargins = 375; // Actual margins: ~336px + 39px safety buffer
+      const safetyMargin = 20; // Extra buffer
+
+      const totalOverhead = statsHeight + tabsHeight + containerPadding + additionalMargins + safetyMargin;
+      const availableHeight = Math.max(300, window.innerHeight - totalOverhead);
+
+      // Set CSS variable
+      viewportRef.current.style.setProperty('--available-height', `${availableHeight}px`);
     };
-  }, [groupedByCategory, filterCategory]);
+
+    calculateHeight();
+
+    // Observe size changes
+    const observer = new ResizeObserver(calculateHeight);
+    if (statsPanelRef.current) observer.observe(statsPanelRef.current);
+    if (filterTabsRef.current) observer.observe(filterTabsRef.current);
+
+    // Window resize
+    window.addEventListener('resize', calculateHeight);
+
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', calculateHeight);
+    };
+  }, [progressions]);
+
+  // Determine which main categories to show based on filter
+  const categoriesToShow = filterMainCategory === 'all'
+    ? Object.keys(groupedByMainCategory)
+    : [filterMainCategory];
 
   // Helper to get competency name
   const getCompetencyName = (compId) => {
@@ -39,151 +75,88 @@ export default function AchievementWall({ studentData, completedGoals = [], comp
     return comp?.name || 'Unbekannt';
   };
 
-  // Get available filter categories (only those with achievements)
-  const availableCategories = useMemo(() => {
-    const categories = Object.keys(groupedByCategory).map(key => ({
-      key,
-      name: getCategoryName(key),
-      count: groupedByCategory[key].achievements.length,
-      earned: groupedByCategory[key].achievements.filter(a => a.earned).length
-    }));
-
-    return categories;
-  }, [groupedByCategory]);
-
   return (
     <div className="space-y-8">
       {/* Statistics Panel */}
-      <div className="achievement-stats-panel">
+      <div ref={statsPanelRef} className="achievement-stats-panel">
         <div className="achievement-stat">
-          <div className="achievement-stat-value">{stats.earned}</div>
-          <div className="achievement-stat-label">Errungen</div>
+          <div className="achievement-stat-value">{progressionStats.earnedTiers}</div>
+          <div className="achievement-stat-label">Erreichte Erfolge</div>
         </div>
         <div className="achievement-stat">
-          <div className="achievement-stat-value">{stats.total}</div>
+          <div className="achievement-stat-value">{progressionStats.totalTiers}</div>
           <div className="achievement-stat-label">Gesamt</div>
         </div>
         <div className="achievement-stat">
-          <div className="achievement-stat-value">{stats.completionPercent}%</div>
+          <div className="achievement-stat-value">{progressionStats.completionPercent}%</div>
           <div className="achievement-stat-label">Fortschritt</div>
         </div>
         <div className="achievement-stat">
-          <div className="achievement-stat-value">
-            {stats.byTier.legendary?.earned || 0}
-          </div>
-          <div className="achievement-stat-label">Legendär</div>
+          <div className="achievement-stat-value">{progressionStats.completedProgressions}</div>
+          <div className="achievement-stat-label">Gemeistert</div>
         </div>
       </div>
 
-      {/* Filter Tabs */}
-      <div className="achievement-filter-tabs">
+      {/* Filter Tabs - ONLY 2 MAIN CATEGORIES */}
+      <div ref={filterTabsRef} className="achievement-filter-tabs">
         <button
-          className={`achievement-filter-tab ${filterCategory === 'all' ? 'active' : ''}`}
-          onClick={() => setFilterCategory('all')}
+          className={`achievement-filter-tab ${filterMainCategory === 'all' ? 'active' : ''}`}
+          onClick={() => setFilterMainCategory('all')}
         >
-          Alle ({stats.earned}/{stats.total})
+          Alle ({progressionStats.earnedTiers}/{progressionStats.totalTiers})
         </button>
-        {availableCategories.map(category => (
-          <button
-            key={category.key}
-            className={`achievement-filter-tab ${filterCategory === category.key ? 'active' : ''}`}
-            onClick={() => setFilterCategory(category.key)}
-          >
-            {category.name} ({category.earned}/{category.count})
-          </button>
-        ))}
+        <button
+          className={`achievement-filter-tab ${filterMainCategory === MAIN_CATEGORIES.FAECHER ? 'active' : ''}`}
+          onClick={() => setFilterMainCategory(MAIN_CATEGORIES.FAECHER)}
+        >
+          Fächer ({progressionStats.byMainCategory[MAIN_CATEGORIES.FAECHER].earned}/{progressionStats.byMainCategory[MAIN_CATEGORIES.FAECHER].total})
+        </button>
+        <button
+          className={`achievement-filter-tab ${filterMainCategory === MAIN_CATEGORIES.KOMPETENZEN ? 'active' : ''}`}
+          onClick={() => setFilterMainCategory(MAIN_CATEGORIES.KOMPETENZEN)}
+        >
+          Kompetenzen ({progressionStats.byMainCategory[MAIN_CATEGORIES.KOMPETENZEN].earned}/{progressionStats.byMainCategory[MAIN_CATEGORIES.KOMPETENZEN].total})
+        </button>
       </div>
 
-      {/* Achievement Categories */}
-      <div className="space-y-6">
-        {Object.entries(filteredCategories).map(([categoryKey, categoryData]) => (
-          <div key={categoryKey} className="achievement-category-section">
-            <h3 className="achievement-category-title">
-              {categoryData.categoryName}
-            </h3>
+      {/* Achievement Progressions grouped by Main Category → Sub Category */}
+      <div ref={viewportRef} className="achievements-viewport">
+        <div className="space-y-8">
+          {categoriesToShow.map(mainCategory => (
+            <div key={mainCategory} className="main-category-section">
+              {/* Main Category Title (h2) */}
+              <h2 className="main-category-title">
+                {MAIN_CATEGORY_NAMES[mainCategory]}
+              </h2>
 
-            {/* Tier Progression */}
-            <div className="tier-progression">
-              {categoryData.achievements.map((achievement, index) => (
-                <React.Fragment key={achievement.id}>
-                  <AchievementCard
-                    achievement={achievement}
-                    showNextTierPreview={true}
-                  />
+              {/* Subcategories Container - Horizontal Scroll */}
+              <div className="subcategories-container">
+                {Object.entries(groupedBySubCategory[mainCategory] || {}).map(([subCategory, data]) => (
+                  <div key={subCategory} className="subcategory-column">
+                    {/* Sub Category Title (h3) */}
+                    <h3 className="achievement-category-title">
+                      {data.categoryName}
+                    </h3>
 
-                  {/* Arrow between visible tiers */}
-                  {index < categoryData.achievements.length - 1 &&
-                   achievement.isVisible &&
-                   categoryData.achievements[index + 1].isVisible && (
-                    <div className="tier-arrow hidden md:block">
-                      <ChevronRight className="w-6 h-6" />
+                    {/* Cards for this subcategory (stacked vertically) */}
+                    <div className="subcategory-cards">
+                      {data.progressions.map(progression => (
+                        <AchievementCard
+                          key={progression.id}
+                          progression={progression}
+                        />
+                      ))}
                     </div>
-                  )}
-                </React.Fragment>
-              ))}
+                  </div>
+                ))}
+              </div>
             </div>
-          </div>
-        ))}
-      </div>
-
-      {/* Completed Goals Timeline */}
-      <div>
-        <h4 className="text-sm font-medium text-slate-400 uppercase tracking-wide mb-4 flex items-center gap-2">
-          <Sparkles className="w-4 h-4" />
-          Erreichte Ziele ({completedGoals.length})
-        </h4>
-
-        {completedGoals.length === 0 ? (
-          <div className="text-center py-12 text-slate-500">
-            <Target className="w-12 h-12 mx-auto mb-4 opacity-30" />
-            <p>Noch keine Ziele erreicht.</p>
-            <p className="text-sm mt-1">Setze dir Ziele und arbeite darauf hin!</p>
-          </div>
-        ) : (
-          <div className="space-y-3 max-h-96 overflow-y-auto pr-2">
-            {completedGoals
-              .sort((a, b) => new Date(b.completed_date) - new Date(a.completed_date))
-              .map((goal, index) => (
-                <div
-                  key={goal.id}
-                  className="flex items-start gap-3 p-3 rounded-lg bg-slate-800/30 border border-green-500/20 hover:border-green-500/40 transition-colors"
-                  style={{
-                    animationDelay: `${index * 0.1}s`,
-                  }}
-                >
-                  {/* Star indicator */}
-                  <div className="flex-shrink-0 w-8 h-8 rounded-full bg-green-500/20 flex items-center justify-center">
-                    <Star className="w-4 h-4 text-green-400 fill-green-400" />
-                  </div>
-
-                  {/* Content */}
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm text-white">{goal.goal_text}</p>
-                    <div className="flex items-center gap-2 mt-1 text-xs text-slate-400">
-                      {goal.competency_id && (
-                        <>
-                          <span className="text-purple-400">{getCompetencyName(goal.competency_id)}</span>
-                          <span>•</span>
-                        </>
-                      )}
-                      <span>{new Date(goal.completed_date).toLocaleDateString('de-DE')}</span>
-                    </div>
-                  </div>
-
-                  {/* Celebration effect for recent */}
-                  {index < 3 && (
-                    <div className="flex-shrink-0 text-yellow-400 animate-bounce">
-                      ✨
-                    </div>
-                  )}
-                </div>
-              ))}
-          </div>
-        )}
+          ))}
+        </div>
       </div>
 
       {/* Achievement Tips (Optional) */}
-      {stats.earned === 0 && (
+      {progressionStats.earnedTiers === 0 && (
         <div className="p-4 bg-purple-500/10 border border-purple-500/30 rounded-lg">
           <h5 className="text-sm font-semibold text-purple-400 mb-2">
             🎯 Wie du Erfolge freischaltest

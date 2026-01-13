@@ -30,12 +30,26 @@ export default defineConfig({
     },
   },
   build: {
-    minify: false,
-    sourcemap: true,
+    minify: 'terser',     // ✅ Code verschleiern & komprimieren
+    sourcemap: false,     // ✅ Source Maps deaktivieren (kein Original-Code sichtbar)
+    terserOptions: {
+      compress: {
+        drop_console: true,      // Console-Logs in Produktion entfernen
+        drop_debugger: true,     // Debugger-Statements entfernen
+        pure_funcs: ['console.log', 'console.debug', 'console.info']
+      },
+      mangle: {
+        safari10: true           // Safari-Kompatibilität
+      },
+      format: {
+        comments: false          // Alle Kommentare entfernen
+      }
+    },
     rollupOptions: {
       output: {
         manualChunks: {
           vendor: ['react', 'react-dom', '@tanstack/react-query'],
+          pocketbase: ['pocketbase'],  // ✅ PocketBase separat bundeln
           components: [
             './src/components/yearly/YearlyGrid.jsx',
             './src/components/yearly/LessonModal.jsx',
