@@ -26,6 +26,7 @@ import { syncYearlyLessonToWeekly } from '@/hooks/useYearlyLessonSync';
 import { safeSortByName } from '@/utils/safeData';
 import { getCurrentSchoolYear } from '@/utils/weekYearUtils';
 import { emitTourEvent, TOUR_EVENTS } from '@/components/onboarding/tours/tourEvents';
+import { canEditClass } from '@/utils/teamTeachingUtils';
 
 const ACADEMIC_WEEKS = 52;
 
@@ -35,7 +36,7 @@ export default function YearlyOverviewPage() {
 
 function InnerYearlyOverviewPage() {
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const mode = searchParams.get('mode');
   const assignSubject = searchParams.get('subject');
   const isAssignMode = mode === 'assign';
@@ -51,7 +52,31 @@ function InnerYearlyOverviewPage() {
   const [holidays, setHolidays] = useState([]);
   const [settings, setSettings] = useState(null);
 
-  const [activeClassId, setActiveClassId] = useState(null);
+  // URL-basierte Klassenauswahl für globale Persistenz
+  const urlClassId = searchParams.get('classId');
+  const [activeClassId, setActiveClassIdLocal] = useState(urlClassId || null);
+
+  // Sync URL → State (beim Navigieren)
+  useEffect(() => {
+    const urlClass = searchParams.get('classId');
+    if (urlClass !== activeClassId) {
+      setActiveClassIdLocal(urlClass || null);
+    }
+  }, [searchParams]);
+
+  // Wrapper für setActiveClassId der auch URL aktualisiert
+  const setActiveClassId = useCallback((newClassId) => {
+    setActiveClassIdLocal(newClassId);
+    setSearchParams(prev => {
+      const next = new URLSearchParams(prev);
+      if (newClassId) {
+        next.set('classId', newClassId);
+      } else {
+        next.delete('classId');
+      }
+      return next;
+    }, { replace: true });
+  }, [setSearchParams]);
   const [activeSubjectName, setActiveSubjectName] = useState('');
   const [activeTopicId, setActiveTopicId] = useState(null);
 
@@ -407,25 +432,188 @@ function InnerYearlyOverviewPage() {
 
   const { allYearlyLessons, isLoading: yearlyLoading, refetch: refetchYearly, optimisticUpdate } = useAllYearlyLessons(currentYear);
 
+  // Team Teaching: Lade sichtbare geteilte Klassen-IDs (für Query-Key-Tracking)
+  const { data: visibleSharedClassIds = [] } = useQuery({
+    queryKey: ['visibleSharedClassIds', userId],
+    queryFn: async () => {
+      if (!userId) return [];
+      const teamTeachings = await pb.collection('team_teachings').getFullList({
+        filter: `invited_user_id = '${userId}' && status = 'accepted' && is_hidden = false`,
+        $autoCancel: false
+      }).catch(() => []);
+      return teamTeachings.map(tt => tt.class_id).sort();
+    },
+    staleTime: 0, // Immer frisch laden
+    enabled: !!userId,
+  });
+
   const { data: topicsData, isLoading: topicsLoading } = useQuery({
-    queryKey: ['topics', userId],
-    queryFn: () => Topic.list({ 'class_id.user_id': userId }),
+    queryKey: ['topics', userId, visibleSharedClassIds],
+    queryFn: async () => {
+      // 1. Eigene Topics laden
+      const ownTopics = await Topic.list({ 'class_id.user_id': userId });
+
+      // 2. Geteilte Klassen-IDs holen (NUR nicht-versteckte)
+      const teamTeachings = await pb.collection('team_teachings').getFullList({
+        filter: `invited_user_id = '${userId}' && status = 'accepted'`,
+        $autoCancel: false
+      }).catch(() => []);
+      // Nur nicht-versteckte Klassen für Daten-Loading
+      const sharedClassIds = teamTeachings
+        .filter(tt => !tt.is_hidden)
+        .map(tt => tt.class_id);
+
+      // 3. Topics von geteilten Klassen laden
+      let sharedTopics = [];
+      if (sharedClassIds.length > 0) {
+        for (const classId of sharedClassIds) {
+          const topics = await pb.collection('topics').getFullList({
+            filter: `class_id = '${classId}'`,
+            $autoCancel: false
+          }).catch(() => []);
+          sharedTopics = [...sharedTopics, ...topics];
+        }
+      }
+
+      console.log('[Topics] Own:', ownTopics?.length, 'Shared:', sharedTopics.length);
+      return [...(ownTopics || []), ...sharedTopics];
+    },
     staleTime: 0, // Immer frische Daten holen
   });
 
   const { data: subjectsData, isLoading: subjectsLoading } = useQuery({
-    queryKey: ['subjects', userId, currentYear],
-    queryFn: () => Subject.list({ 'class_id.user_id': userId }),
+    queryKey: ['subjects', userId, currentYear, visibleSharedClassIds],
+    queryFn: async () => {
+      // 1. Eigene Subjects laden
+      const ownSubjects = await Subject.list({ 'class_id.user_id': userId });
+
+      // 2. Geteilte Klassen-IDs holen (NUR nicht-versteckte)
+      const teamTeachings = await pb.collection('team_teachings').getFullList({
+        filter: `invited_user_id = '${userId}' && status = 'accepted'`,
+        $autoCancel: false
+      }).catch(() => []);
+      // Nur nicht-versteckte Klassen für Daten-Loading
+      const sharedClassIds = teamTeachings
+        .filter(tt => !tt.is_hidden)
+        .map(tt => tt.class_id);
+
+      // 3. Subjects von geteilten Klassen laden
+      let sharedSubjects = [];
+      if (sharedClassIds.length > 0) {
+        for (const classId of sharedClassIds) {
+          const subjects = await pb.collection('subjects').getFullList({
+            filter: `class_id = '${classId}'`,
+            $autoCancel: false
+          }).catch(() => []);
+          sharedSubjects = [...sharedSubjects, ...subjects];
+        }
+      }
+
+      console.log('[Subjects] Own:', ownSubjects?.length, 'Shared:', sharedSubjects.length);
+      return [...(ownSubjects || []), ...sharedSubjects];
+    },
   });
 
   const { data: classesData, isLoading: classesLoading } = useQuery({
     queryKey: ['classes', userId, currentYear],
-    queryFn: () => Class.list({ user_id: userId }),
+    queryFn: async () => {
+      // 1. Eigene Klassen laden
+      const ownedClasses = await Class.list({ user_id: userId });
+      const ownedWithMeta = (ownedClasses || []).map(cls => ({
+        ...cls,
+        isOwner: true,
+        permissionLevel: 'full_access'
+      }));
+
+      // 2. Geteilte Klassen via Team Teaching laden (mit expand für Klassendaten)
+      // WICHTIG: owner_id != userId um Self-Team-Teaching-Records auszuschließen
+      const teamTeachingAccess = await pb.collection('team_teachings').getFullList({
+        filter: `invited_user_id = '${userId}' && status = 'accepted' && owner_id != '${userId}'`,
+        expand: 'class_id,owner_id',
+        $autoCancel: false
+      }).catch((err) => {
+        console.error('[TeamTeaching] Query failed:', err);
+        return [];
+      });
+
+      // Debug-Logging
+      console.log('[TeamTeaching Debug YearlyOverview]', {
+        userId,
+        teamTeachingAccess,
+        expandData: teamTeachingAccess.map(tt => ({
+          id: tt.id,
+          class_id: tt.class_id,
+          class_name: tt.class_name,
+          expand: tt.expand
+        }))
+      });
+
+      // 3. Geteilte Klassen extrahieren - MIT FALLBACK wenn expand fehlschlägt (RLS)
+      // NUR nicht-versteckte Klassen anzeigen
+      const sharedClasses = teamTeachingAccess
+        .filter(tt => (tt.expand?.class_id || tt.class_id) && !tt.is_hidden) // Fallback + Filter
+        .map(tt => ({
+          // Wenn expand funktioniert, nutze es - sonst Fallback
+          ...(tt.expand?.class_id || {}),
+          // Fallback-Felder wenn expand fehlt (wegen RLS)
+          id: tt.expand?.class_id?.id || tt.class_id,
+          name: tt.expand?.class_id?.name || tt.class_name || 'Geteilte Klasse',
+          isOwner: false,
+          permissionLevel: tt.permission_level || 'view_only',
+          teamTeachingId: tt.id,
+          ownerEmail: tt.expand?.owner_id?.email || ''
+        }));
+
+      console.log('[TeamTeaching Debug] Shared classes:', sharedClasses);
+
+      // 4. Zusammenführen mit Deduplizierung (owned hat Priorität)
+      const merged = [...ownedWithMeta, ...sharedClasses];
+      const uniqueClasses = merged.reduce((acc, cls) => {
+        const existing = acc.find(c => c.id === cls.id);
+        if (!existing) {
+          acc.push(cls);
+        } else if (cls.isOwner && !existing.isOwner) {
+          // Owned-Version bevorzugen falls beide existieren
+          const idx = acc.findIndex(c => c.id === cls.id);
+          acc[idx] = cls;
+        }
+        return acc;
+      }, []);
+      return uniqueClasses;
+    },
   });
 
   const { data: holidaysData, isLoading: holidaysLoading } = useQuery({
-    queryKey: ['holidays', userId, currentYear],
-    queryFn: () => Holiday.list({ user_id: userId }),
+    queryKey: ['holidays', userId, currentYear, visibleSharedClassIds],
+    queryFn: async () => {
+      // 1. Eigene Ferien laden
+      const ownHolidays = await Holiday.list({ user_id: userId });
+
+      // 2. Ferien von geteilten Klassen laden (Owner-IDs ermitteln)
+      if (visibleSharedClassIds.length === 0) {
+        return ownHolidays || [];
+      }
+
+      // Team Teaching Daten holen um Owner-IDs zu bekommen
+      const teamTeachings = await pb.collection('team_teachings').getFullList({
+        filter: `invited_user_id = '${userId}' && status = 'accepted' && owner_id != '${userId}'`,
+        $autoCancel: false
+      }).catch(() => []);
+
+      const ownerIds = [...new Set(teamTeachings.map(tt => tt.owner_id))];
+
+      // Ferien der Owner laden
+      let sharedHolidays = [];
+      for (const ownerId of ownerIds) {
+        const holidays = await pb.collection('holidays').getFullList({
+          filter: `user_id = '${ownerId}'`,
+          $autoCancel: false
+        }).catch(() => []);
+        sharedHolidays = [...sharedHolidays, ...holidays];
+      }
+
+      return [...(ownHolidays || []), ...sharedHolidays];
+    },
   });
 
   const { data: settingsData, isLoading: settingsLoading } = useQuery({
@@ -457,6 +645,17 @@ function InnerYearlyOverviewPage() {
       setSettings(latestSettings);
     }
   }, [topicsData, subjectsData, classesData, holidaysData, settingsData, activeClassId, yearViewMode]);
+
+  // Auto-select: Wenn nur eine eigene Klasse existiert und keine ausgewählt ist, automatisch auswählen
+  useEffect(() => {
+    if (!classes || classes.length === 0) return;
+    if (activeClassId !== null) return; // Bereits eine Klasse ausgewählt
+
+    const ownedClasses = classes.filter(c => c.isOwner !== false);
+    if (ownedClasses.length === 1) {
+      setActiveClassId(ownedClasses[0].id);
+    }
+  }, [classes, activeClassId, setActiveClassId]);
 
   // Computed loading state - no useEffect needed
   const isLoading = yearlyLoading || topicsLoading || subjectsLoading || classesLoading || holidaysLoading || settingsLoading;
@@ -566,6 +765,15 @@ function InnerYearlyOverviewPage() {
   }, [isAnyAssignMode, assignSubject, subjects, activeClassId, classes]);
 
   const activeClassName = useMemo(() => classes.find(c => c.id === activeClassId)?.name || '', [classes, activeClassId]);
+
+  // Team Teaching: Berechne ob User diese Klasse bearbeiten darf
+  // WICHTIG: Priorisiere owned-Version falls beide existieren (Edge-Case bei Self-Team-Teaching-Records)
+  const activeClass = useMemo(() =>
+    classes.find(c => c.id === activeClassId && c.isOwner) ||
+    classes.find(c => c.id === activeClassId),
+    [classes, activeClassId]
+  );
+  const canEdit = useMemo(() => canEditClass(activeClass, pb.authStore.model?.id), [activeClass]);
 
   const activeClassDisplayName = activeClassId === null ? 'Alle Klassen' : activeClassName;
 
@@ -1320,6 +1528,7 @@ function InnerYearlyOverviewPage() {
                     refetch={refetchYearly}
                     optimisticUpdateYearlyLessons={optimisticUpdate}
                     settings={settings}
+                    readOnly={!canEdit}
                   />
                 )}
               </>
@@ -1402,6 +1611,7 @@ function InnerYearlyOverviewPage() {
         currentWeek={editingLesson?.week_number || newLessonSlot?.week_number}
         currentYear={currentYear}
         settings={settings}
+        canEdit={canEdit}
         onSaveAndNext={async (nextLessonNumber) => {
           const currentWeek = newLessonSlot?.week_number || editingLesson?.week_number;
           const currentSubjectId = newLessonSlot ? subjects.find(s => s.name === newLessonSlot.subject)?.id : editingLesson?.subject;
@@ -1497,6 +1707,7 @@ function InnerYearlyOverviewPage() {
         topics={topics}
         currentYear={currentYear}
         autoAssignTopicId={selectedTopicInfo?.topic?.id} // Corrected: Pass topic ID directly
+        canEdit={canEdit}
       />
     </div>
   );

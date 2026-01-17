@@ -4,10 +4,19 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Plus, Trash2, Loader2, Users } from 'lucide-react';
+import { Plus, Trash2, Loader2, Users, UserPlus, ChevronDown, ChevronUp, Eye, Users2, EyeOff, Link2 } from 'lucide-react';
 import pb from '@/api/pb';
 import { useStudentSortPreference } from '@/hooks/useStudentSortPreference';
 import StudentManagementModal from './StudentManagementModal';
+import TeamTeachingInviteDialog from './TeamTeachingInviteDialog';
+import TeamTeachingShareLink from './TeamTeachingShareLink';
+import TeamTeachingInvitations from './TeamTeachingInvitations';
+import CoTeachersList from './CoTeachersList';
+import { canEditClass } from '@/utils/teamTeachingUtils';
+import { useTeamTeaching } from '@/hooks/useTeamTeaching';
+import { Switch } from '@/components/ui/switch';
+import toast from 'react-hot-toast';
+import { useQueryClient } from '@tanstack/react-query';
 
 // Utility functions for cascading deletes with rate limiting
 const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
@@ -38,6 +47,14 @@ export default function ClassesSettings({ classes, refreshData, setActiveClassId
 
   // Student Management Modal State
   const [selectedClassForModal, setSelectedClassForModal] = useState(null);
+
+  // Team Teaching State
+  const [selectedClassForTeamTeaching, setSelectedClassForTeamTeaching] = useState(null);
+  const [selectedClassForShareLink, setSelectedClassForShareLink] = useState(null);
+  const [expandedTeamTeaching, setExpandedTeamTeaching] = useState({});
+  const { toggleSharedClassVisibility } = useTeamTeaching();
+  const [togglingVisibility, setTogglingVisibility] = useState({});
+  const queryClient = useQueryClient();
 
   // Student counts per class (for display)
   const [studentCounts, setStudentCounts] = useState({});
@@ -430,6 +447,41 @@ export default function ClassesSettings({ classes, refreshData, setActiveClassId
     }
   };
 
+  // Toggle visibility of shared class
+  const handleToggleVisibility = async (cls) => {
+    if (!cls.teamTeachingId) return;
+
+    setTogglingVisibility(prev => ({ ...prev, [cls.id]: true }));
+    try {
+      const newHiddenState = !cls.is_hidden;
+      const result = await toggleSharedClassVisibility(cls.teamTeachingId, newHiddenState);
+
+      if (result.success) {
+        toast.success(newHiddenState ? 'Klasse deaktiviert' : 'Klasse aktiviert');
+        await refreshData();
+
+        // Bei Aktivierung die Klasse automatisch auswählen
+        if (!newHiddenState && setActiveClassId) {
+          setActiveClassId(cls.id);
+        }
+
+        // Query-Cache invalidieren für alle Seiten die Team Teaching Daten nutzen
+        queryClient.invalidateQueries({ queryKey: ['visibleSharedClassIds'] });
+        queryClient.invalidateQueries({ queryKey: ['topics'] });
+        queryClient.invalidateQueries({ queryKey: ['subjects'] });
+        queryClient.invalidateQueries({ queryKey: ['classes'] });
+        queryClient.invalidateQueries({ queryKey: ['allYearlyLessons'] });
+      } else {
+        toast.error(result.error || 'Fehler beim Ändern');
+      }
+    } catch (error) {
+      console.error('Error toggling visibility:', error);
+      toast.error('Fehler beim Ändern der Sichtbarkeit');
+    } finally {
+      setTogglingVisibility(prev => ({ ...prev, [cls.id]: false }));
+    }
+  };
+
   // Refresh student counts when modal closes
   const handleStudentsChange = async () => {
     const counts = {};
@@ -447,6 +499,9 @@ export default function ClassesSettings({ classes, refreshData, setActiveClassId
   return (
     <div className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">
       <h3 className="text-xl font-bold mb-6 text-slate-900 dark:text-white">Klassenverwaltung</h3>
+
+      {/* Team Teaching Einladungen */}
+      <TeamTeachingInvitations onUpdate={refreshData} />
 
       {/* Global Student Sort Control */}
       <div className="mb-6 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
@@ -472,48 +527,201 @@ export default function ClassesSettings({ classes, refreshData, setActiveClassId
         </p>
       </div>
 
-      {/* Classes List */}
-      <div className="space-y-3">
+      {/* Classes List - Kategorisiert */}
+      <div className="space-y-6">
         {classes.length === 0 ? (
           <p className="text-slate-500 dark:text-slate-400">
             Keine Klassen verfügbar. Bitte fügen Sie eine neue Klasse hinzu.
           </p>
         ) : (
-          classes.map(cls => (
-            <div
-              key={cls.id}
-              className="bg-slate-50 dark:bg-slate-800 rounded-lg p-4 border border-slate-200 dark:border-slate-700 flex items-center justify-between gap-4"
-            >
-              <div className="flex items-center gap-3 flex-1 min-w-0">
-                <span className="font-semibold text-lg truncate">
-                  {cls.name || 'Unbekannte Klasse'}
-                </span>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setSelectedClassForModal(cls)}
-                  className="text-blue-600 border-blue-300 hover:bg-blue-50 dark:text-blue-400 dark:border-blue-700 dark:hover:bg-blue-900/30"
-                >
-                  <Users className="w-4 h-4 mr-1" />
-                  {studentCounts[cls.id] ?? '...'} Schüler verwalten
-                </Button>
+          <>
+            {/* MEINE KLASSEN */}
+            {classes.filter(c => c.isOwner !== false).length > 0 && (
+              <div>
+                <h4 className="text-sm font-semibold text-slate-600 dark:text-slate-400 mb-3 flex items-center gap-2">
+                  <Users className="w-4 h-4" />
+                  Meine Klassen
+                </h4>
+                <div className="space-y-3">
+                  {classes.filter(c => c.isOwner !== false).map(cls => (
+                    <div
+                      key={cls.id}
+                      className="bg-slate-50 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700"
+                    >
+                      {/* Hauptzeile */}
+                      <div className="p-4 flex items-center justify-between gap-4">
+                        <div className="flex items-center gap-3 flex-1 min-w-0">
+                          <span className="font-semibold text-lg truncate">
+                            {cls.name || 'Unbekannte Klasse'}
+                          </span>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setSelectedClassForModal(cls)}
+                            className="text-blue-600 border-blue-300 hover:bg-blue-50 dark:text-blue-400 dark:border-blue-700 dark:hover:bg-blue-900/30"
+                          >
+                            <Users className="w-4 h-4 mr-1" />
+                            {studentCounts[cls.id] ?? '...'} Schueler verwalten
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setSelectedClassForTeamTeaching(cls)}
+                            className="text-purple-600 border-purple-300 hover:bg-purple-50 dark:text-purple-400 dark:border-purple-700 dark:hover:bg-purple-900/30"
+                          >
+                            <UserPlus className="w-4 h-4 mr-1" />
+                            Per E-Mail
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setSelectedClassForShareLink(cls)}
+                            className="text-purple-600 border-purple-300 hover:bg-purple-50 dark:text-purple-400 dark:border-purple-700 dark:hover:bg-purple-900/30"
+                          >
+                            <Link2 className="w-4 h-4 mr-1" />
+                            Per Link
+                          </Button>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-700"
+                            onClick={() => setExpandedTeamTeaching(prev => ({
+                              ...prev,
+                              [cls.id]: !prev[cls.id]
+                            }))}
+                            title="Team Teaching anzeigen"
+                          >
+                            {expandedTeamTeaching[cls.id] ? (
+                              <ChevronUp className="w-4 h-4" />
+                            ) : (
+                              <ChevronDown className="w-4 h-4" />
+                            )}
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-red-500 hover:bg-red-100 dark:hover:bg-red-900/30 flex-shrink-0"
+                            onClick={() => handleDeleteClass(cls.id)}
+                            disabled={isDeletingClass}
+                            title="Klasse loeschen"
+                          >
+                            {isDeletingClass ? (
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <Trash2 className="w-4 h-4" />
+                            )}
+                          </Button>
+                        </div>
+                      </div>
+
+                      {/* Team Teaching Bereich (ausklappbar) */}
+                      {expandedTeamTeaching[cls.id] && (
+                        <div className="px-4 pb-4 pt-2 border-t border-slate-200 dark:border-slate-700">
+                          <h5 className="text-sm font-medium text-slate-600 dark:text-slate-400 mb-2">
+                            Co-Teacher fuer diese Klasse:
+                          </h5>
+                          <CoTeachersList classId={cls.id} onUpdate={refreshData} />
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
               </div>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8 text-red-500 hover:bg-red-100 dark:hover:bg-red-900/30 flex-shrink-0"
-                onClick={() => handleDeleteClass(cls.id)}
-                disabled={isDeletingClass}
-                title="Klasse löschen"
-              >
-                {isDeletingClass ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  <Trash2 className="w-4 h-4" />
-                )}
-              </Button>
-            </div>
-          ))
+            )}
+
+            {/* GETEILTE KLASSEN */}
+            {classes.filter(c => c.isOwner === false).length > 0 && (
+              <div>
+                <h4 className="text-sm font-semibold text-purple-600 dark:text-purple-400 mb-3 flex items-center gap-2">
+                  <Users2 className="w-4 h-4" />
+                  Geteilte Klassen (Team Teaching)
+                </h4>
+                <div className="space-y-3">
+                  {classes.filter(c => c.isOwner === false).map(cls => (
+                    <div
+                      key={cls.id}
+                      className={`rounded-lg border ${
+                        cls.is_hidden
+                          ? 'bg-slate-100 dark:bg-slate-800/50 border-slate-300 dark:border-slate-600 opacity-60'
+                          : 'bg-purple-50 dark:bg-purple-900/20 border-purple-200 dark:border-purple-700'
+                      }`}
+                    >
+                      {/* Hauptzeile */}
+                      <div className="p-4 flex items-center justify-between gap-4">
+                        <div className="flex items-center gap-3 flex-1 min-w-0">
+                          <span className="font-semibold text-lg truncate">
+                            {cls.name || 'Geteilte Klasse'}
+                          </span>
+                          {/* Berechtigungs-Badge */}
+                          <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${
+                            cls.permissionLevel === 'view_only'
+                              ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+                              : 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                          }`}>
+                            {cls.permissionLevel === 'view_only' ? (
+                              <>
+                                <Eye className="w-3 h-3" />
+                                Nur Einsicht
+                              </>
+                            ) : (
+                              <>
+                                <Users2 className="w-3 h-3" />
+                                Vollzugriff
+                              </>
+                            )}
+                          </span>
+                          {/* Deaktiviert Badge */}
+                          {cls.is_hidden && (
+                            <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-400">
+                              <EyeOff className="w-3 h-3" />
+                              Deaktiviert
+                            </span>
+                          )}
+                          {/* Owner-Info */}
+                          {cls.ownerEmail && (
+                            <span className="text-xs text-slate-500 dark:text-slate-400">
+                              von {cls.ownerEmail}
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {/* Schüler ansehen Button (nur wenn nicht deaktiviert) */}
+                          {!cls.is_hidden && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setSelectedClassForModal(cls)}
+                              className="text-purple-600 border-purple-300 hover:bg-purple-100 dark:text-purple-400 dark:border-purple-600 dark:hover:bg-purple-900/30"
+                            >
+                              <Users className="w-4 h-4 mr-1" />
+                              {studentCounts[cls.id] ?? '...'} Schueler
+                            </Button>
+                          )}
+                          {/* Deaktivieren-Toggle */}
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-slate-500 dark:text-slate-400">
+                              {cls.is_hidden ? 'Deaktiviert' : 'Aktiv'}
+                            </span>
+                            <Switch
+                              checked={!cls.is_hidden}
+                              onCheckedChange={() => handleToggleVisibility(cls)}
+                              disabled={togglingVisibility[cls.id]}
+                              className="data-[state=checked]:bg-purple-600"
+                            />
+                            {togglingVisibility[cls.id] && (
+                              <Loader2 className="w-4 h-4 animate-spin text-purple-500" />
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </>
         )}
       </div>
 
@@ -538,6 +746,35 @@ export default function ClassesSettings({ classes, refreshData, setActiveClassId
         onClose={() => setSelectedClassForModal(null)}
         classData={selectedClassForModal}
         onStudentsChange={handleStudentsChange}
+        canEdit={canEditClass(selectedClassForModal, pb.authStore.model?.id)}
+      />
+
+      {/* Team Teaching Invite Dialog */}
+      <TeamTeachingInviteDialog
+        isOpen={!!selectedClassForTeamTeaching}
+        onClose={() => setSelectedClassForTeamTeaching(null)}
+        classData={selectedClassForTeamTeaching}
+        onSuccess={() => {
+          refreshData();
+          setExpandedTeamTeaching(prev => ({
+            ...prev,
+            [selectedClassForTeamTeaching?.id]: true
+          }));
+        }}
+      />
+
+      {/* Team Teaching Share Link Dialog */}
+      <TeamTeachingShareLink
+        isOpen={!!selectedClassForShareLink}
+        onClose={() => setSelectedClassForShareLink(null)}
+        classData={selectedClassForShareLink}
+        onSuccess={() => {
+          refreshData();
+          setExpandedTeamTeaching(prev => ({
+            ...prev,
+            [selectedClassForShareLink?.id]: true
+          }));
+        }}
       />
     </div>
   );

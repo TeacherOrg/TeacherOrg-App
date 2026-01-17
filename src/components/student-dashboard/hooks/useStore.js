@@ -15,8 +15,9 @@ export function useStore(studentId) {
   // Load store data
   const loadStoreData = useCallback(async () => {
     try {
-      // Load all active store items
-      const allItems = await StoreItem.list({ is_active: true });
+      // Load all active store items for this user
+      const userId = pb.authStore.model?.id;
+      const allItems = await StoreItem.list({ is_active: true, user_id: userId });
       // Sort by sort_order, then by cost
       const sortedItems = allItems.sort((a, b) => {
         if (a.sort_order !== b.sort_order) return (a.sort_order || 0) - (b.sort_order || 0);
@@ -117,16 +118,17 @@ export function useStoreManager() {
 
   const loadData = useCallback(async () => {
     try {
-      // Load all items (including inactive)
-      const allItems = await StoreItem.list();
+      const userId = pb.authStore.model?.id;
+      // Load all items (including inactive) for this user
+      const allItems = await StoreItem.list({ user_id: userId });
       const sortedItems = allItems.sort((a, b) => {
         if (a.sort_order !== b.sort_order) return (a.sort_order || 0) - (b.sort_order || 0);
         return (a.cost || 0) - (b.cost || 0);
       });
       setItems(sortedItems);
 
-      // Load all purchases
-      const purchases = await StorePurchase.list();
+      // Load all purchases for this user
+      const purchases = await StorePurchase.list({ user_id: userId });
       setAllPurchases(purchases);
       setPendingPurchases(purchases.filter(p => p.status === 'pending'));
     } catch (error) {

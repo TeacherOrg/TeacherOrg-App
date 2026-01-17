@@ -1,13 +1,14 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { Lesson, YearlyLesson, Topic, Subject, Setting, Class, Holiday, AllerleiLesson } from "@/api/entities";
 import { Button } from "@/components/ui/button";
-import { ChevronsLeft, ChevronsRight } from "lucide-react";
+import { ChevronsLeft, ChevronsRight, Users } from "lucide-react";
 import { motion } from "framer-motion";
 import { DndContext, closestCenter, PointerSensor, KeyboardSensor, useSensor, useSensors, DragOverlay } from '@dnd-kit/core';
 import { sortableKeyboardCoordinates } from '@dnd-kit/sortable';
 import { useDraggable } from '@dnd-kit/core';
 import { restrictToWindowEdges } from '@dnd-kit/modifiers';
 import LessonCard from "../components/timetable/LessonCard";
+import { LessonBadge } from "@/components/shared/lesson";
 import TimetableGrid from "../components/timetable/TimetableGrid";
 import LessonModal from "../components/timetable/LessonModal";
 import DailyView from "../pages/DailyView";
@@ -38,6 +39,7 @@ import { createMixedSubjectGradient } from '@/utils/colorUtils';
 import useAllYearlyLessons from '@/hooks/useAllYearlyLessons';
 import { emitTourEvent, TOUR_EVENTS } from '@/components/onboarding/tours/tourEvents';
 import { useTour } from '@/components/onboarding/TourProvider';
+import { canEditClass } from '@/utils/teamTeachingUtils';
 
 
 
@@ -47,7 +49,23 @@ export default function TimetablePage() {
 
 function InnerTimetablePage() {
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // URL-basierte Klassenauswahl für globale Persistenz
+  const urlClassId = searchParams.get('classId') || null;
+
+  // Callback um URL zu aktualisieren wenn Klasse geändert wird
+  const handleClassIdChange = useCallback((newClassId) => {
+    setSearchParams(prev => {
+      const next = new URLSearchParams(prev);
+      if (newClassId) {
+        next.set('classId', newClassId);
+      } else {
+        next.delete('classId');
+      }
+      return next;
+    }, { replace: true });
+  }, [setSearchParams]);
   const { droppedDay } = useTour();
   const allLessons = useLessonStore((state) => state.allLessons);
   const allerleiLessons = useLessonStore((state) => state.allerleiLessons);
@@ -106,8 +124,8 @@ function InnerTimetablePage() {
   const [currentWeek, setCurrentWeek] = useState(getCurrentWeek());
   const [currentYear, setCurrentYear] = useState(getCurrentWeekYear());
 
-  // Call useTimetableData with currentYear and currentWeek
-  const { data, isLoading: queryLoading, classes, subjects, settings, holidays, topics, refetch, activeClassId, setActiveClassId } = useTimetableData(currentYear, currentWeek);
+  // Call useTimetableData with currentYear, currentWeek, and URL-based classId
+  const { data, isLoading: queryLoading, classes, subjects, settings, holidays, topics, refetch, activeClassId, setActiveClassId } = useTimetableData(currentYear, currentWeek, urlClassId, handleClassIdChange);
 
   const { allYearlyLessons, refetch: refetchYearlyLessons } = useAllYearlyLessons(currentYear);
 
@@ -118,6 +136,10 @@ function InnerTimetablePage() {
 
   const memoizedSubjects = useMemo(() => subjects || [], [subjects]);
   const memoizedTopics = useMemo(() => topics || [], [topics]);
+
+  // Team Teaching: Berechne ob User diese Klasse bearbeiten darf
+  const activeClass = useMemo(() => classes.find(c => c.id === activeClassId), [classes, activeClassId]);
+  const canEdit = useMemo(() => canEditClass(activeClass, pb.authStore.model?.id), [activeClass]);
 
   // Call useTimetableStates with settings, currentYear, and currentWeek
   const { currentView, setCurrentView, viewMode, setViewMode, currentDate, setCurrentDate, renderKey, setRenderKey, isModalOpen, setIsModalOpen, editingLesson, setEditingLesson, slotInfo, setSlotInfo, initialSubjectForModal, setInitialSubjectForModal, isCopying, setIsCopying, copiedLesson, setCopiedLesson, activeDragId, setActiveDragId, hoverLesson, setHoverLesson, hoverPosition, setHoverPosition, disableHover, setDisableHover, overlayRef, handleShowHover, handleHideHover, timeSlots, weekInfo, autoFit, setAutoFit } = useTimetableStates(settings || {}, currentYear, currentWeek);
@@ -430,8 +452,10 @@ function InnerTimetablePage() {
       return acc;
     }, {});
 
-    // Für jede Klasse die Fächer sammeln
-    const result = sortedClasses.map(classData => {
+    // Nur für die aktive Klasse die Fächer sammeln (Team Teaching: nur eine Klasse im Pool)
+    const result = sortedClasses
+      .filter(c => c.id === activeClassId)
+      .map(classData => {
       const subjectsForClass = subjects
         .filter(s => s.class_id === classData.id)
         .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
@@ -545,22 +569,40 @@ function InnerTimetablePage() {
       }
       if (!subjectData) return null;
 
+      // Erste verfügbare Lektion und deren Infos ermitteln
+      const firstAvailable = subjectData.availableLessons[0];
+      const topic = firstAvailable?.topic_id ? topics.find(t => t.id === firstAvailable.topic_id) : null;
+      const displayText = topic?.title || firstAvailable?.name || null;
+
+      // Doppellektion erkennen
+      const isDoubleLesson = firstAvailable?.is_double_lesson ||
+                             firstAvailable?.second_yearly_lesson_id ||
+                             allYearlyLessons.some(yl => yl.second_yearly_lesson_id === firstAvailable?.id);
+      const height = isDoubleLesson ? 104 : 52;
+
       const subjectColor = subjectData.subject.color || '#3b82f6';
       return (
         <div
-          className="rounded cursor-grabbing flex items-center justify-between shadow-2xl"
+          className="rounded cursor-grabbing flex flex-col justify-center items-center shadow-2xl text-center"
           style={{
             background: createGradient(subjectColor, -20, '135deg'),
-            height: '40px',
-            padding: '0 0.75rem',
-            width: '180px',
+            height: `${height}px`,
+            padding: '0.5rem',
+            width: '220px',
             zIndex: 9999
           }}
         >
-          <div className="font-bold text-white">{subjectData.subject.name}</div>
-          <span className="text-sm text-white">
-            ({subjectData.totalScheduled}/{subjectData.lessonsPerWeek})
-          </span>
+          <div className="flex items-center justify-center">
+            {firstAvailable?.is_half_class && <LessonBadge variant="half-class" position="inline" className="mr-1" />}
+            <div className="font-bold text-white text-sm truncate">{subjectData.subject.name}</div>
+            <span className="text-xs text-white flex-shrink-0 ml-2">
+              ({subjectData.totalScheduled}/{subjectData.lessonsPerWeek})
+            </span>
+            {firstAvailable?.is_exam && <LessonBadge variant="exam" position="inline" className="ml-1" />}
+          </div>
+          {displayText && (
+            <div className="text-xs text-white/75 truncate leading-tight mt-0.5">{displayText}</div>
+          )}
         </div>
       );
     }
@@ -933,6 +975,19 @@ function InnerTimetablePage() {
 
       {queryLoading || !settings ? (
         <CalendarLoader />
+      ) : classes.length === 0 ? (
+        <div className="flex flex-col items-center justify-center flex-1 p-8">
+          <Users className="w-16 h-16 text-slate-400 dark:text-slate-500 mb-4" />
+          <h2 className="text-xl font-semibold text-slate-700 dark:text-slate-300 mb-2">
+            Keine Klasse vorhanden
+          </h2>
+          <p className="text-slate-500 dark:text-slate-400 text-center mb-6 max-w-md">
+            Erstellen Sie zuerst eine Klasse in den Einstellungen, um den Stundenplan nutzen zu können.
+          </p>
+          <Button onClick={() => navigate('/Settings')}>
+            Zu den Einstellungen
+          </Button>
+        </div>
       ) : viewMode === 'week' ? (
         <DndContext
           sensors={sensors}
@@ -976,6 +1031,7 @@ function InnerTimetablePage() {
                 subjects={subjects}
                 mergePreview={mergePreview}
                 isSelectingMerge={isSelectingMerge}
+                readOnly={!canEdit}
               />
             </motion.div>
 
@@ -985,6 +1041,7 @@ function InnerTimetablePage() {
                 availableYearlyLessonsForPool={availableYearlyLessonsForPool}
                 gridRef={gridRef}
                 currentWeek={currentWeek}
+                topics={topics}
               />
             )}
           </div>
@@ -1034,6 +1091,7 @@ function InnerTimetablePage() {
         currentYear={currentYear}
         formData={formData}
         settings={settings}
+        canEdit={canEdit}
       />
     </div>
     </>

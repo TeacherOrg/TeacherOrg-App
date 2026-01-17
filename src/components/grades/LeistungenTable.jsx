@@ -35,7 +35,8 @@ const LeistungenTable = ({
   onDataChange,
   expandedRows,
   setExpandedRows,
-  savePreferences // Neu: von PerformanceView als Prop erhalten
+  savePreferences, // Neu: von PerformanceView als Prop erhalten
+  canEdit = true // Team Teaching: Bearbeitungsrechte
 }) => {
   const { toast } = useToast();
   const [sortPreference] = useStudentSortPreference();
@@ -45,8 +46,6 @@ const LeistungenTable = ({
   const [newFachbereichInputs, setNewFachbereichInputs] = useState({});
   const [sortBy, setSortBy] = useState('date');
   const [filterSubject, setFilterSubject] = useState('all');
-  const [currentPage, setCurrentPage] = useState(1);
-  const ITEMS_PER_PAGE = 10;
 
   // Bug 4 Fix: ENTFERNT - Doppelte loadPreferences und saveExpandedRows
   // Die Daten kommen jetzt via Props aus dem usePreferences Hook
@@ -107,21 +106,6 @@ const LeistungenTable = ({
       return 0;
     });
   }, [performances, filterSubject, sortBy]);
-
-  // Pagination
-  const paginatedPerformances = useMemo(() => {
-    const maxPage = Math.ceil(groupedPerformances.length / ITEMS_PER_PAGE);
-    if (currentPage > maxPage && maxPage > 0) {
-      setCurrentPage(maxPage);
-    } else if (currentPage === 0 && groupedPerformances.length > 0) {
-      setCurrentPage(1);
-    }
-
-    const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
-    return groupedPerformances.slice(startIndex, startIndex + ITEMS_PER_PAGE);
-  }, [groupedPerformances, currentPage]);
-
-  const totalPages = Math.ceil(groupedPerformances.length / ITEMS_PER_PAGE);
 
   const subjectOptions = useMemo(() => {
     if (!Array.isArray(performances)) return ['all'];
@@ -367,32 +351,33 @@ const LeistungenTable = ({
       </div>
 
       {/* Table */}
-      <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg">
-        <div className="p-4">
+      <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg flex flex-col">
+        <div className="p-4 flex-shrink-0">
           <h3 className="text-black dark:text-white text-lg font-semibold">Leistungsbeurteilungen</h3>
         </div>
-        <Table className="bg-white dark:bg-slate-800 rounded-lg">
-          <TableHeader>
-            <TableRow className="border-slate-200 dark:border-slate-700">
-              <TableHead className="text-black dark:text-white"></TableHead>
-              <TableHead className="text-black dark:text-white">Datum</TableHead>
-              <TableHead className="text-black dark:text-white">Fach</TableHead>
-              <TableHead className="text-black dark:text-white">Prüfungsname</TableHead>
-              <TableHead className="text-black dark:text-white">Fachbereiche</TableHead>
-              <TableHead className="text-black dark:text-white">Gewichtung</TableHead>
-              <TableHead className="text-black dark:text-white">Notenschnitt</TableHead>
-              <TableHead className="text-black dark:text-white">Aktionen</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {paginatedPerformances.length === 0 ? (
+        <div className="max-h-[calc(100vh-440px)] overflow-y-auto">
+          <Table className="bg-white dark:bg-slate-800 rounded-lg">
+            <TableHeader className="sticky top-0 z-10 bg-white dark:bg-slate-800">
+              <TableRow className="border-slate-200 dark:border-slate-700">
+                <TableHead className="text-black dark:text-white bg-white dark:bg-slate-800"></TableHead>
+                <TableHead className="text-black dark:text-white bg-white dark:bg-slate-800">Datum</TableHead>
+                <TableHead className="text-black dark:text-white bg-white dark:bg-slate-800">Fach</TableHead>
+                <TableHead className="text-black dark:text-white bg-white dark:bg-slate-800">Prüfungsname</TableHead>
+                <TableHead className="text-black dark:text-white bg-white dark:bg-slate-800">Fachbereiche</TableHead>
+                <TableHead className="text-black dark:text-white bg-white dark:bg-slate-800">Gewichtung</TableHead>
+                <TableHead className="text-black dark:text-white bg-white dark:bg-slate-800">Notenschnitt</TableHead>
+                <TableHead className="text-black dark:text-white bg-white dark:bg-slate-800">Aktionen</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {groupedPerformances.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={7} className="text-center py-8 text-slate-500 dark:text-slate-400">
                   Keine Leistungsbeurteilungen gefunden
                 </TableCell>
               </TableRow>
             ) : (
-              paginatedPerformances.map((group) => {
+              groupedPerformances.map((group) => {
                 const groupKey = `${group.assessment_name}-${group.subject}-${group.date}`;
                 const isExpanded = expandedRows.has(groupKey);
                 const isEditing = !!editingGrades[groupKey];
@@ -467,22 +452,26 @@ const LeistungenTable = ({
                           </>
                         ) : (
                           <>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => startEditing(groupKey)}
-                              className="text-slate-400 hover:text-black dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-700 mr-2"
-                            >
-                              <Edit className="w-4 h-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => onDelete && onDelete(group.performances[0].id)}
-                              className="text-red-400 hover:text-red-600 dark:hover:text-red-300"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </Button>
+                            {canEdit && (
+                              <>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => startEditing(groupKey)}
+                                  className="text-slate-400 hover:text-black dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-700 mr-2"
+                                >
+                                  <Edit className="w-4 h-4" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => onDelete && onDelete(group.performances[0].id)}
+                                  className="text-red-400 hover:text-red-600 dark:hover:text-red-300"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </Button>
+                              </>
+                            )}
                           </>
                         )}
                       </TableCell>
@@ -584,7 +573,7 @@ const LeistungenTable = ({
                                         type="number"
                                         min="0"
                                         max="6"
-                                        step="0.25"
+                                        step="0.01"
                                         value={currentGrade}
                                         onChange={(e) => updateGrade(groupKey, student.id, e.target.value)}
                                         className="w-20 bg-white dark:bg-slate-700 border-slate-300 dark:border-slate-600 text-black dark:text-white"
@@ -610,30 +599,10 @@ const LeistungenTable = ({
                 );
               })
             )}
-          </TableBody>
-        </Table>
-      </div>
-
-      {/* Pagination */}
-      {totalPages > 1 && (
-        <div className="flex justify-center items-center gap-4 mt-4 text-black dark:text-white">
-          <Button
-            onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
-            disabled={currentPage === 1}
-            className="bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-black dark:text-white"
-          >
-            Zurück
-          </Button>
-          <span>Seite {currentPage} von {totalPages}</span>
-          <Button
-            onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
-            disabled={currentPage === totalPages}
-            className="bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-black dark:text-white"
-          >
-            Weiter
-          </Button>
+            </TableBody>
+          </Table>
         </div>
-      )}
+      </div>
     </div>
   );
 };

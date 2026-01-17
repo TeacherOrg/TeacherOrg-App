@@ -26,6 +26,7 @@ import {
   ChevronUp,
   Mail,
   QrCode,
+  Eye,
 } from 'lucide-react';
 
 const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
@@ -53,6 +54,7 @@ export default function StudentManagementModal({
   onClose,
   classData,
   onStudentsChange,
+  canEdit = true,
 }) {
   const [students, setStudents] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -546,6 +548,16 @@ export default function StudentManagementModal({
           {/* Content */}
           <div className="flex-1 overflow-hidden flex flex-col p-4 gap-4">
 
+          {/* View-Only Banner */}
+          {!canEdit && (
+            <div className="flex items-center gap-2 p-3 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700">
+              <Eye className="w-4 h-4 text-amber-600 dark:text-amber-400 flex-shrink-0" />
+              <span className="text-sm text-amber-800 dark:text-amber-300">
+                <strong>Nur Einsicht:</strong> Du kannst die Schülerliste ansehen, aber nicht bearbeiten (Team Teaching).
+              </span>
+            </div>
+          )}
+
           {/* Account Stats Bar */}
           {students.length > 0 && (
             <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-3 flex items-center justify-between gap-4 flex-wrap border border-blue-200 dark:border-blue-800">
@@ -565,7 +577,7 @@ export default function StudentManagementModal({
                 )}
               </div>
               <div className="flex gap-2 flex-wrap">
-                {studentsWithoutValidEmail > 0 && (
+                {canEdit && studentsWithoutValidEmail > 0 && (
                   <Button
                     onClick={() => setShowEmailGenerator(!showEmailGenerator)}
                     variant="outline"
@@ -576,24 +588,26 @@ export default function StudentManagementModal({
                     E-Mails generieren
                   </Button>
                 )}
-                <Button
-                  onClick={handleCreateAccounts}
-                  disabled={isCreatingAccounts || studentsReadyForAccount === 0}
-                  size="sm"
-                  className="bg-blue-600 hover:bg-blue-700 text-xs"
-                >
-                  {isCreatingAccounts ? (
-                    <>
-                      <Loader2 className="w-3 h-3 mr-1 animate-spin" />
-                      Erstelle...
-                    </>
-                  ) : (
-                    <>
-                      <UserPlus className="w-3 h-3 mr-1" />
-                      Accounts erstellen
-                    </>
-                  )}
-                </Button>
+                {canEdit && (
+                  <Button
+                    onClick={handleCreateAccounts}
+                    disabled={isCreatingAccounts || studentsReadyForAccount === 0}
+                    size="sm"
+                    className="bg-blue-600 hover:bg-blue-700 text-xs"
+                  >
+                    {isCreatingAccounts ? (
+                      <>
+                        <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                        Erstelle...
+                      </>
+                    ) : (
+                      <>
+                        <UserPlus className="w-3 h-3 mr-1" />
+                        Accounts erstellen
+                      </>
+                    )}
+                  </Button>
+                )}
                 {studentsWithAccount > 0 && (
                   <Button
                     onClick={handleShowAllCredentials}
@@ -662,7 +676,8 @@ export default function StudentManagementModal({
             </div>
           )}
 
-          {/* Add Student Section - NOW ABOVE LIST */}
+          {/* Add Student Section - NOW ABOVE LIST (only if canEdit) */}
+          {canEdit && (
           <div className="border-b border-slate-200 dark:border-slate-700 pb-4 space-y-4">
             {/* Single Student Form */}
             <div className="flex gap-2 items-end">
@@ -818,6 +833,7 @@ export default function StudentManagementModal({
               </div>
             )}
           </div>
+          )}
 
           {/* Student List */}
           <div className="flex-1 overflow-y-auto py-2">
@@ -853,9 +869,9 @@ export default function StudentManagementModal({
                       )}
                     </div>
 
-                    {/* Name Field - Inline Editable */}
+                    {/* Name Field - Inline Editable (only if canEdit) */}
                     <div className="w-40 flex-shrink-0">
-                      {editingStudent?.id === student.id &&
+                      {canEdit && editingStudent?.id === student.id &&
                       editingStudent?.field === 'name' ? (
                         <div className="flex gap-1">
                           <Input
@@ -890,7 +906,7 @@ export default function StudentManagementModal({
                             <X className="w-3 h-3 text-slate-400" />
                           </Button>
                         </div>
-                      ) : (
+                      ) : canEdit ? (
                         <button
                           className="text-left font-medium text-slate-800 dark:text-white hover:bg-slate-200 dark:hover:bg-slate-600 px-2 py-1 rounded truncate w-full"
                           onClick={() =>
@@ -904,12 +920,16 @@ export default function StudentManagementModal({
                         >
                           {student.name}
                         </button>
+                      ) : (
+                        <span className="text-left font-medium text-slate-800 dark:text-white px-2 py-1 truncate block">
+                          {student.name}
+                        </span>
                       )}
                     </div>
 
-                    {/* Email Field - Inline Editable */}
+                    {/* Email Field - Inline Editable (only if canEdit) */}
                     <div className="flex-1 min-w-0">
-                      {editingStudent?.id === student.id &&
+                      {canEdit && editingStudent?.id === student.id &&
                       editingStudent?.field === 'email' ? (
                         <div className="flex gap-1">
                           <Input
@@ -945,7 +965,7 @@ export default function StudentManagementModal({
                             <X className="w-3 h-3 text-slate-400" />
                           </Button>
                         </div>
-                      ) : (
+                      ) : canEdit ? (
                         <button
                           className={`text-left text-sm px-2 py-1 rounded truncate w-full hover:bg-slate-200 dark:hover:bg-slate-600 ${
                             !student.email || student.email.includes('@school.example.com')
@@ -965,13 +985,23 @@ export default function StudentManagementModal({
                             ? 'E-Mail eingeben...'
                             : student.email}
                         </button>
+                      ) : (
+                        <span className={`text-left text-sm px-2 py-1 truncate block ${
+                          !student.email || student.email.includes('@school.example.com')
+                            ? 'text-orange-500 italic'
+                            : 'text-slate-600 dark:text-slate-300'
+                        }`}>
+                          {!student.email || student.email.includes('@school.example.com')
+                            ? 'Keine E-Mail'
+                            : student.email}
+                        </span>
                       )}
                     </div>
 
                     {/* Action Buttons */}
                     <div className="flex gap-1 flex-shrink-0">
-                      {/* Password Reset (only if has account) */}
-                      {student.account_id && (
+                      {/* Password Reset (only if has account and canEdit) */}
+                      {canEdit && student.account_id && (
                         <Button
                           variant="ghost"
                           size="icon"
@@ -983,7 +1013,7 @@ export default function StudentManagementModal({
                         </Button>
                       )}
 
-                      {/* QR Card (only if has account and email) */}
+                      {/* QR Card (only if has account and email - always visible) */}
                       {student.account_id && student.email && (
                         <Button
                           variant="ghost"
@@ -996,8 +1026,8 @@ export default function StudentManagementModal({
                         </Button>
                       )}
 
-                      {/* Delete Email (only if has email and no account) */}
-                      {student.email && !student.account_id && (
+                      {/* Delete Email (only if has email and no account and canEdit) */}
+                      {canEdit && student.email && !student.account_id && (
                         <Button
                           variant="ghost"
                           size="icon"
@@ -1009,16 +1039,18 @@ export default function StudentManagementModal({
                         </Button>
                       )}
 
-                      {/* Delete Student */}
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7 text-red-500 hover:bg-red-100 dark:hover:bg-red-900/30"
-                        onClick={() => handleDeleteStudent(student.id)}
-                        title="Schüler löschen"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
+                      {/* Delete Student (only if canEdit) */}
+                      {canEdit && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 text-red-500 hover:bg-red-100 dark:hover:bg-red-900/30"
+                          onClick={() => handleDeleteStudent(student.id)}
+                          title="Schüler löschen"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      )}
                     </div>
                   </div>
                 ))}

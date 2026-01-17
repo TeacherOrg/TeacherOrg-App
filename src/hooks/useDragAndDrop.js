@@ -7,13 +7,18 @@ import { toast } from 'react-hot-toast';
 import pb from '@/api/pb';
 import { emitTourEvent, TOUR_EVENTS } from '@/components/onboarding/tours/tourEvents';
 
+// Touch-Detection für plattform-spezifisches Verhalten
+const isTouchDevice = typeof window !== 'undefined' &&
+  ('ontouchstart' in window || navigator.maxTouchPoints > 0);
+
 const useDragAndDrop = (lessonsForCurrentWeek, allLessons, allerleiLessons, currentWeek, yearlyLessons, timeSlots, currentYear, queryClientLocal, subjects, activeClassId, optimisticUpdateAllLessons, optimisticUpdateYearlyLessons, optimisticUpdateAllerleiLessons, reassignYearlyLessonLinks, updateYearlyLessonOrder, setAllLessons, setYearlyLessons, setAllerleiLessons, refetch, setActiveDragId) => {
+  // Touch: Long-Press (300ms) für Drag
+  // Desktop: Sofortiger Start (Ctrl-Check erfolgt in handleDragStart)
   const sensors = useSensors(
     useSensor(PointerSensor, {
-      activationConstraint: {
-        delay: 150,
-        tolerance: 5,
-      },
+      activationConstraint: isTouchDevice
+        ? { delay: 300, tolerance: 5 }   // Touch: Long-press
+        : { delay: 0, tolerance: 0 },    // Desktop: Sofort (Ctrl-Check im Handler)
     }),
     useSensor(KeyboardSensor, {
       coordinateGetter: sortableKeyboardCoordinates,
@@ -23,13 +28,19 @@ const useDragAndDrop = (lessonsForCurrentWeek, allLessons, allerleiLessons, curr
   const handleDragStart = useCallback((event) => {
     const { activatorEvent } = event;
 
-    // NEU: Wenn Alt gedrückt → komplett abbrechen
+    // Alt-Key: Merge-Selection (bestehend) → Drag abbrechen
     if (activatorEvent?.altKey) {
-      event.preventDefault();        // ← verhindert Drag komplett
+      event.preventDefault();
       return;
     }
 
-    // Nur hier normalen Drag starten
+    // Desktop (non-touch): Ctrl erforderlich für Drag
+    if (!isTouchDevice && !activatorEvent?.ctrlKey) {
+      event.preventDefault();
+      return;
+    }
+
+    // Drag starten
     setActiveDragId(event.active.id);
   }, [setActiveDragId]);
 

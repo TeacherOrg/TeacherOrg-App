@@ -4,7 +4,9 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
-import { Trash2 } from 'lucide-react';
+import { Trash2, GripVertical } from 'lucide-react';
+import { useSortable } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import MaterialQuickAdd from './MaterialQuickAdd';
 
 const WORK_FORMS = [
@@ -28,6 +30,23 @@ const StepRow = ({
   const [isMaterialFocused, setIsMaterialFocused] = useState(false);
   const activityRef = useRef(null);
   const materialRef = useRef(null);
+
+  // Sortable hook for drag and drop
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging
+  } = useSortable({ id: step.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+    zIndex: isDragging ? 1000 : 'auto'
+  };
 
   const showQuickAdd = topicMaterials.length > 0 && (isLast || isMaterialFocused);
 
@@ -75,7 +94,16 @@ const StepRow = ({
   };
 
   return (
-    <div className="grid grid-cols-[60px_140px_1fr_1fr_auto] gap-2 items-start">
+    <div ref={setNodeRef} style={style} className="grid grid-cols-[auto_60px_140px_1fr_1fr_auto] gap-2 items-start">
+      {/* Drag Handle */}
+      <button
+        {...attributes}
+        {...listeners}
+        className="p-1 cursor-grab active:cursor-grabbing text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 self-center"
+        type="button"
+      >
+        <GripVertical className="w-5 h-5" />
+      </button>
       {/* Zeit */}
       <Input
         type="number"

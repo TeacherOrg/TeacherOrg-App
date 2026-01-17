@@ -37,7 +37,8 @@ export default function LessonModal({
   autoAssignTopicId,
   onSaveAndNext,
   subjects = [],
-  settings = null
+  settings = null,
+  canEdit = true     // Team Teaching: Nur-Einsicht-Modus
 }) {
   // Check if this lesson slot is part of a template double lesson
   const isTemplateDoubleLesson = useMemo(() => {
@@ -101,7 +102,9 @@ export default function LessonModal({
     handleUpdatePrimaryStep,
     handleAddSecondStep,
     handleRemoveSecondStep,
-    handleUpdateSecondStep
+    handleUpdateSecondStep,
+    reorderPrimarySteps,
+    reorderSecondSteps
   } = useStepManagement();
 
   const {
@@ -443,6 +446,19 @@ export default function LessonModal({
           gradient={modalBackground}
         />
 
+        {/* Team Teaching: View-Only Banner */}
+        {!canEdit && (
+          <div className="bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-700 rounded-lg p-3 flex items-center gap-2 mt-4">
+            <svg className="w-5 h-5 text-amber-600 dark:text-amber-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+            </svg>
+            <span className="text-sm font-medium text-amber-800 dark:text-amber-200">
+              Nur-Einsicht-Modus – Diese Klasse wurde mit Ihnen geteilt (keine Bearbeitungsrechte)
+            </span>
+          </div>
+        )}
+
         <form id="yearly-lesson-form" onSubmit={handleSubmit} className="space-y-6 pt-4">
           <LessonTogglesRow
             isHalfClass={formData.is_half_class}
@@ -451,6 +467,7 @@ export default function LessonModal({
             onHalfClassChange={(checked) => setFormData(prev => ({ ...prev, is_half_class: checked }))}
             onDoubleLessonChange={handleDoubleLessonToggle}
             onExamChange={(checked) => setFormData(prev => ({ ...prev, is_exam: checked }))}
+            disabled={!canEdit}  // Team Teaching: Nur-Einsicht-Modus
           />
 
           {/* Topic Selector - full width */}
@@ -459,6 +476,7 @@ export default function LessonModal({
               value={formData.topic_id}
               onChange={(value) => setFormData(prev => ({ ...prev, topic_id: value }))}
               topics={subjectTopics}
+              disabled={!canEdit}  // Team Teaching: Nur-Einsicht-Modus
             />
           </div>
 
@@ -478,6 +496,7 @@ export default function LessonModal({
                 className="lesson-title-input bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white"
                 placeholder={`Lektion ${displayLesson?.lesson_number || ''}`}
                 maxLength={30}
+                disabled={!canEdit}  // Team Teaching: Nur-Einsicht-Modus
               />
             </div>
 
@@ -494,6 +513,7 @@ export default function LessonModal({
                   className="bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white"
                   placeholder={`Lektion ${Number(displayLesson?.lesson_number || 1) + 1}`}
                   maxLength={30}
+                  disabled={!canEdit}  // Team Teaching: Nur-Einsicht-Modus
                 />
               </div>
             )}
@@ -519,6 +539,7 @@ export default function LessonModal({
             onAddStep={handleAddPrimaryStep}
             onUpdateStep={handleUpdatePrimaryStep}
             onRemoveStep={handleRemovePrimaryStep}
+            onReorderSteps={reorderPrimarySteps}
             onInsertTemplate={(steps, templateName) => {
               const withNewIds = steps.map(s => ({ ...s, id: generateId() }));
               setPrimarySteps(prev => [...prev, ...withNewIds]);
@@ -530,13 +551,14 @@ export default function LessonModal({
             topicMaterials={currentTopic?.materials || []}
             topicColor={topicColor}
             buttonLabel="Schritt hinzufügen (Lektion 1)"
-            showSaveAsTemplate={true}
+            showSaveAsTemplate={canEdit}  // Team Teaching: Nur bei Bearbeitungsrechten
             onSaveAsTemplate={() => {
               const defaultName = formData.name?.trim() || lesson?.name?.trim() || "Meine Vorlage";
               setTemplateName(defaultName);
               openTemplateSave();
             }}
             lessonDuration={settings?.lessonDuration || 45}
+            readOnly={!canEdit}  // Team Teaching: Nur-Einsicht-Modus
           />
 
           {formData.is_double_lesson && addSecondLesson && (
@@ -547,6 +569,7 @@ export default function LessonModal({
                 onAddStep={handleAddSecondStep}
                 onUpdateStep={handleUpdateSecondStep}
                 onRemoveStep={handleRemoveSecondStep}
+                onReorderSteps={reorderSecondSteps}
                 onInsertTemplate={(steps) => {
                   const withNewIds = steps.map(s => ({ ...s, id: generateId() }));
                   setSecondSteps(prev => [...prev, ...withNewIds]);
@@ -556,6 +579,7 @@ export default function LessonModal({
                 topicColor={topicColor}
                 buttonLabel="Schritt hinzufügen (2. Lektion)"
                 lessonDuration={settings?.lessonDuration || 45}
+                readOnly={!canEdit}  // Team Teaching: Nur-Einsicht-Modus
               />
             </div>
           )}
@@ -570,6 +594,7 @@ export default function LessonModal({
             saveButtonColor={modalBackground}
             saveButtonTextColor={buttonTextColor}
             deleteLabel="Lektion löschen"
+            canEdit={canEdit}    // Team Teaching: Nur-Einsicht-Modus
           />
         </form>
 

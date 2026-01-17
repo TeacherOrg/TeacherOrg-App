@@ -27,8 +27,9 @@ export function useCompetencyGoals(studentId, onUpdate, options = {}) {
    * Create a new goal (optionally linked to a competency)
    * @param {string|null} competencyId - The competency this goal is for (null for independent goals)
    * @param {string} goalText - The goal description
+   * @param {number} coinReward - Coin reward for completing (default: 2)
    */
-  const createGoal = useCallback(async (competencyId, goalText) => {
+  const createGoal = useCallback(async (competencyId, goalText, coinReward = 2) => {
     if (!studentId || !goalText?.trim()) {
       toast.error('Bitte Zieltext eingeben');
       return { success: false };
@@ -51,7 +52,8 @@ export function useCompetencyGoals(studentId, onUpdate, options = {}) {
         creator_role: creatorRole,
         is_completed: false,
         completed_date: null,
-        completed_by: null
+        completed_by: null,
+        coin_reward: coinReward
       });
 
       toast.success('Ziel erstellt');
@@ -100,7 +102,7 @@ export function useCompetencyGoals(studentId, onUpdate, options = {}) {
         // Only award if this is a newly completed goal (not a bounty goal which handles its own currency)
         if (onGoalCompleted && !goal.is_bounty) {
           try {
-            await onGoalCompleted(goal.id, goal.goal_text);
+            await onGoalCompleted(goal.id, goal.goal_text, goal.coin_reward);
           } catch (currencyError) {
             console.error('Error awarding currency:', currencyError);
             // Don't fail the goal completion if currency fails
@@ -222,13 +224,58 @@ export function useCompetencyGoals(studentId, onUpdate, options = {}) {
   }, []);
 
   /**
-   * Get active (not completed) goals
+   * Get active (not completed and not rejected) goals
    * @param {Array} goals - All goals
    * @returns {Array} Active goals
    */
   const getActiveGoals = useCallback((goals) => {
-    return goals.filter(g => !g.is_completed);
+    return goals.filter(g => !g.is_completed && !g.is_rejected);
   }, []);
+
+  /**
+   * Get rejected goals
+   * @param {Array} goals - All goals
+   * @returns {Array} Rejected goals
+   */
+  const getRejectedGoals = useCallback((goals) => {
+    return goals.filter(g => g.is_rejected && !g.is_completed);
+  }, []);
+
+  /**
+   * Reactivate a rejected goal (remove rejection)
+   * @param {Object} goal - The goal to reactivate
+   */
+  const reactivateGoal = useCallback(async (goal) => {
+    if (!goal?.id) {
+      return { success: false };
+    }
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      await CompetencyGoal.update(goal.id, {
+        is_rejected: false,
+        rejected_date: null,
+        rejected_by: null
+      });
+
+      toast.success('Ziel reaktiviert');
+
+      if (onUpdate) {
+        await onUpdate();
+      }
+
+      return { success: true };
+    } catch (err) {
+      console.error('Error reactivating goal:', err);
+      setError(err.message);
+      toast.error('Fehler beim Reaktivieren');
+      return { success: false, error: err.message };
+    } finally {
+      setLoading(false);
+    }
+  }, [onUpdate]);
 
   return {
     loading,
@@ -239,9 +286,11 @@ export function useCompetencyGoals(studentId, onUpdate, options = {}) {
     toggleGoalComplete,
     updateGoalText,
     deleteGoal,
+    reactivateGoal,
     getGoalsByCompetency,
     getCompletedGoals,
-    getActiveGoals
+    getActiveGoals,
+    getRejectedGoals
   };
 }
 

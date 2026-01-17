@@ -1,17 +1,20 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { Student, Performance, UeberfachlichKompetenz, Class } from "@/api/entities";
-import { Users, TrendingDown, Award, AlertCircle, ChevronRight, Search, Star, LayoutDashboard, Scroll } from "lucide-react";
+import pb from '@/api/pb';
+import { Users, Users2, TrendingDown, Award, AlertCircle, ChevronRight, Search, Star, LayoutDashboard, Scroll, Eye } from "lucide-react";
 import { motion } from "framer-motion";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectGroup, SelectLabel, SelectSeparator } from "@/components/ui/select";
 import CalendarLoader from "../components/ui/CalendarLoader";
 import { useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { toast } from "sonner";
 import { calculateWeightedGrade } from '@/components/grades/utils/calculateWeightedGrade';
 import BountiesStoreTab from '@/components/grades/BountiesStoreTab/BountiesStoreTab';
+import { useStudentSortPreference } from '@/hooks/useStudentSortPreference';
+import { sortStudents } from '@/utils/studentSortUtils';
 
 export default function StudentsOverview() {
   const [students, setStudents] = useState([]);
@@ -25,6 +28,7 @@ export default function StudentsOverview() {
   const [activeTab, setActiveTab] = useState("students"); // "students" | "bounties-store"
 
   const navigate = useNavigate();
+  const [sortPreference] = useStudentSortPreference();
 
   useEffect(() => {
     loadData();
@@ -33,21 +37,99 @@ export default function StudentsOverview() {
   const loadData = async () => {
     setIsLoading(true);
     try {
-      const [studentsData, performancesData, ueberfachlichData, classesData] = await Promise.all([
+      const userId = pb.authStore.model?.id;
+
+      // 1. Erst Team Teaching laden um shared class IDs zu bekommen
+      // WICHTIG: owner_id != userId um Self-Team-Teaching-Records auszuschließen
+      const teamTeachingAccess = await pb.collection('team_teachings').getFullList({
+        filter: `invited_user_id = '${userId}' && status = 'accepted' && owner_id != '${userId}'`,
+        expand: 'class_id,owner_id',
+        $autoCancel: false
+      }).catch(() => []);
+
+      const sharedClassIds = teamTeachingAccess.map(tt => tt.class_id);
+
+      // 2. Eigene Daten parallel laden
+      const [ownStudentsData, ownPerformancesData, ownUeberfachlichData, ownedClassesData] = await Promise.all([
         Student.list(),
         Performance.list(),
         UeberfachlichKompetenz.list(),
         Class.list()
       ]);
-      
-      setStudents(studentsData || []);
-      setPerformances(performancesData || []);
-      setUeberfachlich(ueberfachlichData || []);
-      setClasses(classesData || []);
-      
-      if (classesData && classesData.length > 0 && !activeClassId) {
+
+      // 3. Daten von geteilten Klassen laden (NUR nicht-versteckte)
+      let sharedStudents = [];
+      let sharedPerformances = [];
+      let sharedUeberfachlich = [];
+
+      // Nur nicht-versteckte Klassen für Daten-Loading
+      const visibleSharedClassIds = teamTeachingAccess
+        .filter(tt => !tt.is_hidden)
+        .map(tt => tt.class_id);
+
+      if (visibleSharedClassIds.length > 0) {
+        for (const classId of visibleSharedClassIds) {
+          const [students, performances, ueberfachlich] = await Promise.all([
+            pb.collection('students').getFullList({
+              filter: `class_id = '${classId}'`,
+              $autoCancel: false
+            }).catch(() => []),
+            pb.collection('performances').getFullList({
+              filter: `class_id = '${classId}'`,
+              $autoCancel: false
+            }).catch(() => []),
+            pb.collection('ueberfachlich_kompetenzen').getFullList({
+              filter: `class_id = '${classId}'`,
+              $autoCancel: false
+            }).catch(() => [])
+          ]);
+          sharedStudents = [...sharedStudents, ...students];
+          sharedPerformances = [...sharedPerformances, ...performances];
+          sharedUeberfachlich = [...sharedUeberfachlich, ...ueberfachlich];
+        }
+      }
+
+      console.log('[StudentsOverview] Shared class data:', {
+        sharedClassIds,
+        sharedStudents: sharedStudents.length,
+        sharedPerformances: sharedPerformances.length
+      });
+
+      // 4. Eigene Klassen mit Metadaten
+      const ownedWithMeta = (ownedClassesData || []).map(cls => ({
+        ...cls,
+        isOwner: true,
+        permissionLevel: 'full_access'
+      }));
+
+      // 5. Geteilte Klassen aus Team Teaching - MIT FALLBACK wenn expand fehlschlägt (RLS)
+      // NUR nicht-versteckte Klassen anzeigen
+      const sharedClasses = teamTeachingAccess
+        .filter(tt => (tt.expand?.class_id || tt.class_id) && !tt.is_hidden) // Fallback + Filter
+        .map(tt => ({
+          // Wenn expand funktioniert, nutze es - sonst Fallback
+          ...(tt.expand?.class_id || {}),
+          // Fallback-Felder wenn expand fehlt (wegen RLS)
+          id: tt.expand?.class_id?.id || tt.class_id,
+          name: tt.expand?.class_id?.name || tt.class_name || 'Geteilte Klasse',
+          isOwner: false,
+          permissionLevel: tt.permission_level || 'view_only',
+          teamTeachingId: tt.id,
+          ownerEmail: tt.expand?.owner_id?.email || ''
+        }));
+
+      // 6. Zusammenführen
+      const allClasses = [...ownedWithMeta, ...sharedClasses];
+
+      // 7. Alle Daten setzen
+      setStudents([...(ownStudentsData || []), ...sharedStudents]);
+      setPerformances([...(ownPerformancesData || []), ...sharedPerformances]);
+      setUeberfachlich([...(ownUeberfachlichData || []), ...sharedUeberfachlich]);
+      setClasses(allClasses || []);
+
+      if (allClasses && allClasses.length > 0 && !activeClassId) {
         // ensure activeClassId is a string to match Select onValueChange and comparisons
-        setActiveClassId(String(classesData[0].id));
+        setActiveClassId(String(allClasses[0].id));
       }
     } catch (error) {
       console.error("Error loading data:", error);
@@ -155,21 +237,21 @@ export default function StudentsOverview() {
     // Sortierung
     const sorted = [...filtered].sort((a, b) => {
       switch (sortBy) {
-        case "name":
-          return a.student.name.localeCompare(b.student.name);
+        case "name": {
+          const sortedByName = sortStudents([a.student, b.student], sortPreference);
+          return sortedByName[0].id === a.student.id ? -1 : 1;
+        }
         case "average-asc":
           return (a.average || 0) - (b.average || 0);
         case "average-desc":
           return (b.average || 0) - (a.average || 0);
-        case "foerderbedarf":
-          return b.weakFachbereiche.length - a.weakFachbereiche.length;
         default:
           return 0;
       }
     });
 
     return sorted;
-  }, [studentCards, searchQuery, sortBy]);
+  }, [studentCards, searchQuery, sortBy, sortPreference]);
 
   const handleCardClick = (studentId) => {
     navigate(`${createPageUrl("Grades")}?studentId=${studentId}`);
@@ -265,16 +347,46 @@ export default function StudentsOverview() {
             {/* Filter und Suche - nur im Schüler-Tab */}
             {activeTab === "students" && (
             <div className="flex flex-col sm:flex-row gap-3">
-              {/* Klassen-Auswahl */}
+              {/* Klassen-Auswahl mit Kategorien */}
               <Select value={activeClassId || ''} onValueChange={setActiveClassId}>
                 <SelectTrigger className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 min-w-[180px]">
                   <SelectValue placeholder="Klasse auswählen..." />
                 </SelectTrigger>
                 <SelectContent>
-                  {classes.map(cls => (
-                    // ensure option values are strings so Select value matches activeClassId
-                    <SelectItem key={cls.id} value={String(cls.id)}>{cls.name}</SelectItem>
-                  ))}
+                  {/* Eigene Klassen */}
+                  {classes.filter(c => c.isOwner !== false).length > 0 && (
+                    <SelectGroup>
+                      <SelectLabel className="text-xs text-slate-500 dark:text-slate-400">Meine Klassen</SelectLabel>
+                      {classes.filter(c => c.isOwner !== false).map(cls => (
+                        <SelectItem key={cls.id} value={String(cls.id)}>{cls.name}</SelectItem>
+                      ))}
+                    </SelectGroup>
+                  )}
+
+                  {/* Geteilte Klassen */}
+                  {classes.filter(c => c.isOwner === false).length > 0 && (
+                    <>
+                      <SelectSeparator />
+                      <SelectGroup>
+                        <SelectLabel className="text-xs text-purple-500 dark:text-purple-400 flex items-center gap-1">
+                          <Users2 className="w-3 h-3" />
+                          Geteilte Klassen
+                        </SelectLabel>
+                        {classes.filter(c => c.isOwner === false).map(cls => (
+                          <SelectItem key={cls.id} value={String(cls.id)}>
+                            <div className="flex items-center gap-2">
+                              {cls.permissionLevel === 'view_only' ? (
+                                <Eye className="w-3 h-3 text-blue-500" />
+                              ) : (
+                                <Users2 className="w-3 h-3 text-green-500" />
+                              )}
+                              {cls.name}
+                            </div>
+                          </SelectItem>
+                        ))}
+                      </SelectGroup>
+                    </>
+                  )}
                 </SelectContent>
               </Select>
 
@@ -298,7 +410,6 @@ export default function StudentsOverview() {
                   <SelectItem value="name">Nach Name</SelectItem>
                   <SelectItem value="average-desc">Nach Note (hoch → tief)</SelectItem>
                   <SelectItem value="average-asc">Nach Note (tief → hoch)</SelectItem>
-                  <SelectItem value="foerderbedarf">Nach Förderbedarf</SelectItem>
                 </SelectContent>
               </Select>
             </div>

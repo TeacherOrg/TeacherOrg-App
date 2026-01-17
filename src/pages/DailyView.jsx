@@ -15,6 +15,7 @@ import { CustomizationSettings } from "@/api/entities";
 import pb from "@/api/pb";
 import { useLessonStore, useAllerleiLessons } from "@/store";
 import toast from "react-hot-toast";
+import { useAllStudentsCurrency } from "@/components/student-dashboard/hooks/useCurrency";
 import { playSound } from "@/utils/audioSounds";
 import { useTour } from "@/components/onboarding/TourProvider";
 import { emitTourEvent, TOUR_EVENTS } from "@/components/onboarding/tours/tourEvents";
@@ -132,6 +133,9 @@ export default function DailyView({ currentDate, onDateChange, onThemeChange }) 
   // Store setters
   const { setAllYearlyLessons, setAllerleiLessons } = useLessonStore();
   const allAllerleiLessons = useAllerleiLessons(); // ← korrekter Selector
+
+  // Currency hook for awarding coins when chores are completed
+  const { awardCurrencyForStudent } = useAllStudentsCurrency();
 
   // New feature states
   const [manualStepIndex, setManualStepIndex] = useState(null);
@@ -268,10 +272,20 @@ export default function DailyView({ currentDate, onDateChange, onThemeChange }) 
         return;
       }
 
-      const [lessonsData, yearlyLessonsData, subjectsData, holidaysData, settingsData, classesData, choresData, assignmentsData, announcementsData, studentsData, topicsData, allerleiLessonsData] = await Promise.all([
+      // 1. Erst Team Teaching laden um shared class IDs zu bekommen
+      const teamTeachingAccess = await pb.collection('team_teachings').getFullList({
+        filter: `invited_user_id = '${userId}' && status = 'accepted'`,
+        expand: 'class_id,owner_id',
+        $autoCancel: false
+      }).catch(() => []);
+
+      const sharedClassIds = teamTeachingAccess.map(tt => tt.class_id);
+
+      // 2. Eigene Daten parallel laden
+      const [lessonsData, yearlyLessonsData, subjectsData, holidaysData, settingsData, ownedClassesData, choresData, assignmentsData, announcementsData, studentsData, topicsData, allerleiLessonsData] = await Promise.all([
         Lesson.list({ user_id: userId }),
         YearlyLesson.list({ user_id: userId }),
-        Subject.list(),  // Hat bereits internen User-Filter in entities.js
+        Subject.list(),
         Holiday.list({ user_id: userId }),
         Setting.list({ user_id: userId }),
         Class.list({ user_id: userId }),
@@ -282,18 +296,83 @@ export default function DailyView({ currentDate, onDateChange, onThemeChange }) 
         Topic.list({ user_id: userId }),
         AllerleiLesson.list({ user_id: userId })
       ]);
-      
-      setAllLessons(lessonsData || []);
-      setYearlyLessons(yearlyLessonsData || []);
-      setSubjects(subjectsData || []);
+
+      // 3. Daten von geteilten Klassen laden (NUR nicht-versteckte)
+      let sharedLessons = [];
+      let sharedYearlyLessons = [];
+      let sharedSubjects = [];
+      let sharedChores = [];
+      let sharedAssignments = [];
+      let sharedStudents = [];
+      let sharedTopics = [];
+      let sharedAllerlei = [];
+
+      // Nur nicht-versteckte Klassen für Daten-Loading
+      const visibleSharedClassIds = teamTeachingAccess
+        .filter(tt => !tt.is_hidden)
+        .map(tt => tt.class_id);
+
+      if (visibleSharedClassIds.length > 0) {
+        for (const classId of visibleSharedClassIds) {
+          const [lessons, yearly, subjects, chores, assignments, students, topics, allerlei] = await Promise.all([
+            pb.collection('lessons').getFullList({ filter: `class_id = '${classId}'`, $autoCancel: false }).catch(() => []),
+            pb.collection('yearly_lessons').getFullList({ filter: `class_id = '${classId}'`, $autoCancel: false }).catch(() => []),
+            pb.collection('subjects').getFullList({ filter: `class_id = '${classId}'`, $autoCancel: false }).catch(() => []),
+            pb.collection('chores').getFullList({ filter: `class_id = '${classId}'`, $autoCancel: false }).catch(() => []),
+            pb.collection('chore_assignments').getFullList({ filter: `class_id = '${classId}'`, $autoCancel: false }).catch(() => []),
+            pb.collection('students').getFullList({ filter: `class_id = '${classId}'`, $autoCancel: false }).catch(() => []),
+            pb.collection('topics').getFullList({ filter: `class_id = '${classId}'`, $autoCancel: false }).catch(() => []),
+            pb.collection('allerlei_lessons').getFullList({ filter: `class_id = '${classId}'`, $autoCancel: false }).catch(() => [])
+          ]);
+          sharedLessons = [...sharedLessons, ...lessons];
+          sharedYearlyLessons = [...sharedYearlyLessons, ...yearly];
+          sharedSubjects = [...sharedSubjects, ...subjects];
+          sharedChores = [...sharedChores, ...chores];
+          sharedAssignments = [...sharedAssignments, ...assignments];
+          sharedStudents = [...sharedStudents, ...students];
+          sharedTopics = [...sharedTopics, ...topics];
+          sharedAllerlei = [...sharedAllerlei, ...allerlei];
+        }
+      }
+
+      console.log('[DailyView] Shared class data:', { sharedClassIds, sharedLessons: sharedLessons.length, sharedStudents: sharedStudents.length });
+
+      // 4. Eigene Klassen mit Metadaten
+      const ownedWithMeta = (ownedClassesData || []).map(cls => ({
+        ...cls,
+        isOwner: true,
+        permissionLevel: 'full_access'
+      }));
+
+      // 5. Geteilte Klassen aus Team Teaching - MIT FALLBACK wenn expand fehlschlägt (RLS)
+      // NUR nicht-versteckte Klassen anzeigen
+      const sharedClasses = teamTeachingAccess
+        .filter(tt => (tt.expand?.class_id || tt.class_id) && !tt.is_hidden) // Fallback + Filter
+        .map(tt => ({
+          ...(tt.expand?.class_id || {}),
+          id: tt.expand?.class_id?.id || tt.class_id,
+          name: tt.expand?.class_id?.name || tt.class_name || 'Geteilte Klasse',
+          isOwner: false,
+          permissionLevel: tt.permission_level || 'view_only',
+          teamTeachingId: tt.id,
+          ownerEmail: tt.expand?.owner_id?.email || ''
+        }));
+
+      // 6. Zusammenführen
+      const allClasses = [...ownedWithMeta, ...sharedClasses];
+
+      // 7. Alle Daten setzen
+      setAllLessons([...(lessonsData || []), ...sharedLessons]);
+      setYearlyLessons([...(yearlyLessonsData || []), ...sharedYearlyLessons]);
+      setSubjects([...(subjectsData || []), ...sharedSubjects]);
       setHolidays(holidaysData || []);
-      setClasses(classesData || []);
-      setChores(choresData || []);
-      setChoreAssignments(assignmentsData || []);
-      setStudents(studentsData || []);
+      setClasses(allClasses || []);
+      setChores([...(choresData || []), ...sharedChores]);
+      setChoreAssignments([...(assignmentsData || []), ...sharedAssignments]);
+      setStudents([...(studentsData || []), ...sharedStudents]);
       setAnnouncements(announcementsData || []);
-      setTopics(topicsData || []);
-      setAllerleiLessons(allerleiLessonsData || []); // ← NEU: Allerlei-Lektionen in Store speichern
+      setTopics([...(topicsData || []), ...sharedTopics]);
+      setAllerleiLessons([...(allerleiLessonsData || []), ...sharedAllerlei]);
 
       // Debug: Logge die geladenen Subjects
       console.log("Debug: Loaded Subjects", subjectsData?.map(s => ({
@@ -442,6 +521,7 @@ export default function DailyView({ currentDate, onDateChange, onThemeChange }) 
       let spansSlots = 1;
       let allerleiColors = [];
       let isAllerlei = false;
+      let doubleLessonBreak = null; // Pause-Info für Doppellektionen (Timer-Berechnung)
 
       // WICHTIG: steps, description und topicName NUR hier setzen, nicht vorher überschreiben!
       // Für normale Lektionen bleiben die oben gesetzten Werte erhalten
@@ -547,6 +627,12 @@ export default function DailyView({ currentDate, onDateChange, onThemeChange }) 
         if (nextTimeSlot) {
           spansSlots = 2;
           displayTimeSlot = { ...timeSlot, end: nextTimeSlot.end };
+
+          // Pause-Info für Timer-Berechnung (Pause zwischen Teil 1 und Teil 2)
+          doubleLessonBreak = {
+            start: timeSlot.end,      // Ende Teil 1
+            end: nextTimeSlot.start,  // Start Teil 2
+          };
         }
       }
 
@@ -568,6 +654,7 @@ export default function DailyView({ currentDate, onDateChange, onThemeChange }) 
         spansSlots,                    // ← jetzt korrekt >1 bei Allerlei
         allerleiColors,                // ← gefüllt bei Allerlei
         is_allerlei: isAllerlei,
+        doubleLessonBreak,             // Pause-Info für Timer bei Doppellektionen
 
         // Neu: Für TopicProgress
         allerleiTopicIds: isAllerlei ? allerleiTopicIds : undefined,
@@ -825,6 +912,9 @@ export default function DailyView({ currentDate, onDateChange, onThemeChange }) 
       const now = new Date().toISOString();
       const isCompleted = status === 'completed';
 
+      // Hole Assignment-Details für Coin-Vergabe bevor wir updaten
+      const assignmentsToUpdate = choreAssignments.filter(a => assignmentIds.includes(a.id));
+
       await Promise.all(assignmentIds.map(id =>
         ChoreAssignment.update(id, {
           status: status,
@@ -833,6 +923,30 @@ export default function DailyView({ currentDate, onDateChange, onThemeChange }) 
         })
       ));
 
+      // Bei Completion: Coins vergeben falls coin_reward > 0
+      let coinsAwarded = 0;
+      if (isCompleted && awardCurrencyForStudent) {
+        for (const assignment of assignmentsToUpdate) {
+          const chore = chores.find(c => c.id === assignment.chore_id);
+          const coinReward = chore?.coin_reward || 0;
+
+          if (coinReward > 0 && assignment.student_id) {
+            try {
+              await awardCurrencyForStudent(
+                assignment.student_id,
+                coinReward,
+                'chore',
+                assignment.id,
+                `Ämtli erledigt: ${chore?.name || 'Ämtli'}`
+              );
+              coinsAwarded += coinReward;
+            } catch (coinError) {
+              console.error('Error awarding chore coins:', coinError);
+            }
+          }
+        }
+      }
+
       // Refresh assignments
       const userId = pb.authStore.model?.id;
       const updatedAssignments = await ChoreAssignment.list({ user_id: userId });
@@ -840,7 +954,9 @@ export default function DailyView({ currentDate, onDateChange, onThemeChange }) 
 
       // Status-spezifische Toast-Nachrichten
       const messages = {
-        completed: 'Ämtli als erledigt markiert!',
+        completed: coinsAwarded > 0
+          ? `Ämtli als erledigt markiert! +${coinsAwarded} Coins vergeben.`
+          : 'Ämtli als erledigt markiert!',
         not_completed: 'Ämtli als nicht erledigt markiert.',
         pending: 'Ämtli zurückgesetzt.'
       };
@@ -849,7 +965,7 @@ export default function DailyView({ currentDate, onDateChange, onThemeChange }) 
       console.error('Error updating chore completion:', error);
       toast.error('Fehler beim Aktualisieren des Ämtli.');
     }
-  }, []);
+  }, [choreAssignments, chores, awardCurrencyForStudent]);
 
   // Speicherfunktion für Customization - SOFORT speichern, nicht im useEffect
   const saveCustomizationToDb = useCallback(async (customizationData) => {

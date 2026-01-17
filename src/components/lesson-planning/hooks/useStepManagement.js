@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import { arrayMove } from '@dnd-kit/sortable';
 import { generateId } from '../utils';
 
 /**
@@ -87,6 +88,15 @@ export const useStepManagement = () => {
     setSecondSteps(prev => [...prev, ...withNewIds]);
   }, []);
 
+  // Reorder handlers for drag and drop
+  const reorderPrimarySteps = useCallback((oldIndex, newIndex) => {
+    setPrimarySteps(prev => arrayMove(prev, oldIndex, newIndex));
+  }, []);
+
+  const reorderSecondSteps = useCallback((oldIndex, newIndex) => {
+    setSecondSteps(prev => arrayMove(prev, oldIndex, newIndex));
+  }, []);
+
   return {
     // State
     primarySteps,
@@ -112,7 +122,11 @@ export const useStepManagement = () => {
     clearSecondSteps,
     mergeSecondIntoPrimary,
     appendToPrimarySteps,
-    appendToSecondSteps
+    appendToSecondSteps,
+
+    // Reorder handlers (drag and drop)
+    reorderPrimarySteps,
+    reorderSecondSteps
   };
 };
 

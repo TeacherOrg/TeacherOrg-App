@@ -5,10 +5,10 @@ import { toast } from 'sonner';
 
 // Default rewards by tier
 const DEFAULT_REWARDS = {
-  common: 1,
-  rare: 2,
-  epic: 3,
-  legendary: 4
+  common: 10,
+  rare: 20,
+  epic: 30,
+  legendary: 45
 };
 
 /**

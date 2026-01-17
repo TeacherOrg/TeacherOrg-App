@@ -10,6 +10,7 @@ import { Save, X, Trash2 } from "lucide-react";
  * @param {boolean} props.isEditing - Whether editing an existing lesson
  * @param {boolean} props.isSubmitting - Whether form is currently submitting
  * @param {boolean} [props.isFormValid] - Whether form is valid for submission
+ * @param {boolean} [props.canEdit] - Whether user has edit permission (Team Teaching)
  * @param {Function} props.onDelete - Handler for delete action
  * @param {Function} props.onClose - Handler for cancel/close action
  * @param {Function} [props.onSaveAndNext] - Handler for save & next action (optional)
@@ -22,6 +23,7 @@ export function LessonModalFooter({
   isEditing,
   isSubmitting,
   isFormValid = true,
+  canEdit = true,
   onDelete,
   onClose,
   onSaveAndNext,
@@ -33,7 +35,7 @@ export function LessonModalFooter({
   return (
     <div className="flex justify-between items-center gap-3 pt-4 border-t border-slate-200/50 dark:border-slate-700/50">
       <div>
-        {isEditing && (
+        {isEditing && canEdit && (
           <Button
             type="button"
             variant="destructive"
@@ -56,12 +58,12 @@ export function LessonModalFooter({
           <span className="text-slate-900 dark:text-white">Abbrechen</span>
         </Button>
 
-        {onSaveAndNext && (
+        {onSaveAndNext && canEdit && (
           <Button
             type="submit"
             variant="default"
             className="bg-emerald-600 hover:bg-emerald-700 text-white"
-            disabled={isSubmitting || !isFormValid}
+            disabled={isSubmitting || !isFormValid || !canEdit}
             onClick={(e) => {
               // Call the onSaveAndNext callback to set the state
               onSaveAndNext?.();
@@ -74,19 +76,30 @@ export function LessonModalFooter({
           </Button>
         )}
 
-        <Button
-          type="submit"
-          className="lesson-save-button hover:opacity-90"
-          style={{
-            background: saveButtonColor,
-            color: saveButtonTextColor
-          }}
-          disabled={isSubmitting || !isFormValid}
-          title={!isFormValid ? 'Bitte füllen Sie alle erforderlichen Felder aus.' : ''}
-        >
-          <Save className="w-4 h-4 mr-2" />
-          {saveLabel}
-        </Button>
+        {canEdit ? (
+          <Button
+            type="submit"
+            className="lesson-save-button hover:opacity-90"
+            style={{
+              background: saveButtonColor,
+              color: saveButtonTextColor
+            }}
+            disabled={isSubmitting || !isFormValid}
+            title={!isFormValid ? 'Bitte füllen Sie alle erforderlichen Felder aus.' : ''}
+          >
+            <Save className="w-4 h-4 mr-2" />
+            {saveLabel}
+          </Button>
+        ) : (
+          <Button
+            type="button"
+            variant="outline"
+            onClick={onClose}
+            className="border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white bg-white dark:bg-slate-700 hover:bg-slate-100 dark:hover:bg-slate-600"
+          >
+            Schliessen
+          </Button>
+        )}
       </div>
     </div>
   );

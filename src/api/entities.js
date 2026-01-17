@@ -41,7 +41,9 @@ class PbEntity {
       bountie: '',
       bounty_completion: 'bounty_id,student_id,approved_by',
       achievement_reward: '',
-      achievement_coins_awarded: 'student_id'
+      achievement_coins_awarded: 'student_id',
+      // Team Teaching
+      team_teaching: 'class_id,owner_id,invited_user_id'
     };
 
     this.expandFields = expandMap[this.name] || '';
@@ -351,17 +353,16 @@ class PbEntity {
 
     const params = {
       filter: finalFilter || '',
-      perPage: 2000,  // Erhöht von 500, um alle Lehrplan-Kompetenzen (~1000+) zu laden
       expand: this.expandFields,
-      $cancelKey: cancelKey,  // ← DAS HINZUFÜGEN – das ist alles!
+      $cancelKey: cancelKey,
       // Sortierung nach sort_order für Subjects
       sort: this.name === 'subject' ? '+sort_order,+created' : ''
     };
 
     try {
-      const response = await this.collection.getList(1, params.perPage, params);
+      // getFullList() lädt automatisch alle Records (kein 1000er Limit wie bei getList)
+      const items = await this.collection.getFullList(params);
 
-      const items = response?.items || [];
       if (!Array.isArray(items)) return [];
 
       const validItems = items.filter(Boolean);
@@ -709,6 +710,9 @@ export const DailyNote = new PbEntity('Daily_note');
 export const Announcement = new PbEntity('Announcement');
 export const Chore = new PbEntity('Chore');
 export const ChoreAssignment = new PbEntity('Chore_assignment');
+export const ChoreRotationHistory = new PbEntity('Chore_rotation_history');
+ChoreRotationHistory.collectionName = 'chore_rotation_histories';
+ChoreRotationHistory.collection = pb.collection('chore_rotation_histories');
 export const Group = new PbEntity('Group');
 export const UserPreferences = new PbEntity('User_preference');
 export const CustomizationSettings = new PbEntity('customization_setting');
@@ -717,6 +721,11 @@ export const LehrplanKompetenz = new PbEntity('lehrplan_kompetenz');
 export const SharedTopic = new PbEntity('shared_topic');
 SharedTopic.collectionName = 'shared_topics';
 SharedTopic.collection = pb.collection('shared_topics');
+
+// Team Teaching Entity
+export const TeamTeaching = new PbEntity('team_teaching');
+TeamTeaching.collectionName = 'team_teachings';
+TeamTeaching.collection = pb.collection('team_teachings');
 
 // Student Dashboard Entities
 export const StudentSelfAssessment = new PbEntity('Student_self_assessment');

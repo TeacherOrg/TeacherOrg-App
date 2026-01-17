@@ -98,6 +98,7 @@ const YearlyGrid = ({
   refetch,
   optimisticUpdateYearlyLessons,
   settings, // ← NEU: für Fixed Schedule Template
+  readOnly = false, // Team Teaching: Nur-Einsicht-Modus
 }) => {
   const containerRef = useRef(null);
   const subjectHeaderRef = useRef(null);
@@ -1386,6 +1387,7 @@ const YearlyGrid = ({
           cellRect={contextMenu.cellRect}          // ← NEU: genaue Zellenposition
           lesson={contextMenu.lesson}
           slot={contextMenu.slot}
+          readOnly={readOnly}                      // Team Teaching: Nur-Einsicht-Modus
           onMove={() => openWeekPicker('move', contextMenu.lesson, contextMenu.slot)}
           onCopy={() => openWeekPicker('copy', contextMenu.lesson, contextMenu.slot)}
           onDuplicateNext={() => {

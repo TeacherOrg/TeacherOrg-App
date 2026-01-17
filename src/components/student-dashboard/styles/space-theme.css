@@ -62,6 +62,7 @@
   height: 100%;
   pointer-events: none;
   z-index: 0;
+  perspective: 1000px;  /* 3D-Tiefe für Flug-Effekt */
 }
 
 .starfield-layer {
@@ -70,6 +71,7 @@
   left: 0;
   width: 200%;
   height: 200%;
+  transform-origin: 50vw 50vh;  /* Exakte Bildschirmmitte */
 }
 
 .starfield-far {
@@ -85,8 +87,8 @@
     radial-gradient(1px 1px at 90% 70%, var(--star-blue) 50%, transparent 50%),
     radial-gradient(1px 1px at 15% 85%, var(--star-white) 50%, transparent 50%);
   background-size: 300px 300px;
-  animation: drift-slow 120s linear infinite;
-  opacity: 0.6;
+  animation: starfield-flight 20s linear infinite;
+  animation-delay: 0s;  /* Startet bei 0% */
 }
 
 .starfield-mid {
@@ -98,8 +100,8 @@
     radial-gradient(2px 2px at 85% 45%, var(--star-blue) 50%, transparent 50%),
     radial-gradient(2px 2px at 35% 95%, var(--star-white) 50%, transparent 50%);
   background-size: 400px 400px;
-  animation: drift-medium 80s linear infinite;
-  opacity: 0.8;
+  animation: starfield-flight 20s linear infinite;
+  animation-delay: -6.67s;  /* Startet bei 33% - gleichmäßig verteilt */
 }
 
 .starfield-near {
@@ -108,23 +110,16 @@
     radial-gradient(2px 2px at 55% 65%, var(--star-yellow) 50%, transparent 50%),
     radial-gradient(3px 3px at 75% 25%, var(--star-white) 50%, transparent 50%);
   background-size: 500px 500px;
-  animation: drift-fast 40s linear infinite, twinkle 4s ease-in-out infinite;
+  animation: starfield-flight 20s linear infinite, twinkle 4s ease-in-out infinite;
+  animation-delay: -13.33s, 0s;  /* Startet bei 67% - gleichmäßig verteilt */
 }
 
 /* === Animations === */
-@keyframes drift-slow {
-  from { transform: translate(0, 0); }
-  to { transform: translate(-150px, -150px); }
-}
-
-@keyframes drift-medium {
-  from { transform: translate(0, 0); }
-  to { transform: translate(-200px, -200px); }
-}
-
-@keyframes drift-fast {
-  from { transform: translate(0, 0); }
-  to { transform: translate(-250px, -250px); }
+/* Hyperspace/Tunnel-Effekt - Sterne fliegen aus der Mitte nach außen */
+/* Alle Layer nutzen die gleiche Animation, versetzt um 33% */
+@keyframes starfield-flight {
+  0% { transform: scale(0.7); }
+  100% { transform: scale(1.5); }
 }
 
 @keyframes twinkle {

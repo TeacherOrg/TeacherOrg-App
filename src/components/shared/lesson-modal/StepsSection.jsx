@@ -2,6 +2,8 @@ import React from 'react';
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { PlusCircle, Copy } from "lucide-react";
+import { DndContext, closestCenter, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
+import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import StepRow from '@/components/lesson-planning/StepRow';
 import LessonTemplatePopover from '@/components/lesson-planning/LessonTemplatePopover';
 
@@ -16,6 +18,7 @@ import LessonTemplatePopover from '@/components/lesson-planning/LessonTemplatePo
  * @param {Function} props.onUpdateStep - Handler for updating a step (id, field, value)
  * @param {Function} props.onRemoveStep - Handler for removing a step (id)
  * @param {Function} props.onInsertTemplate - Handler for inserting template (steps, templateName)
+ * @param {Function} [props.onReorderSteps] - Handler for reordering steps (oldIndex, newIndex)
  * @param {string} [props.subjectId] - Subject ID for template filtering
  * @param {Array} [props.topicMaterials] - Materials from current topic
  * @param {string} [props.topicColor] - Color from current topic
@@ -32,6 +35,7 @@ export function StepsSection({
   onUpdateStep,
   onRemoveStep,
   onInsertTemplate,
+  onReorderSteps,
   subjectId,
   topicMaterials = [],
   topicColor = '#3b82f6',
@@ -41,6 +45,28 @@ export function StepsSection({
   templateDefaultName = '',
   lessonDuration = 45
 }) {
+  // DnD Sensors
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8, // Minimum 8px movement to activate
+      },
+    })
+  );
+
+  // Drag End Handler
+  const handleDragEnd = (event) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    const oldIndex = steps.findIndex(s => s.id === active.id);
+    const newIndex = steps.findIndex(s => s.id === over.id);
+
+    if (oldIndex !== -1 && newIndex !== -1 && onReorderSteps) {
+      onReorderSteps(oldIndex, newIndex);
+    }
+  };
+
   return (
     <div className="lesson-steps-section space-y-4">
       <div className="flex items-center gap-2">
@@ -55,18 +81,22 @@ export function StepsSection({
       </div>
 
       <div className="space-y-3 p-4 border rounded-lg bg-slate-100/50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700">
-        {steps.map((step, index) => (
-          <StepRow
-            key={`step-${index}-${step.id}`}
-            step={step}
-            onUpdate={(field, value) => onUpdateStep(step.id, field, value)}
-            onRemove={() => onRemoveStep(step.id)}
-            topicMaterials={topicMaterials}
-            topicColor={topicColor}
-            isLast={index === steps.length - 1}
-            lessonDuration={lessonDuration}
-          />
-        ))}
+        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+          <SortableContext items={steps.map(s => s.id)} strategy={verticalListSortingStrategy}>
+            {steps.map((step, index) => (
+              <StepRow
+                key={`step-${index}-${step.id}`}
+                step={step}
+                onUpdate={(field, value) => onUpdateStep(step.id, field, value)}
+                onRemove={() => onRemoveStep(step.id)}
+                topicMaterials={topicMaterials}
+                topicColor={topicColor}
+                isLast={index === steps.length - 1}
+                lessonDuration={lessonDuration}
+              />
+            ))}
+          </SortableContext>
+        </DndContext>
 
         <div className="flex gap-2 mt-2">
           <Button

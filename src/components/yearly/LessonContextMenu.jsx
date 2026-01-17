@@ -19,6 +19,7 @@ export default function LessonContextMenu({
   prevSlotAvailable = false,
   onEdit,
   onDelete,
+  readOnly = false,   // Team Teaching: Nur-Einsicht-Modus
 }) {
   const menuRef = useRef(null);
 
@@ -101,45 +102,53 @@ export default function LessonContextMenu({
         onClick={(e) => e.stopPropagation()}
         onContextMenu={(e) => e.preventDefault()}
       >
-        <MenuItem icon={<Move className="w-4 h-4" />} onClick={onMove}>
-          Verschieben nach…
-        </MenuItem>
-        <MenuItem icon={<Copy className="w-4 h-4" />} onClick={onCopy}>
-          Kopieren nach…
-        </MenuItem>
+        {/* Im readOnly-Modus nur Ansicht erlauben */}
+        {!readOnly && (
+          <>
+            <MenuItem icon={<Move className="w-4 h-4" />} onClick={onMove}>
+              Verschieben nach…
+            </MenuItem>
+            <MenuItem icon={<Copy className="w-4 h-4" />} onClick={onCopy}>
+              Kopieren nach…
+            </MenuItem>
 
-        <div className="h-px bg-slate-200 dark:bg-slate-700 my-2 mx-3" />
+            <div className="h-px bg-slate-200 dark:bg-slate-700 my-2 mx-3" />
 
-        <MenuItem
-          icon={<ArrowUp className="w-4 h-4" />}
-          onClick={onDuplicateNext}
-          className={nextSlotAvailable ? 'text-emerald-600 dark:text-emerald-400 font-medium' : 'text-red-500 dark:text-red-400 opacity-60'}
-        >
-          In nächste freie Stunde duplizieren
-          {!nextSlotAvailable && <span className="text-xs opacity-75 ml-2">(besetzt)</span>}
-        </MenuItem>
+            <MenuItem
+              icon={<ArrowUp className="w-4 h-4" />}
+              onClick={onDuplicateNext}
+              className={nextSlotAvailable ? 'text-emerald-600 dark:text-emerald-400 font-medium' : 'text-red-500 dark:text-red-400 opacity-60'}
+            >
+              In nächste freie Stunde duplizieren
+              {!nextSlotAvailable && <span className="text-xs opacity-75 ml-2">(besetzt)</span>}
+            </MenuItem>
 
-        <MenuItem
-          icon={<ArrowDown className="w-4 h-4" />}
-          onClick={onDuplicatePrev}
-          className={prevSlotAvailable ? 'text-emerald-600 dark:text-emerald-400 font-medium' : 'text-red-500 dark:text-red-400 opacity-60'}
-        >
-          In vorherige freie Stunde duplizieren
-          {!prevSlotAvailable && <span className="text-xs opacity-75 ml-2">(besetzt)</span>}
-        </MenuItem>
+            <MenuItem
+              icon={<ArrowDown className="w-4 h-4" />}
+              onClick={onDuplicatePrev}
+              className={prevSlotAvailable ? 'text-emerald-600 dark:text-emerald-400 font-medium' : 'text-red-500 dark:text-red-400 opacity-60'}
+            >
+              In vorherige freie Stunde duplizieren
+              {!prevSlotAvailable && <span className="text-xs opacity-75 ml-2">(besetzt)</span>}
+            </MenuItem>
 
-        <div className="h-px bg-slate-200 dark:bg-slate-700 my-2 mx-3" />
+            <div className="h-px bg-slate-200 dark:bg-slate-700 my-2 mx-3" />
+          </>
+        )}
 
         <MenuItem icon={<Edit3 className="w-4 h-4" />} onClick={onEdit}>
-          Bearbeiten
+          {readOnly ? 'Ansehen' : 'Bearbeiten'}
         </MenuItem>
-        <MenuItem
-          icon={<Trash2 className="w-4 h-4" />}
-          onClick={onDelete}
-          className="text-red-600 dark:text-red-400"
-        >
-          Löschen
-        </MenuItem>
+
+        {!readOnly && (
+          <MenuItem
+            icon={<Trash2 className="w-4 h-4" />}
+            onClick={onDelete}
+            className="text-red-600 dark:text-red-400"
+          >
+            Löschen
+          </MenuItem>
+        )}
       </motion.div>
     </AnimatePresence>
   );

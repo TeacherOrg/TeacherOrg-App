@@ -73,7 +73,8 @@ export const useLeistungsChartData = ({
             perf.date === p.date &&
             getSubjectId(perf.subject) === getSubjectId(p.subject)
           );
-          point[student.name || 'Unnamed'] = studentPerf?.grade ?? null;
+          const grade = studentPerf?.grade;
+          point[student.name || 'Unnamed'] = (typeof grade === 'number' && grade > 0) ? grade : null;
         }
       });
 
@@ -258,7 +259,8 @@ export const useLeistungsChartData = ({
             p.assessment_name === perf.assessment_name &&
             p.date === perf.date
           );
-          assessmentMap[key][student.name || 'Unnamed'] = studentPerf?.grade ?? null;
+          const grade = studentPerf?.grade;
+          assessmentMap[key][student.name || 'Unnamed'] = (typeof grade === 'number' && grade > 0) ? grade : null;
         }
       });
     });
@@ -352,9 +354,10 @@ export const useLeistungsChartData = ({
     if (!Array.isArray(performances)) return [];
 
     // Filter performances - if single student selected, only their grades
+    // Grade 0 wird ignoriert (bedeutet "nicht geschrieben")
     const isSingleStudent = selectedStudents.length === 1;
     let filteredPerfs = performances.filter(p =>
-      p && typeof p.grade === 'number' && typeof p.date === 'string'
+      p && typeof p.grade === 'number' && p.grade > 0 && typeof p.date === 'string'
     );
 
     if (isSingleStudent) {

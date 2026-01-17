@@ -36,12 +36,12 @@ const ultraSafeString = (value) => {
   }
 };
 
-export default function TopicLessonsModal({ 
-  isOpen, 
-  onClose, 
-  topicLessons: initialTopicLessons, 
-  topic, 
-  subject, 
+export default function TopicLessonsModal({
+  isOpen,
+  onClose,
+  topicLessons: initialTopicLessons,
+  topic,
+  subject,
   week,
   activeTopicId,
   subjectColor,
@@ -49,7 +49,8 @@ export default function TopicLessonsModal({
   onSaveLesson,
   onDeleteLesson,
   topics,
-  currentYear
+  currentYear,
+  canEdit = true     // Team Teaching: Nur-Einsicht-Modus
 }) {
   const [isLessonModalOpen, setIsLessonModalOpen] = useState(false);
   const [editingLesson, setEditingLesson] = useState(null);
@@ -313,10 +314,9 @@ export default function TopicLessonsModal({
 
   try {
     return (
-      <Dialog open={isOpen} onOpenChange={onClose}>
+      <Dialog open={isOpen} onOpenChange={onClose} modal={!activeTour}>
         <DialogContent
           className="border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900"
-          modal={!activeTour}
           style={{
             borderColor: '#3b82f640',
             width: `${modalWidth}px`,
@@ -404,6 +404,7 @@ export default function TopicLessonsModal({
             allYearlyLessons={allYearlyLessons}
             currentWeek={safeWeek}
             currentYear={currentYear}
+            canEdit={canEdit}    // Team Teaching: Nur-Einsicht-Modus
             onSaveAndNext={(nextLessonNumber) => {
               // Finde die nächste Lektion im gleichen Topic/Woche
               const nextLesson = safeTopicLessons.find(

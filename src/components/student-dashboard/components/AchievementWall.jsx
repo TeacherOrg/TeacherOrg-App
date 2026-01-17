@@ -133,11 +133,6 @@ export default function AchievementWall({ studentData, completedGoals = [], comp
               <div className="subcategories-container">
                 {Object.entries(groupedBySubCategory[mainCategory] || {}).map(([subCategory, data]) => (
                   <div key={subCategory} className="subcategory-column">
-                    {/* Sub Category Title (h3) */}
-                    <h3 className="achievement-category-title">
-                      {data.categoryName}
-                    </h3>
-
                     {/* Cards for this subcategory (stacked vertically) */}
                     <div className="subcategory-cards">
                       {data.progressions.map(progression => (

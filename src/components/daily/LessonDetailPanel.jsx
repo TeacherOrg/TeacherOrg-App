@@ -127,6 +127,21 @@ export default function LessonDetailPanel({
     const lessonStart = new Date(`${today} ${displayLesson.timeSlot.start}`);
     let elapsed = (currentTime - lessonStart) / 60000;
 
+    // Bei Doppellektion: Pausenzeit abziehen
+    if (displayLesson.doubleLessonBreak) {
+      const breakStart = new Date(`${today} ${displayLesson.doubleLessonBreak.start}`);
+      const breakEnd = new Date(`${today} ${displayLesson.doubleLessonBreak.end}`);
+
+      if (currentTime >= breakEnd) {
+        // Nach der Pause: volle Pausendauer abziehen
+        const breakDuration = (breakEnd - breakStart) / 60000;
+        elapsed -= breakDuration;
+      } else if (currentTime >= breakStart) {
+        // Während der Pause: Timer auf Ende von Teil 1 "einfrieren"
+        elapsed = (breakStart - lessonStart) / 60000;
+      }
+    }
+
     if (elapsed < 0) {
       setCurrentStepIndex(-1);
       return;
@@ -150,8 +165,24 @@ export default function LessonDetailPanel({
     }
 
     const progresses = [];
-    const lessonStart = new Date(`${new Date().toDateString()} ${displayLesson.timeSlot.start}`);
+    const today = new Date().toDateString();
+    const lessonStart = new Date(`${today} ${displayLesson.timeSlot.start}`);
     let elapsed = Math.max(0, (currentTime - lessonStart) / 60000);
+
+    // Bei Doppellektion: Pausenzeit abziehen
+    if (displayLesson.doubleLessonBreak) {
+      const breakStart = new Date(`${today} ${displayLesson.doubleLessonBreak.start}`);
+      const breakEnd = new Date(`${today} ${displayLesson.doubleLessonBreak.end}`);
+
+      if (currentTime >= breakEnd) {
+        // Nach der Pause: volle Pausendauer abziehen
+        const breakDuration = (breakEnd - breakStart) / 60000;
+        elapsed -= breakDuration;
+      } else if (currentTime >= breakStart) {
+        // Während der Pause: Timer auf Ende von Teil 1 "einfrieren"
+        elapsed = (breakStart - lessonStart) / 60000;
+      }
+    }
 
     for (const step of displayLesson.steps) {
       const duration = parseInt(step.time) || 0;

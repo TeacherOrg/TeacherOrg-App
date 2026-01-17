@@ -14,8 +14,9 @@ export function useBounties(studentId, classId) {
 
   const loadBounties = useCallback(async () => {
     try {
-      // Load all active bounties
-      const allBounties = await Bounty.list({ is_active: true });
+      // Load all active bounties for this user
+      const userId = pb.authStore.model?.id;
+      const allBounties = await Bounty.list({ is_active: true, user_id: userId });
 
       // Filter bounties for this class (or bounties without class restriction)
       const relevantBounties = allBounties.filter(bounty => {
@@ -83,7 +84,8 @@ export function useBountyManager() {
 
   const loadData = useCallback(async () => {
     try {
-      const allBounties = await Bounty.list();
+      const userId = pb.authStore.model?.id;
+      const allBounties = await Bounty.list({ user_id: userId });
       // Sort by active first, then by created date
       const sortedBounties = allBounties.sort((a, b) => {
         if (a.is_active !== b.is_active) return b.is_active ? 1 : -1;
@@ -91,7 +93,7 @@ export function useBountyManager() {
       });
       setBounties(sortedBounties);
 
-      const allCompletions = await BountyCompletion.list();
+      const allCompletions = await BountyCompletion.list({ user_id: userId });
       setCompletions(allCompletions);
     } catch (error) {
       console.error('Error loading bounty data:', error);

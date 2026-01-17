@@ -38,7 +38,7 @@ export function SavedGroupSetsSelect({
             disabled={disabled}
         >
             <Save className="w-4 h-4 mr-2" />
-            Save Current
+            Aktuelle Gruppen speichern
         </Button>
       </div>
 

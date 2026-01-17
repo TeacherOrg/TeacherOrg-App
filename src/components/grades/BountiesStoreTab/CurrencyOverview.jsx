@@ -1,10 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Coins, TrendingUp, TrendingDown, Edit, Loader2, Search } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import { useCurrency } from '@/components/student-dashboard/hooks/useCurrency';
+import { useStudentSortPreference } from '@/hooks/useStudentSortPreference';
+import { sortStudents } from '@/utils/studentSortUtils';
 
 /**
  * CurrencyOverview - View and manage student currency balances
@@ -14,6 +16,20 @@ export default function CurrencyOverview({ currencyData = [], students = [], isL
   const [adjustingStudent, setAdjustingStudent] = useState(null);
   const [adjustAmount, setAdjustAmount] = useState(0);
   const [adjustReason, setAdjustReason] = useState('');
+  const [sortPreference] = useStudentSortPreference();
+
+  // Escape key handler for modal
+  useEffect(() => {
+    const handleEscape = (e) => {
+      if (e.key === 'Escape' && adjustingStudent) {
+        setAdjustingStudent(null);
+        setAdjustAmount(0);
+        setAdjustReason('');
+      }
+    };
+    document.addEventListener('keydown', handleEscape);
+    return () => document.removeEventListener('keydown', handleEscape);
+  }, [adjustingStudent]);
 
   // Map currency data to students
   const studentCurrencyMap = currencyData.reduce((acc, c) => {
@@ -26,12 +42,11 @@ export default function CurrencyOverview({ currencyData = [], students = [], isL
     s.name?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  // Sort by balance descending
-  const sortedStudents = [...filteredStudents].sort((a, b) => {
-    const balanceA = studentCurrencyMap[a.id]?.balance || 0;
-    const balanceB = studentCurrencyMap[b.id]?.balance || 0;
-    return balanceB - balanceA;
-  });
+  // Sort by global student sort preference
+  const sortedStudents = useMemo(() =>
+    sortStudents(filteredStudents, sortPreference),
+    [filteredStudents, sortPreference]
+  );
 
   // Calculate totals
   const totalBalance = Object.values(studentCurrencyMap).reduce((sum, c) => sum + (c.balance || 0), 0);
@@ -106,7 +121,7 @@ export default function CurrencyOverview({ currencyData = [], students = [], isL
       </div>
 
       {/* Student List */}
-      <Card>
+      <Card className="overflow-hidden">
         <CardContent className="p-0">
           <div className="overflow-auto max-h-[calc(100vh-450px)] min-h-[200px] scrollbar-thin scrollbar-thumb-slate-300 dark:scrollbar-thumb-slate-600 scrollbar-track-transparent">
             <table className="w-full">

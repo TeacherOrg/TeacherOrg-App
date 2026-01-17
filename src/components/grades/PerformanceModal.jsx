@@ -24,7 +24,7 @@ const PerformanceModal = ({ isOpen, onClose, onSave, students = [], subjects = [
   const [pasteData, setPasteData] = useState('');
   const [error, setError] = useState('');
   const [allFachbereiche, setAllFachbereiche] = useState([]);
-  const [importMode, setImportMode] = useState('nameAndGrade');
+  const [importMode, setImportMode] = useState('gradesOnly');
   const [weight, setWeight] = useState(1); // ← State mit Default = 1
   const [sortPreference] = useStudentSortPreference();
 
@@ -59,7 +59,7 @@ const PerformanceModal = ({ isOpen, onClose, onSave, students = [], subjects = [
       setMode('manual');
       setPasteData('');
       setError('');
-      setImportMode('nameAndGrade');
+      setImportMode('gradesOnly');
       setNewFachbereichName('');
       setWeight(1); // ← Reset weight on open
 
@@ -332,6 +332,28 @@ const PerformanceModal = ({ isOpen, onClose, onSave, students = [], subjects = [
                 Standard = 1 | Klausur = 3 | Stegreif = 0.5 | mündlich = 1
               </p>
             </div>
+            {mode === 'import' && (
+              <div>
+                <div className="flex gap-4 my-2">
+                  <div className="flex items-center gap-2">
+                    <input type="radio" id="modeGradesOnly" name="importMode" value="gradesOnly" checked={importMode === 'gradesOnly'} onChange={() => setImportMode('gradesOnly')} />
+                    <Label htmlFor="modeGradesOnly">Nur Noten (in Schülerreihenfolge)</Label>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input type="radio" id="modeNameAndGrade" name="importMode" value="nameAndGrade" checked={importMode === 'nameAndGrade'} onChange={() => setImportMode('nameAndGrade')} />
+                    <Label htmlFor="modeNameAndGrade">Name & Note</Label>
+                  </div>
+                </div>
+                <Textarea
+                  value={pasteData}
+                  onChange={e => setPasteData(e.target.value)}
+                  placeholder={importMode === 'nameAndGrade' ? "Max Mustermann 5.5\nErika Musterfrau 4.0" : "5.5\n4.0\n..."}
+                  className="h-32 bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600"
+                />
+                <Button type="button" onClick={handleParsePasteData} className="mt-2 bg-green-600 hover:bg-green-700">Daten verarbeiten & Vorschau</Button>
+                {error && <p className="text-red-500 mt-2">{error}</p>}
+              </div>
+            )}
             <div>
               <Label>Noten</Label>
               <div className="grid grid-cols-1 xs:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 p-3 bg-slate-100 dark:bg-slate-800/50 rounded-lg">
@@ -341,7 +363,7 @@ const PerformanceModal = ({ isOpen, onClose, onSave, students = [], subjects = [
                     <Input
                       id={`grade-${sg.student_id}`}
                       type="number"
-                      step="0.1"
+                      step="0.01"
                       min="0"
                       max="6"
                       value={sg.grade}
@@ -356,28 +378,6 @@ const PerformanceModal = ({ isOpen, onClose, onSave, students = [], subjects = [
                 ))}
               </div>
             </div>
-            {mode === 'import' && (
-              <div>
-                <div className="flex gap-4 my-2">
-                  <div className="flex items-center gap-2">
-                    <input type="radio" id="modeNameAndGrade" name="importMode" value="nameAndGrade" checked={importMode === 'nameAndGrade'} onChange={() => setImportMode('nameAndGrade')} />
-                    <Label htmlFor="modeNameAndGrade">Name & Note</Label>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <input type="radio" id="modeGradesOnly" name="importMode" value="gradesOnly" checked={importMode === 'gradesOnly'} onChange={() => setImportMode('gradesOnly')} />
-                    <Label htmlFor="modeGradesOnly">Nur Noten (in Schülerreihenfolge)</Label>
-                  </div>
-                </div>
-                <Textarea
-                  value={pasteData}
-                  onChange={e => setPasteData(e.target.value)}
-                  placeholder={importMode === 'nameAndGrade' ? "Max Mustermann 5.5\nErika Musterfrau 4.0" : "5.5\n4.0\n..."}
-                  className="h-32 bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600"
-                />
-                <Button type="button" onClick={handleParsePasteData} className="mt-2 bg-green-600 hover:bg-green-700">Daten verarbeiten & Vorschau</Button>
-                {error && <p className="text-red-500 mt-2">{error}</p>}
-              </div>
-            )}
           </div>
 
           <div className="flex justify-end gap-3 px-6 py-4 border-t border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 flex-shrink-0">

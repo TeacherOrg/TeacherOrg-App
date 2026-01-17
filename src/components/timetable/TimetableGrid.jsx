@@ -1,5 +1,5 @@
 import React from "react";
-import { useMemo, useState, useEffect, useRef } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Plus } from "lucide-react";
 import { useDroppable } from "@dnd-kit/core";
@@ -63,10 +63,12 @@ const getHolidayDisplay = (holiday) => {
   }
 };
 
+// Touch-Detection für plattform-spezifisches Verhalten
+const isTouchDevice = typeof window !== 'undefined' &&
+  ('ontouchstart' in window || navigator.maxTouchPoints > 0);
+
 const DraggableItem = ({ id, data, children, onClick }) => {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useDraggable({ id, data });
-  const clickTimeRef = useRef(0);
-  const startPosRef = useRef({ x: 0, y: 0 });
 
   const style = {
     transform: transform ? `translate3d(${transform.x}px, ${transform.y}px, 0)` : undefined,
@@ -75,25 +77,18 @@ const DraggableItem = ({ id, data, children, onClick }) => {
   };
 
   const handlePointerDown = (e) => {
-    clickTimeRef.current = Date.now();
-    startPosRef.current = { x: e.clientX, y: e.clientY };
+    // Desktop: Nur Drag aktivieren wenn Ctrl gedrückt
+    // Touch: PointerSensor übernimmt mit Long-Press (300ms delay)
+    if (!isTouchDevice && !e.ctrlKey) {
+      // Kein Drag-Listener aktivieren - wird zum normalen Click
+      return;
+    }
     listeners?.onPointerDown?.(e);
   };
 
   const handleClick = (e) => {
-    const elapsed = Date.now() - clickTimeRef.current;
-
-    // Bewegung berechnen
-    const deltaX = Math.abs(e.clientX - startPosRef.current.x);
-    const deltaY = Math.abs(e.clientY - startPosRef.current.y);
-    const moved = Math.max(deltaX, deltaY);
-
-    // Click erkannt wenn:
-    // - Wenig bewegt (< 15px) - erhöht für bessere Touch/Touchpad-Kompatibilität
-    // - ODER schnell geklickt (< 400ms)
-    const isClick = (moved < 15) || (elapsed < 400);
-
-    if (isClick && !isDragging) {
+    // Click nur wenn nicht gedraggt wird
+    if (!isDragging) {
       e.stopPropagation();
       onClick?.();
     }
@@ -103,7 +98,6 @@ const DraggableItem = ({ id, data, children, onClick }) => {
     <div
       ref={setNodeRef}
       style={style}
-      {...listeners}
       {...attributes}
       onPointerDown={handlePointerDown}
       onClick={handleClick}
@@ -119,13 +113,26 @@ const TimetableGrid = React.forwardRef(
     const [isAltPressed, setIsAltPressed] = useState(false);
 
     useEffect(() => {
-      const handleKeyDown = (e) => e.altKey && setIsAltPressed(true);
-      const handleKeyUp = () => setIsAltPressed(false);
+      const handleKeyDown = (e) => {
+        if (e.altKey) setIsAltPressed(true);
+        // Visuelles Feedback: Cursor ändern wenn Ctrl gedrückt (nur Desktop)
+        if (e.ctrlKey && !isTouchDevice) {
+          document.body.classList.add('ctrl-pressed');
+        }
+      };
+      const handleKeyUp = (e) => {
+        setIsAltPressed(false);
+        // Ctrl losgelassen → Cursor zurücksetzen
+        if (!e.ctrlKey) {
+          document.body.classList.remove('ctrl-pressed');
+        }
+      };
       window.addEventListener('keydown', handleKeyDown);
       window.addEventListener('keyup', handleKeyUp);
       return () => {
         window.removeEventListener('keydown', handleKeyDown);
         window.removeEventListener('keyup', handleKeyUp);
+        document.body.classList.remove('ctrl-pressed');
       };
     }, []);
 
@@ -340,9 +347,9 @@ const TimetableGrid = React.forwardRef(
                   onPointerEnter={(e) => onShowHover(lesson, e)}
                   onPointerLeave={onHideHover}
                 >
-                  {/* Immer die normale LessonCard rendern */}
-                  {isAltPressed ? (
-                    <div className="h-full w-full" onClick={() => onEditLesson(lesson.id)}>
+                  {/* Immer die normale LessonCard rendern - readOnly deaktiviert Drag */}
+                  {isAltPressed || readOnly ? (
+                    <div className="h-full w-full cursor-pointer" onClick={() => onEditLesson?.(lesson.id)}>
                       <LessonCard
                         lesson={lesson}
                         isDragging={false}

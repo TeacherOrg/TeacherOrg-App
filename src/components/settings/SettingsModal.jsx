@@ -632,14 +632,54 @@ const SettingsModal = ({ isOpen, onClose }) => {
         throw new Error('Unzureichende Rechte – nur für Teachers.');
         }
         const userId = pb.authStore.model.id;
-        const [settingsData, classData, subjectData, holidayData] = await Promise.all([
+        const [settingsData, classData, subjectData, holidayData, teamTeachingAccess] = await Promise.all([
         Setting.list({ user_id: userId }),
         Class.list({ user_id: userId }),
         Subject.list({ 'class_id.user_id': userId }),
         Holiday.list({ user_id: userId }),
+        // Team Teaching: Lade akzeptierte Einladungen
+        pb.collection('team_teachings').getFullList({
+          filter: `invited_user_id = '${userId}' && status = 'accepted'`,
+          expand: 'class_id,owner_id',
+          $autoCancel: false
+        }).catch(() => []),
         ]);
 
-        const validClasses = classData.filter(cls => cls && cls.id && typeof cls.name === 'string');
+        // Eigene Klassen mit Metadaten
+        const ownedClasses = (classData || [])
+          .filter(cls => cls && cls.id && typeof cls.name === 'string')
+          .map(cls => ({
+            ...cls,
+            isOwner: true,
+            permissionLevel: 'full_access'
+          }));
+
+        // Geteilte Klassen mit Metadaten
+        const sharedClasses = (teamTeachingAccess || [])
+          .filter(tt => tt.expand?.class_id || tt.class_id)
+          .map(tt => ({
+            ...(tt.expand?.class_id || {}),
+            id: tt.expand?.class_id?.id || tt.class_id,
+            name: tt.expand?.class_id?.name || tt.class_name || 'Geteilte Klasse',
+            isOwner: false,
+            permissionLevel: tt.permission_level || 'view_only',
+            teamTeachingId: tt.id,
+            ownerEmail: tt.expand?.owner_id?.email || '',
+            is_hidden: tt.is_hidden || false
+          }));
+
+        // Zusammenführen mit Deduplizierung (owned hat Priorität)
+        const merged = [...ownedClasses, ...sharedClasses];
+        const validClasses = merged.reduce((acc, cls) => {
+          const existing = acc.find(c => c.id === cls.id);
+          if (!existing) {
+            acc.push(cls);
+          } else if (cls.isOwner && !existing.isOwner) {
+            const idx = acc.findIndex(c => c.id === cls.id);
+            acc[idx] = cls;
+          }
+          return acc;
+        }, []);
         if (settingsData.length > 0) {
         const latestSettings = settingsData.sort((a, b) => new Date(b.updated) - new Date(a.updated))[0];
         setSettings(latestSettings);

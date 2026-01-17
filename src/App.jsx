@@ -11,6 +11,7 @@ import { Routes, Route } from 'react-router-dom';
 import ProtectedRoute from '@/components/auth/ProtectedRoute';
 import Landing from '@/pages/Landing';
 import Privacy from '@/pages/Privacy';
+import InvitePage from '@/pages/InvitePage';
 import debounce from 'lodash/debounce';
 import { version } from '../package.json';
 import UpdateModal from '@/components/ui/UpdateModal';
@@ -28,6 +29,8 @@ import { GroupsTutorial } from '@/components/onboarding/tutorials/GroupsTutorial
 import { TopicsTutorial } from '@/components/onboarding/tutorials/TopicsTutorial';
 import { GradesTutorial } from '@/components/onboarding/tutorials/GradesTutorial';
 import { HelpButton } from '@/components/onboarding/HelpButton';
+import TeamTeachingInvitationsModal from '@/components/settings/TeamTeachingInvitationsModal';
+import { useTeamTeaching } from '@/hooks/useTeamTeaching';
 
 // Onboarding Content Component - renders all onboarding UI
 function OnboardingContent() {
@@ -55,7 +58,11 @@ function OnboardingContent() {
 function App() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [showUpdateModal, setShowUpdateModal] = useState(false); // New state for modal
+  const [showUpdateModal, setShowUpdateModal] = useState(false);
+  const [showInvitationsModal, setShowInvitationsModal] = useState(false);
+
+  // Team Teaching Einladungen
+  const { pendingInvitations } = useTeamTeaching();
 
   useEffect(() => {
     const checkAuth = debounce(async () => {
@@ -116,6 +123,17 @@ function App() {
   // Daten nach Login initialisieren
   usePostLoginInit(user);
 
+  // Team Teaching Einladungen-Popup nach Login anzeigen
+  useEffect(() => {
+    if (user && pendingInvitations.length > 0 && !showUpdateModal) {
+      // Kleine Verzögerung damit das UpdateModal zuerst angezeigt werden kann
+      const timer = setTimeout(() => {
+        setShowInvitationsModal(true);
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [user, pendingInvitations.length, showUpdateModal]);
+
   if (loading) {
     return (
       <div className="min-h-screen bg-slate-900 flex items-center justify-center">
@@ -149,6 +167,15 @@ function App() {
         onClose={() => setShowUpdateModal(false)}
         version={version}
       />
+      <TeamTeachingInvitationsModal
+        isOpen={showInvitationsModal}
+        onClose={() => setShowInvitationsModal(false)}
+        onUpdate={() => {
+          // Query-Cache invalidieren damit Klassen neu geladen werden
+          queryClient.invalidateQueries(['classes']);
+          queryClient.invalidateQueries(['timetable']);
+        }}
+      />
 
       {/* Router mit Public & Protected Routes */}
       <Routes>
@@ -160,6 +187,9 @@ function App() {
 
         {/* Public Route: Datenschutzerklärung */}
         <Route path="/privacy" element={<Privacy />} />
+
+        {/* Public Route: Team Teaching Einladungslink */}
+        <Route path="/invite/:token" element={<InvitePage />} />
 
         {/* Protected Routes: Alle anderen Seiten */}
         <Route

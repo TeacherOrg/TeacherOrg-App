@@ -1,8 +1,8 @@
-import React, { useState } from "react";
+import React, { useState, useMemo, useCallback } from "react";
 import { motion } from "framer-motion";
 import { DndContext, closestCenter, DragOverlay, useSensors, useSensor, PointerSensor, KeyboardSensor } from "@dnd-kit/core";
 import { sortableKeyboardCoordinates } from "@dnd-kit/sortable";
-import { Users } from "lucide-react";
+import { Users, Eye } from "lucide-react";
 import { useGroups } from "@/components/groups/hooks/useGroups";
 import { Controls } from "@/components/groups/components/Controls";
 import { UnassignedBox } from "@/components/groups/components/UnassignedBox";
@@ -10,11 +10,31 @@ import { GroupBox } from "@/components/groups/components/GroupBox";
 import { StudentPreview } from "@/components/groups/components/StudentPreview";
 import { SavedGroupSetsSelect } from "@/components/groups/components/SavedGroupSetsSelect"; // falls direkt gebraucht
 import { findContainer, arrayMove } from "@/components/groups/utils/dndUtils";
+import { useSearchParams } from "react-router-dom";
 
 import pb from '@/api/pb';
 import { Student, Group } from "@/api/entities";
+import { canEditClass } from '@/utils/teamTeachingUtils';
 
 export default function GroupsPage() {
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // URL-basierte Klassenauswahl
+  const urlClassId = searchParams.get('classId') || null;
+
+  // Callback um URL zu aktualisieren wenn Klasse geändert wird
+  const handleClassIdChange = useCallback((newClassId) => {
+    setSearchParams(prev => {
+      const next = new URLSearchParams(prev);
+      if (newClassId) {
+        next.set('classId', newClassId);
+      } else {
+        next.delete('classId');
+      }
+      return next;
+    }, { replace: true });
+  }, [setSearchParams]);
+
   const {
     allStudents,
     classes,
@@ -35,16 +55,22 @@ export default function GroupsPage() {
     handleDeleteGroupSet,
     handleRenameGroupSet,
     handleRenameGroup,
-  } = useGroups();
+  } = useGroups(urlClassId, handleClassIdChange);
 
   const [activeStudent, setActiveStudent] = useState(null);
   const [isOverUnassigned, setIsOverUnassigned] = useState(false);
 
+  // Team Teaching: Berechne ob User diese Klasse bearbeiten darf
+  const activeClass = useMemo(() => classes.find(c => c.id === activeClassId), [classes, activeClassId]);
+  const canEdit = useMemo(() => canEditClass(activeClass, pb.authStore.model?.id), [activeClass]);
+
   // Sensor configuration for drag activation
+  // Note: We always pass sensors but use a very high distance when canEdit is false
+  // to prevent the useEffect array size warning from @dnd-kit
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
-        distance: 8, // 8px movement before drag starts
+        distance: canEdit ? 8 : 99999, // 8px movement before drag starts, or effectively disabled
       },
     }),
     useSensor(KeyboardSensor, {
@@ -202,15 +228,25 @@ export default function GroupsPage() {
               <Users className="w-6 h-6 text-gray-800 dark:text-white" />
             </div>
             <div>
-              <h1 className="text-3xl font-bold text-gray-800 dark:text-white tracking-tight mb-1">Group Maker</h1>
-              <p className="text-gray-500 dark:text-slate-400">Create and randomize student groups by class.</p>
+              <h1 className="text-3xl font-bold text-gray-800 dark:text-white tracking-tight mb-1">Gruppenbildung</h1>
+              <p className="text-gray-500 dark:text-slate-400">Erstelle und verteile Schülergruppen nach Klasse.</p>
             </div>
           </div>
         </motion.div>
 
         {error && <div className="mb-4 p-4 bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 rounded-xl">{error}</div>}
 
-        <div className="flex-1 grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-6 min-h-0">
+        {/* Team Teaching: View-Only Banner */}
+        {!canEdit && activeClassId && (
+          <div className="mb-4 bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-700 rounded-xl px-4 py-3 flex items-center gap-2">
+            <Eye className="w-5 h-5 text-amber-600 dark:text-amber-400" />
+            <span className="text-sm font-medium text-amber-800 dark:text-amber-200">
+              Nur-Einsicht-Modus – Diese Klasse wurde mit Ihnen geteilt (keine Bearbeitungsrechte)
+            </span>
+          </div>
+        )}
+
+        <div className="flex-1 grid grid-cols-1 lg:grid-cols-[320px_1fr] gap-6 min-h-0">
           <div className="lg:col-span-1">
             <Controls
               classes={classes}
@@ -227,16 +263,24 @@ export default function GroupsPage() {
               onDeleteSet={handleDeleteGroupSet}
               onRenameSet={handleRenameGroupSet}
               disabled={isLoading || !activeClassId || groups.length === 0}
+              canEdit={canEdit}    // Team Teaching: Nur-Einsicht-Modus
             />
           </div>
 
           <div className="overflow-hidden flex flex-col min-h-0">
-            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={onDragStart} onDragEnd={onDragEnd} onDragOver={onDragOver}>
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragStart={canEdit ? onDragStart : undefined}
+              onDragEnd={canEdit ? onDragEnd : undefined}
+              onDragOver={canEdit ? onDragOver : undefined}
+            >
               <div className="flex flex-col lg:flex-row gap-6 h-full min-h-0">
                 <UnassignedBox
                   students={unassignedStudents}
                   isOver={isOverUnassigned}
                   handleDeleteStudent={handleDeleteStudent}
+                  canEdit={canEdit}
                 />
 
                 <div className="flex-1 min-w-0 max-h-[calc(100vh-280px)] overflow-y-auto pr-2">
@@ -250,11 +294,12 @@ export default function GroupsPage() {
                           handleDeleteStudent={handleDeleteStudent}
                           handleRenameGroup={handleRenameGroup}
                           index={index}
+                          canEdit={canEdit}
                         />
                       ))
                     ) : (
                       <div className="col-span-full text-center text-gray-500 dark:text-slate-400 p-8 text-sm font-medium">
-                        Noch keine Gruppen erstellt. Klicke auf "Create Groups", um zu beginnen.
+                        Noch keine Gruppen erstellt. Klicke auf "Gruppen erstellen", um zu beginnen.
                       </div>
                     )}
                   </div>

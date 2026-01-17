@@ -19,6 +19,7 @@ import BountyBoard from './components/BountyBoard';
 import CurrencyDisplay from './components/CurrencyDisplay';
 import { AchievementCoinsAwarded } from '@/api/entities';
 import { useAchievementRewards } from '@/components/grades/BountiesStoreTab/hooks/useAchievementRewards';
+import { ACHIEVEMENT_PROGRESSION_MAP, achievementDefinitions } from './config/achievements';
 
 /**
  * Main Student Dashboard Component
@@ -58,9 +59,10 @@ export default function StudentDashboard({ studentId = null }) {
   const currencyData = useCurrency(student?.id);
 
   // Goal operations (with currency award on completion)
-  const handleGoalCompleted = async (goalId, goalText) => {
+  const handleGoalCompleted = async (goalId, goalText, coinReward) => {
     if (currencyData.awardCurrency) {
-      await currencyData.awardCurrency(1, 'goal', goalId, `Ziel erreicht: ${goalText?.substring(0, 50) || 'Ziel'}`);
+      const coins = coinReward ?? 2;
+      await currencyData.awardCurrency(coins, 'goal', goalId, `Ziel erreicht: ${goalText?.substring(0, 50) || 'Ziel'}`);
     }
   };
   const goalOps = useCompetencyGoals(student?.id, refresh, { onGoalCompleted: handleGoalCompleted });
@@ -77,48 +79,63 @@ export default function StudentDashboard({ studentId = null }) {
   // Ref to track sync status and prevent duplicate sync calls
   const syncedAchievementsRef = useRef(false);
 
+  // Ref for stable callback reference (prevents effect re-runs when currencyData changes)
+  const handleAchievementEarnedRef = useRef(null);
+
   // Callback for achievement coin awarding (called when new achievements are earned)
+  // Uses AWARD-FIRST pattern: Award coins BEFORE creating tracking record to prevent lost coins
   const handleAchievementEarned = useCallback(async (achievement, tier, studentId) => {
     if (!studentId || !currencyData.awardCurrency) return;
 
-    try {
-      // Check if coins already awarded for this achievement (with unique cancel key)
-      const existing = await AchievementCoinsAwarded.filter({
-        student_id: studentId,
-        achievement_id: achievement.id,
-        $cancelKey: `check_${achievement.id}_${studentId}`
-      });
+    // Get all achievements in this progression up to current tier
+    // e.g., for goals_3_epic: ['goals_1_common', 'goals_2_rare', 'goals_3_epic']
+    const progressionIds = ACHIEVEMENT_PROGRESSION_MAP[achievement.id] || [achievement.id];
 
-      if (existing.length > 0) return; // Already awarded
+    for (const achievementId of progressionIds) {
+      try {
+        // Check if tracking record already exists (= already processed)
+        const existing = await AchievementCoinsAwarded.filter({
+          student_id: studentId,
+          achievement_id: achievementId
+        });
 
-      // Get reward amount (custom or default)
-      const coins = getReward(achievement.id, tier);
+        if (existing.length > 0) continue; // Bereits vergeben, skip
 
-      // Award coins
-      await currencyData.awardCurrency(
-        coins,
-        'achievement',
-        achievement.id,
-        `Achievement: ${achievement.name}`
-      );
+        // Find the achievement definition to get its tier
+        const achDef = achievementDefinitions.find(a => a.id === achievementId);
+        if (!achDef) continue;
 
-      // Track that coins were awarded
-      await AchievementCoinsAwarded.create({
-        student_id: studentId,
-        achievement_id: achievement.id,
-        tier: tier,
-        coins_awarded: coins,
-        $cancelKey: `create_${achievement.id}_${studentId}`
-      });
+        // Get reward amount (custom or default)
+        const coins = getReward(achievementId, achDef.tier);
 
-    } catch (error) {
-      // Ignore auto-cancellation errors
-      if (error?.message?.includes('autocancelled')) {
-        return;
+        // ERST Coins vergeben - wenn das fehlschlägt, wird kein Record erstellt
+        // So können die Coins beim nächsten Versuch erneut vergeben werden
+        await currencyData.awardCurrency(
+          coins,
+          'achievement',
+          achievementId,
+          `Achievement: ${achDef.name}`
+        );
+
+        // NUR bei Erfolg: Record erstellen (verhindert doppelte Vergabe)
+        await AchievementCoinsAwarded.create({
+          student_id: studentId,
+          achievement_id: achievementId,
+          tier: achDef.tier,
+          coins_awarded: coins
+        });
+
+      } catch (error) {
+        // Ignore auto-cancellation errors
+        if (error?.message?.includes('autocancelled')) {
+          continue;
+        }
       }
-      console.error('Failed to award achievement coins:', error);
     }
   }, [currencyData, getReward]);
+
+  // Update ref with latest callback (for stable reference in effect)
+  handleAchievementEarnedRef.current = handleAchievementEarned;
 
   // Achievements (with coin awarding callback)
   const achievements = useAchievements(studentData, {
@@ -127,6 +144,7 @@ export default function StudentDashboard({ studentId = null }) {
   });
 
   // Sync existing achievements on mount (for already earned achievements)
+  // Uses ref for callback to prevent re-runs when currencyData changes
   useEffect(() => {
     let isCancelled = false;
 
@@ -142,7 +160,8 @@ export default function StudentDashboard({ studentId = null }) {
         if (isCancelled) break;
 
         try {
-          await handleAchievementEarned(ach, ach.tier, student.id);
+          // Use ref to get latest callback without triggering effect re-runs
+          await handleAchievementEarnedRef.current?.(ach, ach.tier, student.id);
           // Small delay between requests to avoid overwhelming the server
           await new Promise(resolve => setTimeout(resolve, 100));
         } catch {
@@ -159,7 +178,7 @@ export default function StudentDashboard({ studentId = null }) {
     return () => {
       isCancelled = true;
     };
-  }, [student?.id, achievements?.achievements?.length, handleAchievementEarned]);
+  }, [student?.id, achievements?.achievements?.length]); // NO handleAchievementEarned dependency!
 
   if (loading) {
     return (

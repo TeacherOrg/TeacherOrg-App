@@ -21,13 +21,13 @@ export function Controls({
 }) {
   return (
     <div className="bg-white dark:bg-slate-800 backdrop-blur-xl rounded-3xl shadow-xl border border-gray-200 dark:border-slate-700 p-6">
-      <h3 className="font-bold text-gray-800 dark:text-white text-lg mb-4">Controls</h3>
+      <h3 className="font-bold text-gray-800 dark:text-white text-lg mb-4">Steuerung</h3>
       <div className="space-y-4">
         <div className="space-y-2">
-          <label className="text-sm font-medium text-gray-600 dark:text-slate-300">Select Class</label>
+          <label className="text-sm font-medium text-gray-600 dark:text-slate-300">Klasse wählen</label>
           <Select value={activeClassId || ''} onValueChange={onClassChange} disabled={classes.length === 0}>
             <SelectTrigger>
-              <SelectValue placeholder="Choose a class" />
+              <SelectValue placeholder="Wähle eine Klasse" />
             </SelectTrigger>
             <SelectContent>
               {classes.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
@@ -44,32 +44,32 @@ export function Controls({
             onFocus={(e) => e.target.select()}
             className="w-24 px-3 py-2 border rounded-2xl bg-white dark:bg-slate-700"
           />
-          <Button 
-            onClick={onCreateGroups} 
+          <Button
+            onClick={onCreateGroups}
             className="bg-blue-600 hover:bg-blue-700 text-white font-semibold shadow-lg rounded-2xl"
             disabled={!activeClassId}
             >
-            Create Groups
+            Gruppen erstellen
             </Button>
         </div>
 
-        <Button 
-            onClick={onRandomize} 
-            variant="outline" 
-            className="w-full bg-gradient-to-r from-blue-500 via-emerald-500 to-pink-500 text-white font-semibold shadow-lg hover:opacity-90 border-0"
+        <Button
+            onClick={onRandomize}
+            variant="outline"
+            className="w-full bg-[linear-gradient(to_right,#10b981,#3b82f6,#8b5cf6,#f97316)] text-white font-semibold shadow-lg hover:opacity-90 border-0"
             disabled={disabled}
         >
-            <Shuffle className="w-4 h-4 mr-2" /> 
-            Randomize
+            <Shuffle className="w-4 h-4 mr-2" />
+            Zufällig verteilen
         </Button>
 
         <Button onClick={onClearGroups} variant="outline" className="w-full" disabled={disabled}>
-          <Trash2 className="w-4 h-4 mr-2" /> Clear All Groups
+          <Trash2 className="w-4 h-4 mr-2" /> Alle Gruppen löschen
         </Button>
 
         <div className="pt-4 border-t border-gray-200 dark:border-slate-700">
           <label className="text-sm font-medium text-gray-600 dark:text-slate-300 block mb-2">
-            Saved Group Sets
+            Gespeicherte Gruppensets
           </label>
           <SavedGroupSetsSelect
             savedGroupSets={savedGroupSets}

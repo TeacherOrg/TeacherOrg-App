@@ -211,6 +211,7 @@ export default function UeberfachlichTable({
   setExpandedCompetencies,
   allCompetencies = [],
   savePreferences, // Bug 9 Fix: savePreferences als Prop von PerformanceView
+  canEdit = true, // Team Teaching: Bearbeitungsrechte
 }) {
   const [searchTerm, setSearchTerm] = useState('');
   const debouncedSearchTerm = useDebounce(searchTerm, 300);
@@ -218,6 +219,10 @@ export default function UeberfachlichTable({
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
   const [sortPreference] = useStudentSortPreference();
+
+  // Bulk-Add State
+  const [bulkAddCompetencyId, setBulkAddCompetencyId] = useState(null);
+  const [bulkAddRatings, setBulkAddRatings] = useState({}); // { [studentId]: { score, notes } }
 
   // Debugging-Logs für Props
   useEffect(() => {
@@ -602,6 +607,122 @@ export default function UeberfachlichTable({
     });
   };
 
+  // Bulk-Add Funktionen
+  const handleStartBulkAdd = (competencyId) => {
+    // Setze Bulk-Add Modus für diese Kompetenz
+    setBulkAddCompetencyId(competencyId);
+
+    // Initialisiere leere Ratings für alle Schüler
+    const initialRatings = {};
+    filteredStudents.forEach(student => {
+      initialRatings[student.id] = { score: 0, notes: '' };
+    });
+    setBulkAddRatings(initialRatings);
+
+    // Expandiere die Kompetenz
+    setExpandedCompetencies(prev => {
+      const newSet = new Set(prev);
+      newSet.add(competencyId);
+      return newSet;
+    });
+  };
+
+  const handleBulkAddCancel = () => {
+    setBulkAddCompetencyId(null);
+    setBulkAddRatings({});
+  };
+
+  const handleBulkAddSave = async (competencyId) => {
+    // Filtere nur Schüler mit score > 0
+    const ratingsToSave = Object.entries(bulkAddRatings).filter(([_, data]) => data.score > 0);
+
+    if (ratingsToSave.length === 0) {
+      toast({
+        title: "Hinweis",
+        description: "Keine Bewertungen ausgewählt",
+        variant: "default",
+      });
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const user = User.current();
+      if (!user || !user.id) throw new Error('Kein Benutzer eingeloggt');
+
+      const today = new Date().toISOString().slice(0, 10);
+
+      // Speichere alle Bewertungen parallel
+      await Promise.all(ratingsToSave.map(async ([studentId, data]) => {
+        const comp = ueberfachlich.find(u => u.student_id === studentId && u.competency_id === competencyId);
+        const newAssessment = {
+          date: today,
+          score: data.score,
+          notes: data.notes || ''
+        };
+
+        if (comp) {
+          const updatedAssessments = [...(comp.assessments || []), newAssessment];
+          await UeberfachlichKompetenz.update(comp.id, {
+            assessments: updatedAssessments,
+            user_id: user.id
+          });
+        } else {
+          await UeberfachlichKompetenz.create({
+            student_id: studentId,
+            class_id: activeClassId,
+            competency_id: competencyId,
+            assessments: [newAssessment],
+            user_id: user.id
+          });
+        }
+      }));
+
+      // Refresh Daten
+      const updatedUeberfachlich = await UeberfachlichKompetenz.list({
+        filter: `class_id = '${activeClassId}'`,
+        perPage: 500,
+        expand: 'student_id,class_id,competency_id'
+      });
+      setUeberfachlich(updatedUeberfachlich || []);
+
+      // Expansion States beibehalten
+      const newExpandedCompetencies = new Set(expandedCompetencies);
+      newExpandedCompetencies.add(competencyId);
+
+      const preservedStates = {
+        expandedUeberfachlichHistories: Array.from(expandedHistories || []),
+        expandedUeberfachlichCompetencies: Array.from(newExpandedCompetencies),
+        performanceTab: 'ueberfachlich'
+      };
+
+      if (savePreferences) {
+        savePreferences(preservedStates);
+      }
+
+      onDataChange?.(updatedUeberfachlich, preservedStates);
+
+      // Reset Bulk-Add State
+      setBulkAddCompetencyId(null);
+      setBulkAddRatings({});
+
+      toast({
+        title: "Erfolg",
+        description: `${ratingsToSave.length} Bewertungen erfolgreich gespeichert`,
+        variant: "success",
+      });
+    } catch (error) {
+      console.error('handleBulkAddSave - Error:', error);
+      toast({
+        title: "Fehler",
+        description: `Fehler beim Speichern: ${error.message}`,
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   if (isLoading) {
     return <div>Loading...</div>;
   }
@@ -643,15 +764,58 @@ export default function UeberfachlichTable({
                 {isExpanded ? <ChevronDown className="w-5 h-5" /> : <ChevronRight className="w-5 h-5" />}
                 <CardTitle className="text-xl">{competency?.name || 'Unbekannte Kompetenz'}</CardTitle>
               </div>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="text-slate-400 hover:text-red-500 hover:bg-red-900/20"
-                onClick={(e) => { e.stopPropagation(); handleDeleteCompetency(competencyId); }}
-                disabled={isLoading}
-              >
-                <Trash2 className="w-4 h-4" />
-              </Button>
+              <div className="flex items-center gap-2">
+                {bulkAddCompetencyId === competencyId ? (
+                  <>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-green-400 hover:text-green-300 hover:bg-green-900/20"
+                      onClick={(e) => { e.stopPropagation(); handleBulkAddSave(competencyId); }}
+                      disabled={isLoading}
+                    >
+                      <Save className="w-4 h-4 mr-1" />
+                      Alle speichern
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-slate-400 hover:text-red-400 hover:bg-red-900/20"
+                      onClick={(e) => { e.stopPropagation(); handleBulkAddCancel(); }}
+                      disabled={isLoading}
+                    >
+                      <X className="w-4 h-4 mr-1" />
+                      Abbrechen
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    {canEdit && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="text-slate-400 hover:text-green-400 hover:bg-green-900/20"
+                        onClick={(e) => { e.stopPropagation(); handleStartBulkAdd(competencyId); }}
+                        disabled={isLoading}
+                        title="Alle Schüler bewerten"
+                      >
+                        <Plus className="w-4 h-4" />
+                      </Button>
+                    )}
+                    {canEdit && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="text-slate-400 hover:text-red-500 hover:bg-red-900/20"
+                        onClick={(e) => { e.stopPropagation(); handleDeleteCompetency(competencyId); }}
+                        disabled={isLoading}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    )}
+                  </>
+                )}
+              </div>
             </CardHeader>
             <AnimatePresence>
               {isExpanded && (
@@ -669,6 +833,8 @@ export default function UeberfachlichTable({
                         const historyKey = `${student.id}-${competencyId}`;
                         const isHistoryExpanded = expandedHistories.has(historyKey);
                         const isQuickAdding = quickAddState.key === historyKey;
+                        const isBulkAdding = bulkAddCompetencyId === competencyId;
+                        const bulkRating = bulkAddRatings[student.id] || { score: 0, notes: '' };
                         return (
                           <div key={student.id} className="bg-slate-100/50 dark:bg-slate-700/50 rounded-lg p-3 border border-slate-300 dark:border-slate-600">
                             <div className="flex justify-between items-center">
@@ -681,53 +847,72 @@ export default function UeberfachlichTable({
                                 <Badge variant="secondary">Keine</Badge>
                               )}
                             </div>
-                            <div className="flex justify-between items-center mt-1">
-                              <Button
-                                variant="link"
-                                size="sm"
-                                className="p-0 h-auto text-xs text-slate-400"
-                                onClick={() => toggleHistoryExpansion(historyKey)}
-                                disabled={isQuickAdding || isLoading}
-                              >
-                                {assessments.length > 0 ? (isHistoryExpanded ? 'Verlauf ausblenden' : `Verlauf anzeigen (${assessments.length} Bewertungen)`) : ''}
-                              </Button>
-                              {!isQuickAdding ? (
+                            {isBulkAdding ? (
+                              <div className="flex justify-between items-center mt-2 p-2 bg-green-900/20 rounded border border-green-700/30">
+                                <span className="text-xs text-slate-400">{format(new Date(), 'dd.MM.yyyy')}</span>
+                                <InteractiveStarRating
+                                  rating={bulkRating.score}
+                                  onRatingChange={(score) => setBulkAddRatings(prev => ({
+                                    ...prev,
+                                    [student.id]: { ...prev[student.id], score }
+                                  }))}
+                                  size="w-4 h-4"
+                                  notes={bulkRating.notes}
+                                  onNotesChange={(newNoteText) => setBulkAddRatings(prev => ({
+                                    ...prev,
+                                    [student.id]: { ...prev[student.id], notes: newNoteText }
+                                  }))}
+                                />
+                              </div>
+                            ) : (
+                              <div className="flex justify-between items-center mt-1">
                                 <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="w-6 h-6 text-slate-400 hover:text-white"
-                                  onClick={() => {
-                                    const historyKey = `${student.id}-${competencyId}`;
-                                    setQuickAddState({ key: historyKey, score: 0, notes: '' });
-                                    toggleHistoryExpansion(historyKey);
-                                  }}
-                                  disabled={isLoading}
+                                  variant="link"
+                                  size="sm"
+                                  className="p-0 h-auto text-xs text-slate-400"
+                                  onClick={() => toggleHistoryExpansion(historyKey)}
+                                  disabled={isQuickAdding || isLoading}
                                 >
-                                  <Plus className="w-4 h-4" />
+                                  {assessments.length > 0 ? (isHistoryExpanded ? 'Verlauf ausblenden' : `Verlauf anzeigen (${assessments.length} Bewertungen)`) : ''}
                                 </Button>
-                              ) : (
-                                <div className="flex gap-2">
+                                {!isQuickAdding ? (
                                   <Button
                                     variant="ghost"
                                     size="icon"
-                                    className="w-6 h-6 text-slate-400 hover:text-green-500"
-                                    onClick={() => handleQuickAdd(student.id, competencyId)}
+                                    className="w-6 h-6 text-slate-400 hover:text-white"
+                                    onClick={() => {
+                                      const historyKey = `${student.id}-${competencyId}`;
+                                      setQuickAddState({ key: historyKey, score: 0, notes: '' });
+                                      toggleHistoryExpansion(historyKey);
+                                    }}
                                     disabled={isLoading}
                                   >
-                                    <Save className="w-4 h-4" />
+                                    <Plus className="w-4 h-4" />
                                   </Button>
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="w-6 h-6 text-slate-400 hover:text-red-500"
-                                    onClick={() => setQuickAddState({ key: null, score: 0, notes: '' })}
-                                    disabled={isLoading}
-                                  >
-                                    <X className="w-4 h-4" />
-                                  </Button>
-                                </div>
-                              )}
-                            </div>
+                                ) : (
+                                  <div className="flex gap-2">
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="w-6 h-6 text-slate-400 hover:text-green-500"
+                                      onClick={() => handleQuickAdd(student.id, competencyId)}
+                                      disabled={isLoading}
+                                    >
+                                      <Save className="w-4 h-4" />
+                                    </Button>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="w-6 h-6 text-slate-400 hover:text-red-500"
+                                      onClick={() => setQuickAddState({ key: null, score: 0, notes: '' })}
+                                      disabled={isLoading}
+                                    >
+                                      <X className="w-4 h-4" />
+                                    </Button>
+                                  </div>
+                                )}
+                              </div>
+                            )}
                             <AnimatePresence>
                               {(isHistoryExpanded || isQuickAdding) && (
                                 <motion.div

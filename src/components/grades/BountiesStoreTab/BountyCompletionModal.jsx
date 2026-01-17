@@ -1,6 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { X, Check, Users, Coins, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { useStudentSortPreference } from '@/hooks/useStudentSortPreference';
+import { sortStudents } from '@/utils/studentSortUtils';
 
 /**
  * BountyCompletionModal - Select students who completed a bounty
@@ -8,6 +10,13 @@ import { Button } from '@/components/ui/button';
 export default function BountyCompletionModal({ bounty, students = [], onClose, onSubmit }) {
   const [selectedStudents, setSelectedStudents] = useState([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [sortPreference] = useStudentSortPreference();
+
+  // Sort students by global preference
+  const sortedStudents = useMemo(() =>
+    sortStudents(students, sortPreference),
+    [students, sortPreference]
+  );
 
   const toggleStudent = (studentId) => {
     setSelectedStudents(prev =>
@@ -18,7 +27,7 @@ export default function BountyCompletionModal({ bounty, students = [], onClose, 
   };
 
   const selectAll = () => {
-    setSelectedStudents(students.map(s => s.id));
+    setSelectedStudents(sortedStudents.map(s => s.id));
   };
 
   const selectNone = () => {
@@ -77,7 +86,7 @@ export default function BountyCompletionModal({ bounty, students = [], onClose, 
 
           {/* Student List */}
           <div className="max-h-64 overflow-y-auto space-y-1 border rounded-lg p-2 dark:border-slate-700">
-            {students.map(student => {
+            {sortedStudents.map(student => {
               const isSelected = selectedStudents.includes(student.id);
 
               return (
@@ -106,7 +115,7 @@ export default function BountyCompletionModal({ bounty, students = [], onClose, 
               );
             })}
 
-            {students.length === 0 && (
+            {sortedStudents.length === 0 && (
               <p className="text-center text-slate-500 py-4">
                 Keine Schüler in dieser Klasse
               </p>

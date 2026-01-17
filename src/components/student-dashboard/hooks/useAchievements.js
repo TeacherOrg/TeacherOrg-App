@@ -91,6 +91,8 @@ export function useAchievements(studentData, options = {}) {
   // Track previously earned achievement IDs to detect new unlocks
   const prevEarnedRef = useRef(new Set());
   const initializedRef = useRef(false);
+  // Guard to prevent multiple simultaneous award streams
+  const isAwardingRef = useRef(false);
   // NEW: Calculate all achievement progressions
   // Two-phase calculation to handle Engagement achievements that depend on Epic/Legendary counts
   const progressions = useMemo(() => {
@@ -334,6 +336,9 @@ export function useAchievements(studentData, options = {}) {
   useEffect(() => {
     if (!onAchievementEarned || !studentId) return;
 
+    // Prevent multiple simultaneous award streams (effect can trigger multiple times)
+    if (isAwardingRef.current) return;
+
     const currentEarned = achievementsWithVisibility.filter(a => a.earned);
 
     // On first run, just initialize the set without calling callbacks
@@ -346,11 +351,26 @@ export function useAchievements(studentData, options = {}) {
     // Find newly earned achievements (not in previous set)
     const newlyEarned = currentEarned.filter(a => !prevEarnedRef.current.has(a.id));
 
-    // Call callback for each newly earned achievement
-    newlyEarned.forEach(achievement => {
-      onAchievementEarned(achievement, achievement.tier, studentId);
-      prevEarnedRef.current.add(achievement.id);
-    });
+    // Nothing new to award
+    if (newlyEarned.length === 0) return;
+
+    // Call callbacks SEQUENTIALLY to prevent race conditions
+    // (parallel execution causes duplicate coin awards)
+    (async () => {
+      isAwardingRef.current = true;
+      try {
+        for (const achievement of newlyEarned) {
+          prevEarnedRef.current.add(achievement.id);
+          try {
+            await onAchievementEarned(achievement, achievement.tier, studentId);
+          } catch (error) {
+            // Continue with next achievement even if one fails
+          }
+        }
+      } finally {
+        isAwardingRef.current = false;
+      }
+    })();
   }, [achievementsWithVisibility, onAchievementEarned, studentId]);
 
   // Group achievements by category

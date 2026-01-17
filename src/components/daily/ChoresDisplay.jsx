@@ -1,6 +1,5 @@
-import { useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import { User, Check, X, CheckCircle, XCircle } from "lucide-react";
+import { motion } from "framer-motion";
+import { User, Check, X, CheckCircle, XCircle, RotateCcw } from "lucide-react";
 
 export default function ChoresDisplay({
   assignments,
@@ -10,8 +9,6 @@ export default function ChoresDisplay({
   isDark,
   onMarkCompleted
 }) {
-  const [hoveredChoreId, setHoveredChoreId] = useState(null);
-
   // Verknüpfe Assignments mit Chores und Students
   const enrichedAssignments = assignments.map((assignment) => {
     const chore = chores.find((c) => c.id === assignment.chore_id) || {};
@@ -105,11 +102,10 @@ export default function ChoresDisplay({
     hover: { scale: 1.02, y: -2 },
   };
 
-  const handleMarkCompleted = (assignmentIds, isCompleted) => {
+  const handleMarkCompleted = (assignmentIds, status) => {
     if (onMarkCompleted) {
-      onMarkCompleted(assignmentIds, isCompleted);
+      onMarkCompleted(assignmentIds, status);
     }
-    setHoveredChoreId(null);
   };
 
   return (
@@ -141,8 +137,6 @@ export default function ChoresDisplay({
                   border: `2px solid ${chore.choreColor}40`,
                   color: isDark ? "#e2e8f0" : "#1e293b",
                 }}
-                onMouseEnter={() => setHoveredChoreId(chore.chore_id)}
-                onMouseLeave={() => setHoveredChoreId(null)}
               >
                 {/* Status Indicator */}
                 {chore.isCompleted && (
@@ -157,7 +151,7 @@ export default function ChoresDisplay({
                 )}
 
                 {/* Card Content */}
-                <div className={`transition-all duration-300 ${hoveredChoreId === chore.chore_id ? 'blur-sm opacity-50' : ''}`}>
+                <div>
                   {/* Grosses Emoji */}
                   <div className="text-4xl md:text-5xl mb-3 drop-shadow-sm">
                     {chore.choreIcon}
@@ -180,85 +174,61 @@ export default function ChoresDisplay({
 
                   {/* Zugewiesene Schüler */}
                   <div
-                    className="flex flex-col gap-1 text-sm mt-3 pt-3 w-full"
+                    className="flex flex-col gap-1.5 text-sm mt-3 pt-3 w-full"
                     style={{ borderTop: `1px solid ${chore.choreColor}30` }}
                   >
                     {chore.students.map((student, idx) => (
-                      <div key={idx} className="flex items-center gap-2 justify-center">
-                        <User className="w-4 h-4" style={{ color: chore.choreColor }} />
-                        <span className={`font-semibold ${
+                      <div key={idx} className="flex items-center gap-2 w-full">
+                        <User className="w-4 h-4 flex-shrink-0" style={{ color: chore.choreColor }} />
+                        <span className={`font-semibold flex-1 text-left ${
                           student.isCompleted ? 'line-through text-green-600' :
                           student.isNotCompleted ? 'line-through text-red-500' : ''
                         }`}>
                           {student.name}
                         </span>
-                        {student.isCompleted && (
-                          <Check className="w-3 h-3 text-green-500" />
-                        )}
-                        {student.isNotCompleted && (
-                          <X className="w-3 h-3 text-red-500" />
-                        )}
+                        {/* Inline Buttons für individuelle Markierung */}
+                        <div className="flex items-center gap-1 flex-shrink-0">
+                          {student.status !== 'completed' && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleMarkCompleted([student.assignmentId], 'completed');
+                              }}
+                              className="p-1 rounded-md hover:bg-green-100 dark:hover:bg-green-900/30 transition-colors"
+                              title="Als erledigt markieren"
+                            >
+                              <Check className="w-4 h-4 text-green-500 hover:text-green-700" />
+                            </button>
+                          )}
+                          {student.status !== 'not_completed' && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleMarkCompleted([student.assignmentId], 'not_completed');
+                              }}
+                              className="p-1 rounded-md hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors"
+                              title="Als nicht erledigt markieren"
+                            >
+                              <X className="w-4 h-4 text-red-500 hover:text-red-700" />
+                            </button>
+                          )}
+                          {(student.status === 'completed' || student.status === 'not_completed') && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleMarkCompleted([student.assignmentId], 'pending');
+                              }}
+                              className="p-1 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700/30 transition-colors"
+                              title="Zurücksetzen"
+                            >
+                              <RotateCcw className="w-3 h-3 text-gray-400 hover:text-gray-600" />
+                            </button>
+                          )}
+                        </div>
                       </div>
                     ))}
                   </div>
                 </div>
-
-                {/* Hover Overlay with Buttons */}
-                <AnimatePresence>
-                  {hoveredChoreId === chore.chore_id && (
-                    <motion.div
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      exit={{ opacity: 0 }}
-                      transition={{ duration: 0.2 }}
-                      className="absolute inset-0 rounded-2xl flex flex-col items-center justify-center gap-3 z-20"
-                      style={{ backgroundColor: 'rgba(0,0,0,0.3)' }}
-                    >
-                      {/* Pending oder not_completed: Erledigt-Button anzeigen */}
-                      {!chore.isCompleted && (
-                        <motion.button
-                          initial={{ y: -10, opacity: 0 }}
-                          animate={{ y: 0, opacity: 1 }}
-                          exit={{ y: -10, opacity: 0 }}
-                          transition={{ delay: 0.05 }}
-                          onClick={() => handleMarkCompleted(chore.assignmentIds, 'completed')}
-                          className="flex items-center gap-2 px-5 py-2.5 bg-green-500 hover:bg-green-600 text-white font-semibold rounded-xl shadow-lg transition-colors"
-                        >
-                          <Check className="w-5 h-5" />
-                          Erledigt
-                        </motion.button>
-                      )}
-                      {/* Pending: Nicht-erledigt-Button anzeigen */}
-                      {!chore.isCompleted && !chore.isNotCompleted && (
-                        <motion.button
-                          initial={{ y: 10, opacity: 0 }}
-                          animate={{ y: 0, opacity: 1 }}
-                          exit={{ y: 10, opacity: 0 }}
-                          transition={{ delay: 0.1 }}
-                          onClick={() => handleMarkCompleted(chore.assignmentIds, 'not_completed')}
-                          className="flex items-center gap-2 px-5 py-2.5 bg-red-500 hover:bg-red-600 text-white font-semibold rounded-xl shadow-lg transition-colors"
-                        >
-                          <X className="w-5 h-5" />
-                          Nicht erledigt
-                        </motion.button>
-                      )}
-                      {/* Completed oder not_completed: Zurücksetzen-Button anzeigen */}
-                      {(chore.isCompleted || chore.isNotCompleted) && (
-                        <motion.button
-                          initial={{ y: 10, opacity: 0 }}
-                          animate={{ y: 0, opacity: 1 }}
-                          exit={{ y: 10, opacity: 0 }}
-                          transition={{ delay: 0.1 }}
-                          onClick={() => handleMarkCompleted(chore.assignmentIds, 'pending')}
-                          className="flex items-center gap-2 px-5 py-2.5 bg-slate-500 hover:bg-slate-600 text-white font-semibold rounded-xl shadow-lg transition-colors"
-                        >
-                          <X className="w-5 h-5" />
-                          Zurücksetzen
-                        </motion.button>
-                      )}
-                    </motion.div>
-                  )}
-                </AnimatePresence>
               </motion.div>
             ))}
           </div>

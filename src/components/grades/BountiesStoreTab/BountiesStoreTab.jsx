@@ -1,13 +1,15 @@
 import React, { useState } from 'react';
-import { Scroll, ShoppingBag, CheckCircle, Coins, Star } from 'lucide-react';
+import { Scroll, ShoppingBag, CheckCircle, Coins, Star, Target } from 'lucide-react';
 import BountyManager from './BountyManager';
 import StoreManager from './StoreManager';
 import PurchaseApprovals from './PurchaseApprovals';
 import CurrencyOverview from './CurrencyOverview';
 import AchievementRewards from './AchievementRewards';
+import GoalsOverview from './GoalsOverview';
 import { useBountyManager } from '@/components/student-dashboard/hooks/useBounties';
 import { useStoreManager } from '@/components/student-dashboard/hooks/useStore';
 import { useAllStudentsCurrency } from '@/components/student-dashboard/hooks/useCurrency';
+import { useClassGoals } from './hooks/useClassGoals';
 
 /**
  * BountiesStoreTab - Main teacher interface for managing bounties, store, and currency
@@ -20,6 +22,7 @@ export default function BountiesStoreTab({ students = [], activeClassId }) {
   const bountyManager = useBountyManager();
   const storeManager = useStoreManager();
   const currencyOverview = useAllStudentsCurrency(activeClassId);
+  const classGoals = useClassGoals(students, currencyOverview.awardCurrencyForStudent);
 
   const subTabs = [
     {
@@ -45,6 +48,13 @@ export default function BountiesStoreTab({ students = [], activeClassId }) {
       id: 'achievements',
       label: 'Erfolge',
       icon: Star
+    },
+    {
+      id: 'goals',
+      label: 'Ziele',
+      icon: Target,
+      badge: classGoals.getActiveGoals().length || 0,
+      badgeColor: classGoals.getActiveGoals().length > 0 ? 'bg-purple-500' : 'bg-slate-500'
     },
     {
       id: 'currency',
@@ -112,6 +122,13 @@ export default function BountiesStoreTab({ students = [], activeClassId }) {
 
         {activeSubTab === 'achievements' && (
           <AchievementRewards />
+        )}
+
+        {activeSubTab === 'goals' && (
+          <GoalsOverview
+            students={students}
+            awardCurrencyFn={currencyOverview.awardCurrencyForStudent}
+          />
         )}
 
         {activeSubTab === 'currency' && (

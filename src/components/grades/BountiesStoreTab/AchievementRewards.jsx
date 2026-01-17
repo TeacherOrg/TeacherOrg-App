@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Star, ChevronDown, ChevronRight, Coins, Loader2, RotateCcw } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -20,6 +20,17 @@ export default function AchievementRewards() {
   const [editingAchievement, setEditingAchievement] = useState(null);
   const [editValue, setEditValue] = useState(0);
   const [isSaving, setIsSaving] = useState(false);
+
+  // Escape key handler for modal
+  useEffect(() => {
+    const handleEscape = (e) => {
+      if (e.key === 'Escape' && editingAchievement && !isSaving) {
+        setEditingAchievement(null);
+      }
+    };
+    document.addEventListener('keydown', handleEscape);
+    return () => document.removeEventListener('keydown', handleEscape);
+  }, [editingAchievement, isSaving]);
 
   // Group achievements by category
   const groupedAchievements = useMemo(() => {
@@ -232,7 +243,7 @@ export default function AchievementRewards() {
                   <Input
                     type="number"
                     min={0}
-                    max={20}
+                    max={100}
                     value={editValue}
                     onChange={(e) => setEditValue(parseInt(e.target.value) || 0)}
                     className="w-20 text-center"
@@ -241,7 +252,7 @@ export default function AchievementRewards() {
                   <Button
                     size="sm"
                     variant="outline"
-                    onClick={() => setEditValue(Math.min(20, editValue + 1))}
+                    onClick={() => setEditValue(Math.min(100, editValue + 1))}
                     disabled={isSaving}
                   >
                     +

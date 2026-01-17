@@ -21,10 +21,10 @@ const GroupSet = {
   }
 };
 
-export function useGroups() {
+export function useGroups(initialClassId = null, onClassIdChange = null) {
   const [allStudents, setAllStudents] = useState([]);
   const [classes, setClasses] = useState([]);
-  const [activeClassId, setActiveClassId] = useState(null);
+  const [activeClassId, setActiveClassIdInternal] = useState(initialClassId);
   const [groups, setGroups] = useState([]);
   const [savedGroupSets, setSavedGroupSets] = useState([]);
   const [numGroups, setNumGroups] = useState(2);
@@ -33,7 +33,22 @@ export function useGroups() {
 
   const userId = pb.authStore.model?.id;
 
-  // Initiales Laden
+  // Wrapper für setActiveClassId der optionalen Callback aufruft
+  const setActiveClassId = (newClassId) => {
+    setActiveClassIdInternal(newClassId);
+    if (onClassIdChange) {
+      onClassIdChange(newClassId);
+    }
+  };
+
+  // Sync initialClassId → State (wenn von außen geändert)
+  useEffect(() => {
+    if (initialClassId !== activeClassId && initialClassId !== null) {
+      setActiveClassIdInternal(initialClassId);
+    }
+  }, [initialClassId]);
+
+  // Initiales Laden mit Team Teaching
   useEffect(() => {
     const loadInitial = async () => {
       if (!userId) {
@@ -44,18 +59,81 @@ export function useGroups() {
 
       setIsLoading(true);
       try {
-        const [students, classesList, sets] = await Promise.all([
+        // Lade eigene Daten + Team Teaching parallel
+        const [students, ownedClasses, sets, teamTeachingAccess] = await Promise.all([
           Student.list(),
           Class.list(),
-          GroupSet.list(`user_id = "${userId}"`)
+          GroupSet.list(`user_id = "${userId}"`),
+          pb.collection('team_teachings').getFullList({
+            // WICHTIG: owner_id != userId um Self-Team-Teaching-Records auszuschließen
+            filter: `invited_user_id = '${userId}' && status = 'accepted' && owner_id != '${userId}'`,
+            expand: 'class_id,owner_id',
+            $autoCancel: false
+          }).catch(() => [])
         ]);
 
-        setAllStudents(students);
-        setClasses(classesList);
+        // Eigene Klassen mit Metadaten
+        const ownedWithMeta = (ownedClasses || []).map(cls => ({
+          ...cls,
+          isOwner: true,
+          permissionLevel: 'full_access'
+        }));
+
+        // Geteilte Klassen (nur nicht-versteckte) - MIT Owner-ID für Gruppen-Ladung
+        const sharedClasses = teamTeachingAccess
+          .filter(tt => (tt.expand?.class_id || tt.class_id) && !tt.is_hidden)
+          .map(tt => ({
+            ...(tt.expand?.class_id || {}),
+            id: tt.expand?.class_id?.id || tt.class_id,
+            name: tt.expand?.class_id?.name || tt.class_name || 'Geteilte Klasse',
+            isOwner: false,
+            permissionLevel: tt.permission_level || 'view_only',
+            teamTeachingId: tt.id,
+            ownerEmail: tt.expand?.owner_id?.email || '',
+            // NEU: Owner-ID für Gruppen-Ladung (Co-Teacher soll Owner's Gruppen sehen)
+            teamTeachingOwnerId: tt.owner_id
+          }));
+
+        // Deduplizierung (owned hat Priorität)
+        const merged = [...ownedWithMeta, ...sharedClasses];
+        const uniqueClasses = merged.reduce((acc, cls) => {
+          const existing = acc.find(c => c.id === cls.id);
+          if (!existing) {
+            acc.push(cls);
+          } else if (cls.isOwner && !existing.isOwner) {
+            const idx = acc.findIndex(c => c.id === cls.id);
+            acc[idx] = cls;
+          }
+          return acc;
+        }, []);
+
+        // Lade Schüler von geteilten Klassen
+        const visibleSharedClassIds = teamTeachingAccess
+          .filter(tt => !tt.is_hidden)
+          .map(tt => tt.class_id);
+
+        let sharedStudents = [];
+        if (visibleSharedClassIds.length > 0) {
+          for (const classId of visibleSharedClassIds) {
+            const classStudents = await pb.collection('students').getFullList({
+              filter: `class_id = '${classId}'`,
+              $autoCancel: false
+            }).catch(() => []);
+            sharedStudents = [...sharedStudents, ...classStudents];
+          }
+        }
+
+        setAllStudents([...(students || []), ...sharedStudents]);
+        setClasses(uniqueClasses);
         setSavedGroupSets(sets);
 
-        if (classesList.length > 0) {
-          setActiveClassId(classesList[0].id);
+        // Setze activeClassId nur wenn nicht von außen vorgegeben
+        if (uniqueClasses.length > 0 && !activeClassId && !initialClassId) {
+          const firstClassId = uniqueClasses[0].id;
+          setActiveClassIdInternal(firstClassId);
+          if (onClassIdChange) {
+            onClassIdChange(firstClassId);
+          }
         }
       } catch (err) {
         setError("Failed to load initial data.");
@@ -69,6 +147,7 @@ export function useGroups() {
   }, [userId]);
 
   // Gruppen laden, wenn Klasse wechselt
+  // NEU: Für geteilte Klassen die Owner-ID verwenden, damit Co-Teacher die Gruppen des Owners sieht
   const loadGroupsForClass = useCallback(async (classId) => {
     if (!classId) {
       setGroups([]);
@@ -76,8 +155,12 @@ export function useGroups() {
     }
 
     try {
+      // Prüfe ob es eine geteilte Klasse ist (mit teamTeachingOwnerId)
+      const targetClass = classes.find(c => c.id === classId);
+      const ownerIdForGroups = targetClass?.teamTeachingOwnerId || userId;
+
       const fetched = await Group.list({
-        filter: `class_id = "${classId}" && user_id = "${userId}"`
+        filter: `class_id = "${classId}" && user_id = "${ownerIdForGroups}"`
       });
       setGroups(fetched);
     } catch (err) {
@@ -85,7 +168,7 @@ export function useGroups() {
       console.error(err);
       setGroups([]);
     }
-  }, [userId]);
+  }, [userId, classes]);
 
   useEffect(() => {
     loadGroupsForClass(activeClassId);

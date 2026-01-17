@@ -42,7 +42,7 @@ const PRESET_EMOJIS = [
 
 const WIZARD_STEPS = [
   { id: 'welcome', title: 'Willkommen', icon: Sparkles, skippable: false },
-  { id: 'class', title: 'Klasse', icon: Users, skippable: true },
+  { id: 'class', title: 'Klasse', icon: Users, skippable: false },
   { id: 'subjects', title: 'Fächer', icon: BookOpen, skippable: true },
   { id: 'students', title: 'Schüler', icon: UserPlus, skippable: true },
   { id: 'schedule-type', title: 'Stundenplan', icon: Calendar, skippable: true },

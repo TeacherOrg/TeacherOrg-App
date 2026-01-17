@@ -1,4 +1,4 @@
-import React, { Suspense, useState, useEffect, useCallback } from 'react';
+import React, { Suspense, useState, useEffect, useCallback, useMemo } from 'react';
 import { Button } from "@/components/ui/button";
 import { usePreferences } from './hooks/usePreferences';
 import { useToast } from "@/components/ui/use-toast";
@@ -6,7 +6,8 @@ import { Performance, UeberfachlichKompetenz, Subject, Competency, Fachbereich, 
 import CalendarLoader from '../ui/CalendarLoader';
 import PerformanceModal from './PerformanceModal';
 import UeberfachlichModal from './UeberfachlichModal';
-import { BarChart3, Plus, GraduationCap, Users } from 'lucide-react';
+import { BarChart3, Plus, GraduationCap, Users, Eye } from 'lucide-react';
+import { canEditClass, isViewOnly } from '@/utils/teamTeachingUtils';
 
 // Lazy-load Tabs for performance
 const DiagramTab = React.lazy(() => import('./DiagramTab/DiagramTab')); // Korrigierter Pfad
@@ -23,6 +24,11 @@ const PerformanceView = ({ students = [], performances = [], activeClassId, setA
   const [isPerformanceModalOpen, setIsPerformanceModalOpen] = useState(false);
   const [isUeberfachlichModalOpen, setIsUeberfachlichModalOpen] = useState(false);
   const [editingPerformance, setEditingPerformance] = useState(null);
+
+  // Team Teaching: Ermittle Berechtigungen fuer aktive Klasse
+  const activeClass = useMemo(() => classes.find(c => c.id === activeClassId), [classes, activeClassId]);
+  const canEdit = useMemo(() => canEditClass(activeClass), [activeClass]);
+  const viewOnly = useMemo(() => isViewOnly(activeClass), [activeClass]);
 
   const {
     tab,
@@ -256,7 +262,15 @@ const PerformanceView = ({ students = [], performances = [], activeClassId, setA
           alert('Einige Leistungen konnten nicht gespeichert werden. Bitte überprüfen Sie die Daten und versuchen Sie es erneut.');
         }
       }
-      if (onDataChange) onDataChange();
+
+      // Expliziter Reload der Performances nach dem Speichern
+      const updatedPerformances = await Performance.list({
+        filter: `class_id = '${activeClassId}'`,
+        perPage: 500,
+        expand: 'student_id,class_id,subject'
+      });
+
+      if (onDataChange) onDataChange(updatedPerformances);
       setIsPerformanceModalOpen(false);
       setEditingPerformance(null);
       savePreferences();
@@ -491,18 +505,46 @@ const PerformanceView = ({ students = [], performances = [], activeClassId, setA
         {/* Spacer */}
         <div className="flex-1" />
 
-        {/* Create Buttons */}
+        {/* Create Buttons - nur wenn Bearbeitungsrechte vorhanden */}
         {tab === 'leistungen' && (
-          <Button onClick={handleCreatePerformance} size="sm" className="bg-blue-600 hover:bg-blue-700">
-            <Plus className="w-4 h-4 mr-1.5"/>
-            Neue Leistung
-          </Button>
+          <>
+            {viewOnly && (
+              <div className="flex items-center gap-1.5 text-sm text-blue-400 mr-2">
+                <Eye className="w-4 h-4" />
+                <span>Nur Einsicht</span>
+              </div>
+            )}
+            <Button
+              onClick={handleCreatePerformance}
+              size="sm"
+              className="bg-blue-600 hover:bg-blue-700"
+              disabled={!canEdit}
+              title={!canEdit ? 'Keine Bearbeitungsrechte fuer diese Klasse' : ''}
+            >
+              <Plus className="w-4 h-4 mr-1.5"/>
+              Neue Leistung
+            </Button>
+          </>
         )}
         {tab === 'ueberfachlich' && (
-          <Button onClick={handleCreateUeberfachlich} size="sm" className="bg-purple-600 hover:bg-purple-700">
-            <Plus className="w-4 h-4 mr-1.5"/>
-            Neue Kompetenz
-          </Button>
+          <>
+            {viewOnly && (
+              <div className="flex items-center gap-1.5 text-sm text-purple-400 mr-2">
+                <Eye className="w-4 h-4" />
+                <span>Nur Einsicht</span>
+              </div>
+            )}
+            <Button
+              onClick={handleCreateUeberfachlich}
+              size="sm"
+              className="bg-purple-600 hover:bg-purple-700"
+              disabled={!canEdit}
+              title={!canEdit ? 'Keine Bearbeitungsrechte fuer diese Klasse' : ''}
+            >
+              <Plus className="w-4 h-4 mr-1.5"/>
+              Neue Kompetenz
+            </Button>
+          </>
         )}
       </div>
       <Suspense fallback={<CalendarLoader />}>
@@ -535,6 +577,7 @@ const PerformanceView = ({ students = [], performances = [], activeClassId, setA
               setEditingPerformance(performance);
               setIsPerformanceModalOpen(true);
             }}
+            canEdit={canEdit}
           />
         )}
         {tab === 'ueberfachlich' && (
@@ -551,6 +594,7 @@ const PerformanceView = ({ students = [], performances = [], activeClassId, setA
             setExpandedCompetencies={setExpandedUeberfachlichCompetencies}
             allCompetencies={allCompetencies}
             savePreferences={savePreferences}
+            canEdit={canEdit}
           />
         )}
       </Suspense>

@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { PlusCircle } from "lucide-react";
+import { PlusCircle, Eye } from "lucide-react";
 import { Lesson, YearlyLesson, AllerleiLesson } from '@/api/entities';
 import { debounce } from 'lodash';
 import { useAllerleiLogic } from '@/components/timetable/allerlei/useAllerleiLogic';
@@ -19,6 +19,8 @@ import { useQueryClient } from '@tanstack/react-query';
 import StepRow from '@/components/lesson-planning/StepRow';
 import { generateId } from '@/components/lesson-planning/utils';
 import { useStepManagement, useTemplateSaveModal } from '@/components/lesson-planning/hooks';
+import { DndContext, closestCenter, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
+import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import TemplateSaveModal from '@/components/lesson-planning/TemplateSaveModal';
 
 // Shared components
@@ -51,7 +53,8 @@ export default function LessonModal({
   subjectColor, initialSubject, subjects, topics, activeClassId, setEditingLesson,
   setIsModalOpen, currentYear,
   formData: propFormData = {},
-  settings = null
+  settings = null,
+  canEdit = true
 }) {
   const { setAllLessons } = useLessonStore();
   const queryClient = useQueryClient();
@@ -74,8 +77,40 @@ export default function LessonModal({
     handleUpdatePrimaryStep,
     handleAddSecondStep,
     handleRemoveSecondStep,
-    handleUpdateSecondStep
+    handleUpdateSecondStep,
+    reorderPrimarySteps,
+    reorderSecondSteps
   } = useStepManagement();
+
+  // DnD Sensors for step reordering
+  const stepSensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8,
+      },
+    })
+  );
+
+  // Drag End Handlers for steps
+  const handlePrimaryStepsDragEnd = (event) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const oldIndex = primarySteps.findIndex(s => s.id === active.id);
+    const newIndex = primarySteps.findIndex(s => s.id === over.id);
+    if (oldIndex !== -1 && newIndex !== -1) {
+      reorderPrimarySteps(oldIndex, newIndex);
+    }
+  };
+
+  const handleSecondStepsDragEnd = (event) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const oldIndex = secondSteps.findIndex(s => s.id === active.id);
+    const newIndex = secondSteps.findIndex(s => s.id === over.id);
+    if (oldIndex !== -1 && newIndex !== -1) {
+      reorderSecondSteps(oldIndex, newIndex);
+    }
+  };
 
   const {
     showTemplateSave,
@@ -1101,6 +1136,15 @@ export default function LessonModal({
           gradient={displayModalColor}
         />
 
+        {!canEdit && (
+          <div className="flex items-center gap-2 p-3 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 mt-4">
+            <Eye className="w-4 h-4 text-amber-600 dark:text-amber-400 flex-shrink-0" />
+            <span className="text-sm text-amber-800 dark:text-amber-300">
+              <strong>Nur Einsicht:</strong> Du kannst diese Lektion ansehen, aber nicht bearbeiten (Team Teaching).
+            </span>
+          </div>
+        )}
+
         <form id="lesson-form" onSubmit={handleSubmit} className="space-y-6 pt-4">
           {validationError && (
             <div className="p-3 bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 rounded-lg">
@@ -1275,18 +1319,22 @@ export default function LessonModal({
               />
             </div>
             <div className="space-y-3 p-4 border rounded-lg bg-slate-100/50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700">
-              {primarySteps.map((step, index) => (
-                <StepRow
-                  key={`primary-${index}-${step.id}`}
-                  step={step}
-                  onUpdate={(field, value) => handleUpdatePrimaryStep(step.id, field, value)}
-                  onRemove={() => handleRemovePrimaryStep(step.id)}
-                  topicMaterials={topicMaterials}
-                  topicColor={topicColor}
-                  isLast={index === primarySteps.length - 1}
-                  lessonDuration={settings?.lessonDuration || 45}
-                />
-              ))}
+              <DndContext sensors={stepSensors} collisionDetection={closestCenter} onDragEnd={handlePrimaryStepsDragEnd}>
+                <SortableContext items={primarySteps.map(s => s.id)} strategy={verticalListSortingStrategy}>
+                  {primarySteps.map((step, index) => (
+                    <StepRow
+                      key={`primary-${index}-${step.id}`}
+                      step={step}
+                      onUpdate={(field, value) => handleUpdatePrimaryStep(step.id, field, value)}
+                      onRemove={() => handleRemovePrimaryStep(step.id)}
+                      topicMaterials={topicMaterials}
+                      topicColor={topicColor}
+                      isLast={index === primarySteps.length - 1}
+                      lessonDuration={settings?.lessonDuration || 45}
+                    />
+                  ))}
+                </SortableContext>
+              </DndContext>
               <div className="flex gap-2 mt-2">
                 <Button type="button" variant="outline" onClick={handleAddPrimaryStep} className="w-full border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white bg-white dark:bg-slate-700 hover:bg-slate-100 dark:hover:bg-slate-600">
                   <PlusCircle className="w-4 h-4 mr-2" />
@@ -1334,18 +1382,22 @@ export default function LessonModal({
                     lessonDuration={settings?.lessonDuration || 45}
                   />
                 ) : (
-                  secondSteps.map((step, index) => (
-                    <StepRow
-                      key={`second-${index}-${step.id}`}
-                      step={step}
-                      onUpdate={(field, value) => handleUpdateSecondStep(step.id, field, value)}
-                      onRemove={() => handleRemoveSecondStep(step.id)}
-                      topicMaterials={topicMaterials}
-                      topicColor={topicColor}
-                      isLast={index === secondSteps.length - 1}
-                      lessonDuration={settings?.lessonDuration || 45}
-                    />
-                  ))
+                  <DndContext sensors={stepSensors} collisionDetection={closestCenter} onDragEnd={handleSecondStepsDragEnd}>
+                    <SortableContext items={secondSteps.map(s => s.id)} strategy={verticalListSortingStrategy}>
+                      {secondSteps.map((step, index) => (
+                        <StepRow
+                          key={`second-${index}-${step.id}`}
+                          step={step}
+                          onUpdate={(field, value) => handleUpdateSecondStep(step.id, field, value)}
+                          onRemove={() => handleRemoveSecondStep(step.id)}
+                          topicMaterials={topicMaterials}
+                          topicColor={topicColor}
+                          isLast={index === secondSteps.length - 1}
+                          lessonDuration={settings?.lessonDuration || 45}
+                        />
+                      ))}
+                    </SortableContext>
+                  </DndContext>
                 )}
                 <Button type="button" variant="outline" onClick={handleAddSecondStep} className="w-full mt-2 border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white bg-white dark:bg-slate-700 hover:bg-slate-100 dark:hover:bg-slate-600">
                   <PlusCircle className="w-4 h-4 mr-2" />
@@ -1359,6 +1411,7 @@ export default function LessonModal({
             isEditing={isEditing}
             isSubmitting={isSubmitting}
             isFormValid={isFormValid}
+            canEdit={canEdit}
             onDelete={handleDeleteClick}
             onClose={onClose}
             saveButtonColor={displayModalColor}

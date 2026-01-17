@@ -10,15 +10,17 @@ export const ACHIEVEMENT_TIERS = {
   LEGENDARY: 'legendary'
 };
 
-// Main categories (2 top-level categories)
+// Main categories (3 top-level categories)
 export const MAIN_CATEGORIES = {
   FAECHER: 'faecher',
-  KOMPETENZEN: 'kompetenzen'
+  KOMPETENZEN: 'kompetenzen',
+  VERSCHIEDENES: 'verschiedenes'
 };
 
 export const MAIN_CATEGORY_NAMES = {
   [MAIN_CATEGORIES.FAECHER]: 'Fächer',
-  [MAIN_CATEGORIES.KOMPETENZEN]: 'Kompetenzen'
+  [MAIN_CATEGORIES.KOMPETENZEN]: 'Kompetenzen',
+  [MAIN_CATEGORIES.VERSCHIEDENES]: 'Verschiedenes'
 };
 
 export const ACHIEVEMENT_CATEGORIES = {
@@ -32,7 +34,8 @@ export const ACHIEVEMENT_CATEGORIES = {
   PERFECTION: 'perfection',
   STREAK: 'streak',
   ENGAGEMENT: 'engagement',
-  CURRENCY: 'currency'
+  CURRENCY: 'currency',
+  BOUNTY: 'bounty'
 };
 
 // Category display names (German)
@@ -47,23 +50,29 @@ export const CATEGORY_NAMES = {
   [ACHIEVEMENT_CATEGORIES.PERFECTION]: 'Perfektion',
   [ACHIEVEMENT_CATEGORIES.STREAK]: 'Verbesserungsstreak',
   [ACHIEVEMENT_CATEGORIES.ENGAGEMENT]: 'Engagement',
-  [ACHIEVEMENT_CATEGORIES.CURRENCY]: 'Währungsmeister'
+  [ACHIEVEMENT_CATEGORIES.CURRENCY]: 'Währungsmeister',
+  [ACHIEVEMENT_CATEGORIES.BOUNTY]: 'Kopfgeldjäger'
 };
 
 // Mapping: Sub-category → Main category
 export const CATEGORY_TO_MAIN = {
+  // Fächer
   [ACHIEVEMENT_CATEGORIES.GRADES]: MAIN_CATEGORIES.FAECHER,
   [ACHIEVEMENT_CATEGORIES.PERFECTION]: MAIN_CATEGORIES.FAECHER,
   [ACHIEVEMENT_CATEGORIES.STREAK]: MAIN_CATEGORIES.FAECHER,
   [ACHIEVEMENT_CATEGORIES.IMPROVEMENT]: MAIN_CATEGORIES.FAECHER,
   [ACHIEVEMENT_CATEGORIES.CORE_SUBJECTS]: MAIN_CATEGORIES.FAECHER,
 
+  // Kompetenzen
   [ACHIEVEMENT_CATEGORIES.GOALS]: MAIN_CATEGORIES.KOMPETENZEN,
   [ACHIEVEMENT_CATEGORIES.CHORES]: MAIN_CATEGORIES.KOMPETENZEN,
   [ACHIEVEMENT_CATEGORIES.COMPETENCY]: MAIN_CATEGORIES.KOMPETENZEN,
   [ACHIEVEMENT_CATEGORIES.REFLECTION]: MAIN_CATEGORIES.KOMPETENZEN,
-  [ACHIEVEMENT_CATEGORIES.ENGAGEMENT]: MAIN_CATEGORIES.KOMPETENZEN,
-  [ACHIEVEMENT_CATEGORIES.CURRENCY]: MAIN_CATEGORIES.KOMPETENZEN
+  [ACHIEVEMENT_CATEGORIES.CURRENCY]: MAIN_CATEGORIES.KOMPETENZEN,
+  [ACHIEVEMENT_CATEGORIES.BOUNTY]: MAIN_CATEGORIES.KOMPETENZEN,
+
+  // Verschiedenes
+  [ACHIEVEMENT_CATEGORIES.ENGAGEMENT]: MAIN_CATEGORIES.VERSCHIEDENES
 };
 
 // Tier display configuration
@@ -641,12 +650,12 @@ export const achievementProgressions = [
   },
 
   // ============================================
-  // KOMPETENZEN - ENGAGEMENT (4 tiers)
+  // VERSCHIEDENES - ENGAGEMENT (4 tiers)
   // ============================================
   {
     id: 'engagement_progression',
     category: ACHIEVEMENT_CATEGORIES.ENGAGEMENT,
-    mainCategory: MAIN_CATEGORIES.KOMPETENZEN,
+    mainCategory: MAIN_CATEGORIES.VERSCHIEDENES,
     tiers: [
       {
         tier: ACHIEVEMENT_TIERS.COMMON,
@@ -837,6 +846,69 @@ export const achievementProgressions = [
         icon: 'Banknote',
         target: 50,
         calculate: (data) => data.lifetimeSpent || 0
+      }
+    ]
+  },
+
+  // ============================================
+  // KOMPETENZEN - BOUNTY HUNTER (4 tiers)
+  // ============================================
+  {
+    id: 'bounty_progression',
+    category: ACHIEVEMENT_CATEGORIES.BOUNTY,
+    mainCategory: MAIN_CATEGORIES.KOMPETENZEN,
+    tiers: [
+      {
+        tier: ACHIEVEMENT_TIERS.COMMON,
+        name: 'Kopfgeldjäger-Lehrling',
+        description: 'Erledige deine erste Bounty',
+        descriptionEarned: 'Erste Bounty erledigt - Willkommen bei den Kopfgeldjägern!',
+        descriptionInProgress: (data) => {
+          const current = data.progress || 0;
+          return `${current} von 1 Bounty erledigt`;
+        },
+        icon: 'Crosshair',
+        target: 1,
+        calculate: (data) => data.completedBounties || 0
+      },
+      {
+        tier: ACHIEVEMENT_TIERS.RARE,
+        name: 'Kopfgeldjäger',
+        description: 'Erledige 3 Bounties',
+        descriptionEarned: '3 Bounties erledigt - Du hast dir einen Namen gemacht!',
+        descriptionInProgress: (data) => {
+          const current = data.progress || 0;
+          return `${current} von 3 Bounties erledigt`;
+        },
+        icon: 'Target',
+        target: 3,
+        calculate: (data) => data.completedBounties || 0
+      },
+      {
+        tier: ACHIEVEMENT_TIERS.EPIC,
+        name: 'Bounty-Experte',
+        description: 'Erledige 5 Bounties',
+        descriptionEarned: '5 Bounties erledigt - Dein Ruf eilt dir voraus!',
+        descriptionInProgress: (data) => {
+          const current = data.progress || 0;
+          return `${current} von 5 Bounties erledigt`;
+        },
+        icon: 'Swords',
+        target: 5,
+        calculate: (data) => data.completedBounties || 0
+      },
+      {
+        tier: ACHIEVEMENT_TIERS.LEGENDARY,
+        name: 'Legendärer Kopfgeldjäger',
+        description: 'Erledige 10 Bounties',
+        descriptionEarned: '10 Bounties erledigt - Eine lebende Legende!',
+        descriptionInProgress: (data) => {
+          const current = data.progress || 0;
+          return `${current} von 10 Bounties erledigt`;
+        },
+        icon: 'Crown',
+        target: 10,
+        calculate: (data) => data.completedBounties || 0
       }
     ]
   }
@@ -1457,6 +1529,58 @@ export const achievementDefinitions = [
     target: 50,
     unlocks: null,
     calculate: (data) => data.lifetimeSpent || 0
+  },
+
+  // ============================================
+  // CATEGORY 13: Bounty Hunter - 4 Tiers
+  // ============================================
+  {
+    id: 'bounty_1_common',
+    category: ACHIEVEMENT_CATEGORIES.BOUNTY,
+    tier: ACHIEVEMENT_TIERS.COMMON,
+    name: 'Kopfgeldjäger-Lehrling',
+    description: '1 Bounty erledigt',
+    flavor: 'Willkommen bei den Kopfgeldjägern',
+    icon: 'Crosshair',
+    target: 1,
+    unlocks: 'bounty_2_rare',
+    calculate: (data) => data.completedBounties || 0
+  },
+  {
+    id: 'bounty_2_rare',
+    category: ACHIEVEMENT_CATEGORIES.BOUNTY,
+    tier: ACHIEVEMENT_TIERS.RARE,
+    name: 'Kopfgeldjäger',
+    description: '3 Bounties erledigt',
+    flavor: 'Du hast dir einen Namen gemacht',
+    icon: 'Target',
+    target: 3,
+    unlocks: 'bounty_3_epic',
+    calculate: (data) => data.completedBounties || 0
+  },
+  {
+    id: 'bounty_3_epic',
+    category: ACHIEVEMENT_CATEGORIES.BOUNTY,
+    tier: ACHIEVEMENT_TIERS.EPIC,
+    name: 'Bounty-Experte',
+    description: '5 Bounties erledigt',
+    flavor: 'Dein Ruf eilt dir voraus',
+    icon: 'Swords',
+    target: 5,
+    unlocks: 'bounty_4_legendary',
+    calculate: (data) => data.completedBounties || 0
+  },
+  {
+    id: 'bounty_4_legendary',
+    category: ACHIEVEMENT_CATEGORIES.BOUNTY,
+    tier: ACHIEVEMENT_TIERS.LEGENDARY,
+    name: 'Legendärer Kopfgeldjäger',
+    description: '10 Bounties erledigt',
+    flavor: 'Eine lebende Legende',
+    icon: 'Crown',
+    target: 10,
+    unlocks: null,
+    calculate: (data) => data.completedBounties || 0
   }
 ];
 
@@ -1480,3 +1604,45 @@ export function getCategoryName(category) {
 export function getAchievementById(id) {
   return achievementDefinitions.find(a => a.id === id);
 }
+
+/**
+ * Build a map of achievement ID → all previous achievement IDs in progression
+ * Uses the 'unlocks' chain to find progression relationships
+ *
+ * Example: For goals_3_epic, returns ['goals_1_common', 'goals_2_rare', 'goals_3_epic']
+ * This allows awarding coins for all lower tiers when a higher tier is earned
+ */
+function buildProgressionMap(definitions) {
+  const map = {};
+
+  // Build reverse lookup: which achievement unlocks this one?
+  const unlockedBy = {};
+  for (const ach of definitions) {
+    if (ach.unlocks) {
+      unlockedBy[ach.unlocks] = ach.id;
+    }
+  }
+
+  // For each achievement, trace back to find all previous achievements
+  for (const ach of definitions) {
+    const progression = [ach.id];
+    let currentId = ach.id;
+
+    // Walk backwards through the unlock chain
+    while (unlockedBy[currentId]) {
+      const prevId = unlockedBy[currentId];
+      progression.unshift(prevId); // Add to beginning
+      currentId = prevId;
+    }
+
+    map[ach.id] = progression;
+  }
+
+  return map;
+}
+
+/**
+ * Map of achievement ID → all achievement IDs in its progression (from lowest to current tier)
+ * Used for tier progression coin awarding
+ */
+export const ACHIEVEMENT_PROGRESSION_MAP = buildProgressionMap(achievementDefinitions);

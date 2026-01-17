@@ -6,7 +6,20 @@ import { Input } from '@/components/ui/input';
 import { toast } from 'sonner';
 
 // Default emoji picker options
-const EMOJI_OPTIONS = ['🎯', '🎮', '🎵', '🎨', '🏃', '📚', '🌟', '🏆', '🎁', '🎪', '🎭', '🎬', '🪑', '☕', '🍎', '🎲'];
+const EMOJI_OPTIONS = [
+  // Aktivitäten & Spiele
+  '🎯', '🎮', '🎵', '🎨', '🎲', '🎪', '🎭', '🎬', '🎤', '🎸',
+  // Sport & Bewegung
+  '🏃', '⚽', '🏀', '🎾', '🏊', '🚴', '🤸', '⛷️',
+  // Schule & Lernen
+  '📚', '✏️', '📝', '📖', '🎒', '🔬', '🧮', '🌍',
+  // Belohnungen & Erfolge
+  '🌟', '🏆', '🎁', '👑', '💎', '🥇', '🥈', '🥉', '🏅', '⭐', '💫',
+  // Essen & Trinken
+  '☕', '🍎', '🍭', '🍪', '🍬', '🎂', '🍕', '🍦',
+  // Entspannung & Privilegien
+  '🪑', '🛋️', '😎', '🌈', '🌻', '🎈', '🎉', '🎊'
+];
 
 const CATEGORY_OPTIONS = [
   { value: 'privilege', label: 'Privileg' },

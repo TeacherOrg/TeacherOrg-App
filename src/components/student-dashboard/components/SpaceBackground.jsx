@@ -1,24 +1,29 @@
-import React, { useMemo } from 'react';
 import '../styles/space-theme.css';
+import Galaxy from './Galaxy';
 
 /**
- * Animated space background with multiple star layers
- * Pure CSS animations for performance
+ * Animated space background with WebGL Galaxy effect
+ * Uses OGL library for GPU-accelerated rendering
  *
  * @param {boolean} isActive - Controls visibility (for smooth transitions without remounting)
  * @param {ReactNode} children - Optional children (for wrapper mode)
  */
 export default function SpaceBackground({ children, className = '', isActive = true }) {
-  // Generate random shooting stars positions
-  const shootingStars = useMemo(() => {
-    return Array.from({ length: 3 }, (_, i) => ({
-      id: i,
-      top: Math.random() * 50 + '%',
-      left: Math.random() * 100 + '%',
-      delay: Math.random() * 10 + 's',
-      duration: (Math.random() * 2 + 1) + 's',
-    }));
-  }, []);
+  // Galaxy settings for space theme
+  const galaxyProps = {
+    saturation: 0.2,
+    rotationSpeed: 0.02,
+    repulsionStrength: 1,
+    starSpeed: 0.5,
+    speed: 0.05,
+    transparent: false,
+    hueShift: 220,        // Blau/Lila-Töne passend zum Space-Theme
+    glowIntensity: 0.2,   // Reduziert für weniger Glow
+    twinkleIntensity: 0.3,
+    density: 1.2,
+    mouseInteraction: true,
+    mouseRepulsion: true,
+  };
 
   // Overlay mode (no children) - renders as fixed overlay
   if (!children) {
@@ -30,12 +35,10 @@ export default function SpaceBackground({ children, className = '', isActive = t
         {/* Dark background */}
         <div className="absolute inset-0 bg-[#0a0a1a]" />
 
-        {/* Starfield layers */}
-        <div className="starfield">
-          <div className="starfield-layer starfield-far" />
-          <div className="starfield-layer starfield-mid" />
-          <div className="starfield-layer starfield-near" />
-        </div>
+        {/* Galaxy WebGL Background */}
+        {isActive && (
+          <Galaxy {...galaxyProps} />
+        )}
 
         {/* Nebula gradient overlay */}
         <div
@@ -48,28 +51,6 @@ export default function SpaceBackground({ children, className = '', isActive = t
             `,
           }}
         />
-
-        {/* Shooting stars */}
-        {isActive && shootingStars.map((star) => (
-          <div
-            key={star.id}
-            className="absolute w-1 h-1 bg-white rounded-full pointer-events-none"
-            style={{
-              top: star.top,
-              left: star.left,
-              animation: `shooting-star ${star.duration} ${star.delay} ease-out infinite`,
-              opacity: 0,
-            }}
-          />
-        ))}
-
-        <style>{`
-          @keyframes shooting-star {
-            0% { opacity: 0; transform: translateX(0) translateY(0); }
-            10% { opacity: 1; }
-            100% { opacity: 0; transform: translateX(200px) translateY(200px); }
-          }
-        `}</style>
       </div>
     );
   }
@@ -77,11 +58,9 @@ export default function SpaceBackground({ children, className = '', isActive = t
   // Wrapper mode (with children) - original behavior
   return (
     <div className={`space-theme relative min-h-screen ${className}`}>
-      {/* Starfield layers */}
-      <div className="starfield">
-        <div className="starfield-layer starfield-far" />
-        <div className="starfield-layer starfield-mid" />
-        <div className="starfield-layer starfield-near" />
+      {/* Galaxy WebGL Background */}
+      <div className="fixed inset-0 z-0">
+        <Galaxy {...galaxyProps} />
       </div>
 
       {/* Nebula gradient overlay */}
@@ -96,41 +75,10 @@ export default function SpaceBackground({ children, className = '', isActive = t
         }}
       />
 
-      {/* Shooting stars (occasional) */}
-      {shootingStars.map((star) => (
-        <div
-          key={star.id}
-          className="fixed w-1 h-1 bg-white rounded-full pointer-events-none z-10"
-          style={{
-            top: star.top,
-            left: star.left,
-            animation: `shooting-star ${star.duration} ${star.delay} ease-out infinite`,
-            opacity: 0,
-          }}
-        />
-      ))}
-
       {/* Content */}
       <div className="relative z-10">
         {children}
       </div>
-
-      {/* Shooting star animation */}
-      <style>{`
-        @keyframes shooting-star {
-          0% {
-            opacity: 0;
-            transform: translateX(0) translateY(0);
-          }
-          10% {
-            opacity: 1;
-          }
-          100% {
-            opacity: 0;
-            transform: translateX(200px) translateY(200px);
-          }
-        }
-      `}</style>
     </div>
   );
 }

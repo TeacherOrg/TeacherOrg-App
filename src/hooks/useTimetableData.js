@@ -5,15 +5,15 @@ import pb from '@/api/pb';
 import { useLessonStore } from '@/store';
 import { isEqual } from 'lodash';
 
-const useTimetableData = (currentYear, currentWeek) => {
-  const { 
-    setAllLessons, 
-    setYearlyLessons, 
-    setAllerleiLessons, 
-    setTopics, 
-    setSubjects, 
-    setClasses, 
-    setHolidays, 
+const useTimetableData = (currentYear, currentWeek, initialClassId = null, onClassIdChange = null) => {
+  const {
+    setAllLessons,
+    setYearlyLessons,
+    setAllerleiLessons,
+    setTopics,
+    setSubjects,
+    setClasses,
+    setHolidays,
     setSettings,
     allLessons,
     yearlyLessons,
@@ -24,14 +24,32 @@ const useTimetableData = (currentYear, currentWeek) => {
     holidays,
     settings,
   } = useLessonStore();
-  const [activeClassId, setActiveClassId] = useState(null);
+  const [activeClassId, setActiveClassIdInternal] = useState(initialClassId);
   const queryClientLocal = useQueryClient();
 
   const userId = pb.authStore.model?.id;
 
+  // Wrapper für setActiveClassId der optionalen Callback aufruft
+  const setActiveClassId = (newClassId) => {
+    setActiveClassIdInternal(newClassId);
+    if (onClassIdChange) {
+      onClassIdChange(newClassId);
+    }
+  };
+
+  // Sync initialClassId → State (wenn von außen geändert)
+  useEffect(() => {
+    if (initialClassId !== activeClassId) {
+      setActiveClassIdInternal(initialClassId);
+    }
+  }, [initialClassId]);
+
   // Reset activeClassId wenn sich der User ändert (Login/Logout)
   useEffect(() => {
-    setActiveClassId(null);
+    setActiveClassIdInternal(null);
+    if (onClassIdChange) {
+      onClassIdChange(null);
+    }
   }, [userId]);
 
   const { data, isLoading: queryLoading, error: queryError, refetch } = useQuery({
@@ -50,7 +68,8 @@ const useTimetableData = (currentYear, currentWeek) => {
         };
       }
       try {
-        const [lessonsData, yearlyLessonsData, allerleiLessonsData, topicsData, subjectsData, classesData, settingsData, holidaysData] = await Promise.all([
+        // 1. Lade eigene Daten + Team Teaching Zugriffe parallel
+        const [lessonsData, yearlyLessonsData, allerleiLessonsData, topicsData, subjectsData, ownedClassesData, settingsData, holidaysData, teamTeachingAccess] = await Promise.all([
           Lesson.list({ user_id: userId }).catch(err => {
             console.error('Lesson.list error:', err);
             return [];
@@ -83,14 +102,97 @@ const useTimetableData = (currentYear, currentWeek) => {
             console.error('Holiday.list error:', err);
             return [];
           }),
+          // Team Teaching: Lade akzeptierte Einladungen mit expand für Klassendaten
+          // Direkter PocketBase-Aufruf um expand-Daten zu behalten (Entity.list() entfernt expand durch normalizeData)
+          // WICHTIG: owner_id != userId um Self-Team-Teaching-Records auszuschließen
+          pb.collection('team_teachings').getFullList({
+            filter: `invited_user_id = '${userId}' && status = 'accepted' && owner_id != '${userId}'`,
+            expand: 'class_id,owner_id',
+            $autoCancel: false // Verhindert Auto-Cancellation bei parallelen Requests
+          }).catch(err => {
+            console.error('TeamTeaching.list error:', err);
+            return [];
+          }),
         ]);
+
+        // 2. Lade Daten fuer geteilte Klassen
+        let sharedClassesData = [];
+        let sharedSubjectsData = [];
+        let sharedTopicsData = [];
+        let sharedLessonsData = [];
+        let sharedYearlyLessonsData = [];
+
+        if (teamTeachingAccess.length > 0) {
+          // Lade geteilte Klassen und deren Daten - nutze expand-Daten statt Class.findById
+          const sharedDataPromises = teamTeachingAccess
+            .filter(tt => tt.expand?.class_id)  // Nur Einträge mit expand-Daten
+            .map(async (ttEntry) => {
+              const classId = ttEntry.class_id;
+              const classData = ttEntry.expand.class_id;  // Aus expand-Daten (kein separater API-Call)
+
+              const [classSubjects, classTopics, classLessons, classYearlyLessons] = await Promise.all([
+                Subject.filter({ class_id: classId }).catch(() => []),
+                Topic.filter({ class_id: classId }).catch(() => []),
+                Lesson.filter({ filter: `class_id = '${classId}'` }).catch(() => []),
+                YearlyLesson.filter({ class_id: classId }).catch(() => []),
+              ]);
+
+              return {
+                classData: {
+                  ...classData,
+                  isOwner: false,
+                  permissionLevel: ttEntry.permission_level || 'view_only',
+                  teamTeachingId: ttEntry.id,
+                  is_hidden: ttEntry.is_hidden || false
+                },
+                subjects: classSubjects,
+                topics: classTopics,
+                lessons: classLessons,
+                yearlyLessons: classYearlyLessons,
+                is_hidden: ttEntry.is_hidden || false
+              };
+            });
+
+          const sharedResults = await Promise.all(sharedDataPromises);
+
+          // Alle geteilten Klassen (inkl. versteckte - für Settings)
+          sharedClassesData = sharedResults.map(r => r.classData).filter(Boolean);
+
+          // NUR Daten von NICHT-versteckten Klassen laden (für Timetable, Daily etc.)
+          const visibleResults = sharedResults.filter(r => !r.is_hidden);
+          sharedSubjectsData = visibleResults.flatMap(r => r.subjects);
+          sharedTopicsData = visibleResults.flatMap(r => r.topics);
+          sharedLessonsData = visibleResults.flatMap(r => r.lessons);
+          sharedYearlyLessonsData = visibleResults.flatMap(r => r.yearlyLessons);
+        }
+
+        // 3. Merge eigene und geteilte Daten
+        const ownedClassesWithMeta = (ownedClassesData || []).map(cls => ({
+          ...cls,
+          isOwner: true,
+          permissionLevel: 'full_access'
+        }));
+
+        // Deduplizierung: owned hat Priorität über shared (falls beide existieren)
+        const mergedClasses = [...ownedClassesWithMeta, ...sharedClassesData];
+        const uniqueClasses = mergedClasses.reduce((acc, cls) => {
+          const existing = acc.find(c => c.id === cls.id);
+          if (!existing) {
+            acc.push(cls);
+          } else if (cls.isOwner && !existing.isOwner) {
+            const idx = acc.findIndex(c => c.id === cls.id);
+            acc[idx] = cls;
+          }
+          return acc;
+        }, []);
+
         return {
-          lessonsData: lessonsData || [],
-          yearlyLessonsData: yearlyLessonsData || [],
+          lessonsData: [...(lessonsData || []), ...sharedLessonsData],
+          yearlyLessonsData: [...(yearlyLessonsData || []), ...sharedYearlyLessonsData],
           allerleiLessonsData: allerleiLessonsData || [],
-          topicsData: topicsData || [],
-          subjectsData: subjectsData || [],
-          classesData: classesData || [],
+          topicsData: [...(topicsData || []), ...sharedTopicsData],
+          subjectsData: [...(subjectsData || []), ...sharedSubjectsData],
+          classesData: uniqueClasses,
           settingsData: settingsData || [],
           holidaysData: holidaysData || [],
         };
@@ -144,29 +246,6 @@ const useTimetableData = (currentYear, currentWeek) => {
         const filteredSubjects = data.subjectsData?.filter(s => s.class_id === localActiveClassId) || [];
         if (!isEqual(subjects, filteredSubjects)) {
           setSubjects(filteredSubjects);
-        }
-      }
-
-      if (Array.isArray(data.classesData) && data.classesData.length === 0) {
-        try {
-          const defaultClass = await Class.create({
-            name: 'Default Klasse',
-            user_id: currentUserId,
-            teacher_id: currentUserId,
-            school_year: currentYear,
-          });
-          setClasses([defaultClass]);
-          setActiveClassId(defaultClass.id);
-          queryClientLocal.invalidateQueries(['timetableData', currentYear, currentWeek]);
-          await refetch();
-          import('react-hot-toast').then(({ toast }) => {
-            toast.success('Default-Klasse erstellt. Stundenplan sollte nun laden.');
-          });
-        } catch (error) {
-          console.error('Error creating default class:', error?.data ? JSON.stringify(error.data) : error.message);
-          import('react-hot-toast').then(({ toast }) => {
-            toast.error('Fehler beim Erstellen der Default-Klasse. Überprüfen Sie die Konsole.');
-          });
         }
       }
 

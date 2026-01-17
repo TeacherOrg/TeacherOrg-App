@@ -84,15 +84,25 @@ export function useCurrency(studentId) {
         type: type,
         reference_type: type === 'goal' ? 'competency_goal' :
                         type === 'achievement' ? 'achievement' :
-                        type === 'bounty' ? 'bounty' : 'manual',
+                        type === 'bounty' ? 'bounty' :
+                        type === 'chore' ? 'chore_assignment' : 'manual',
         reference_id: referenceId || '',
         description: description || '',
         $cancelKey: `txn_create_${uniqueKey}`
       });
 
+      // WICHTIG: Aktuelle Balance aus DB lesen (nicht aus State!)
+      // Dies verhindert Race Conditions wenn mehrere Coins schnell hintereinander vergeben werden
+      const freshCurrency = await StudentCurrency.filter({
+        student_id: studentId,
+        $cancelKey: `fresh_read_${uniqueKey}`
+      });
+      const currentBalance = freshCurrency[0]?.balance || 0;
+      const currentLifetimeEarned = freshCurrency[0]?.lifetime_earned || 0;
+
       // Update currency balance
-      const newBalance = (currencyData.balance || 0) + amount;
-      const newLifetimeEarned = (currencyData.lifetime_earned || 0) + amount;
+      const newBalance = currentBalance + amount;
+      const newLifetimeEarned = currentLifetimeEarned + amount;
 
       const updatedCurrency = await StudentCurrency.update(currencyData.id, {
         balance: newBalance,
@@ -235,10 +245,83 @@ export function useAllStudentsCurrency(classId) {
     loadAllCurrency();
   }, [loadAllCurrency]);
 
+  /**
+   * Award currency to a specific student (teacher action)
+   * @param {string} studentId - The student's ID
+   * @param {number} amount - Amount to award
+   * @param {string} type - Transaction type
+   * @param {string} referenceId - Reference ID
+   * @param {string} description - Description
+   */
+  const awardCurrencyForStudent = useCallback(async (studentId, amount, type, referenceId, description) => {
+    if (!studentId || amount <= 0) return null;
+
+    const uniqueKey = `${type}_${referenceId}_${Date.now()}`;
+
+    try {
+      // Find or create currency record for student
+      let studentCurrency = currencyData.find(c => c.student_id === studentId);
+
+      if (!studentCurrency) {
+        studentCurrency = await StudentCurrency.create({
+          student_id: studentId,
+          balance: 0,
+          lifetime_earned: 0,
+          lifetime_spent: 0,
+          $cancelKey: `create_currency_${uniqueKey}`
+        });
+      }
+
+      // Create transaction
+      const transaction = await CurrencyTransaction.create({
+        student_id: studentId,
+        amount: amount,
+        type: type,
+        reference_type: type === 'goal' ? 'competency_goal' :
+                        type === 'achievement' ? 'achievement' :
+                        type === 'bounty' ? 'bounty' :
+                        type === 'chore' ? 'chore_assignment' : 'manual',
+        reference_id: referenceId || '',
+        description: description || '',
+        $cancelKey: `txn_create_${uniqueKey}`
+      });
+
+      // WICHTIG: Aktuelle Balance aus DB lesen (nicht aus State!)
+      const freshCurrency = await StudentCurrency.filter({
+        student_id: studentId,
+        $cancelKey: `fresh_read_${uniqueKey}`
+      });
+      const currentBalance = freshCurrency[0]?.balance || 0;
+      const currentLifetimeEarned = freshCurrency[0]?.lifetime_earned || 0;
+
+      // Update currency balance
+      const newBalance = currentBalance + amount;
+      const newLifetimeEarned = currentLifetimeEarned + amount;
+
+      await StudentCurrency.update(studentCurrency.id, {
+        balance: newBalance,
+        lifetime_earned: newLifetimeEarned,
+        $cancelKey: `currency_update_${uniqueKey}`
+      });
+
+      // Refresh data
+      await loadAllCurrency();
+
+      return transaction;
+    } catch (error) {
+      if (error?.message?.includes('autocancelled')) {
+        return null;
+      }
+      console.error('Error awarding currency to student:', error);
+      throw error;
+    }
+  }, [currencyData, loadAllCurrency]);
+
   return {
     currencyData,
     isLoading,
-    refresh: loadAllCurrency
+    refresh: loadAllCurrency,
+    awardCurrencyForStudent
   };
 }
 

@@ -1260,3 +1260,15 @@ main {
 .dark .grades-page-scroll::-webkit-scrollbar-thumb:hover {
   background-color: #64748b; /* slate-500 */
 }
+
+/* ===== TIMETABLE DRAG & DROP CURSOR FEEDBACK ===== */
+/* Visuelles Feedback wenn Ctrl gedrückt ist (nur Desktop) */
+@media (pointer: fine) {
+  body.ctrl-pressed .lesson-card {
+    cursor: grab;
+  }
+
+  body.ctrl-pressed .lesson-card:active {
+    cursor: grabbing;
+  }
+}

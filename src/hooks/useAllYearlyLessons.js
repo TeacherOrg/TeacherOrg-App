@@ -14,8 +14,28 @@ export default function useAllYearlyLessons(currentYear) {
     queryFn: async () => {
       if (!userId) return [];
 
+      // 1. Hole geteilte Klassen-IDs via Team Teaching (NUR nicht-versteckte)
+      // WICHTIG: owner_id != userId um Self-Team-Teaching-Records auszuschließen
+      const teamTeachings = await pb.collection('team_teachings').getFullList({
+        filter: `invited_user_id = '${userId}' && status = 'accepted' && owner_id != '${userId}'`,
+        $autoCancel: false
+      }).catch(() => []);
+      // Nur nicht-versteckte Klassen für Daten-Loading
+      const sharedClassIds = teamTeachings
+        .filter(tt => !tt.is_hidden)
+        .map(tt => tt.class_id);
+
+      // 2. Baue Filter für eigene + geteilte Klassen
+      let filter = `user_id = '${userId}'`;
+      if (sharedClassIds.length > 0) {
+        const classFilters = sharedClassIds.map(id => `class_id = '${id}'`).join(' || ');
+        filter = `(${filter}) || (${classFilters})`;
+      }
+
+      console.log('[useAllYearlyLessons] Filter:', filter, 'Shared classes:', sharedClassIds);
+
       const records = await pb.collection('yearly_lessons').getFullList({
-        filter: `user_id = '${userId}'`,
+        filter,
         expand: 'topic,subject',
       });
 
