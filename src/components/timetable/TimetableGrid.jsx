@@ -6,7 +6,6 @@ import { useDroppable } from "@dnd-kit/core";
 import TimeSlot from "./TimeSlot";
 import DayHeader, { DAYS } from "./DayHeader";
 import LessonCard from "./LessonCard";
-import { useDraggable } from "@dnd-kit/core";
 import { motion } from "framer-motion";
 import { createMixedSubjectGradient } from '@/utils/colorUtils';
 import HolidayDecorations from './HolidayDecorations';
@@ -67,46 +66,30 @@ const getHolidayDisplay = (holiday) => {
 const isTouchDevice = typeof window !== 'undefined' &&
   ('ontouchstart' in window || navigator.maxTouchPoints > 0);
 
-const DraggableItem = ({ id, data, children, onClick }) => {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useDraggable({ id, data });
-
-  const style = {
-    transform: transform ? `translate3d(${transform.x}px, ${transform.y}px, 0)` : undefined,
-    transition,
-    opacity: isDragging ? 0 : 1, // Hide original during drag - DragOverlay shows the preview
-    touchAction: isTouchDevice ? 'none' : 'auto', // Mobile: Long-Press Drag ermöglichen
+// Einfacher Wrapper für Lektionskarten mit nativem HTML5 drag-drop (wie in Jahresansicht)
+const LessonCardWrapper = ({ lesson, children, onClick }) => {
+  const handleClick = (e) => {
+    e.stopPropagation();
+    onClick?.();
   };
 
-  const handlePointerDown = (e) => {
-    // Mouse/Trackpad: Nur Drag aktivieren wenn Ctrl gedrückt
-    // Touch: PointerSensor übernimmt mit Long-Press (300ms delay)
-    const isMousePointer = e.pointerType === 'mouse';
-    if (isMousePointer && !e.ctrlKey) {
-      // Kein Drag-Listener aktivieren - wird zum normalen Click
+  const handleDragStart = (e) => {
+    // Nur mit Ctrl erlauben
+    if (!e.ctrlKey) {
+      e.preventDefault();
       return;
     }
-    listeners?.onPointerDown?.(e);
+    e.dataTransfer.setData('lessonId', lesson.id);
+    e.dataTransfer.setData('type', 'existing-lesson');
+    e.dataTransfer.effectAllowed = 'move';
   };
-
-  const handleClick = (e) => {
-    // Click nur wenn nicht aktiv gedraggt wird
-    if (!isDragging) {
-      e.stopPropagation();
-      onClick?.();
-    }
-  };
-
-  // Entferne potentiell konfliktierende Handler aus dnd-kit attributes
-  const { onPointerDown: _ignored, ...safeAttributes } = attributes;
 
   return (
     <div
-      ref={setNodeRef}
-      style={style}
-      {...safeAttributes}
-      onPointerDown={handlePointerDown}
+      className="h-full w-full cursor-pointer lesson-card"
       onClick={handleClick}
-      className="h-full w-full select-none lesson-card"
+      draggable={true}
+      onDragStart={handleDragStart}
     >
       {children}
     </div>
@@ -333,6 +316,23 @@ const TimetableGrid = React.forwardRef(
             className={`h-full w-full transition-colors duration-200 ${
               isOver && !holiday ? "bg-blue-900/30" : ""
             } ${isAltPressed ? 'cursor-alias' : ''}`}
+            // HTML5 Drop-Handler für existierende Lektionen (Ctrl+Drag)
+            onDragOver={(e) => {
+              if (e.dataTransfer.types.includes('lessonid') || e.dataTransfer.types.includes('text/plain')) {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = 'move';
+              }
+            }}
+            onDrop={(e) => {
+              const lessonId = e.dataTransfer.getData('lessonId');
+              const type = e.dataTransfer.getData('type');
+              if (type === 'existing-lesson' && lessonId && onEditLesson) {
+                e.preventDefault();
+                e.stopPropagation();
+                // TODO: onMoveLesson implementieren - vorerst nur log
+                console.log('Move lesson:', lessonId, 'to', day.key, slot.period);
+              }
+            }}
           >
             {lesson ? (() => {
               const isPartOfMerge = isSelectingMerge && mergePreview?.lessons.some(l => l.id === lesson.id);
@@ -352,26 +352,15 @@ const TimetableGrid = React.forwardRef(
                   onPointerEnter={(e) => onShowHover(lesson, e)}
                   onPointerLeave={onHideHover}
                 >
-                  {/* Immer die normale LessonCard rendern - readOnly deaktiviert Drag */}
-                  {isAltPressed || readOnly ? (
-                    <div className="h-full w-full cursor-pointer" onClick={() => onEditLesson?.(lesson.id)}>
-                      <LessonCard
-                        lesson={lesson}
-                        isDragging={false}
-                        subjects={subjects}
-                        isAltPressed={isAltPressed}
-                      />
-                    </div>
-                  ) : (
-                    <DraggableItem id={lesson.id} data={{ type: 'lesson', lesson }} onClick={() => onEditLesson(lesson.id)}>
-                      <LessonCard
-                        lesson={lesson}
-                        isDragging={false}
-                        subjects={subjects}
-                        isAltPressed={isAltPressed}
-                      />
-                    </DraggableItem>
-                  )}
+                  {/* LessonCardWrapper mit nativem HTML5 drag-drop (Ctrl+Drag) */}
+                  <LessonCardWrapper lesson={lesson} onClick={() => onEditLesson?.(lesson.id)}>
+                    <LessonCard
+                      lesson={lesson}
+                      isDragging={false}
+                      subjects={subjects}
+                      isAltPressed={isAltPressed}
+                    />
+                  </LessonCardWrapper>
 
                   {/* Während Merge: Original-Lektion komplett ausblenden */}
                   {isPartOfMerge && (
