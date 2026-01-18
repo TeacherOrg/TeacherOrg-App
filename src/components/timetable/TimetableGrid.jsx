@@ -66,15 +66,23 @@ const getHolidayDisplay = (holiday) => {
 const isTouchDevice = typeof window !== 'undefined' &&
   ('ontouchstart' in window || navigator.maxTouchPoints > 0);
 
-// Wrapper für Lektionskarten - onPointerUp statt onClick (umgeht dnd-kit Sensor)
+// Wrapper für Lektionskarten - Klick öffnet Modal, Ctrl/Alt+Drag für dnd-kit
 const LessonCardWrapper = ({ children, onClick }) => {
   return (
     <div
       className="h-full w-full cursor-pointer"
-      onPointerDown={(e) => e.stopPropagation()}
+      onPointerDown={(e) => {
+        // Bei Ctrl oder Alt: Event durchlassen für dnd-kit Drag / Allerlei
+        if (!e.ctrlKey && !e.altKey) {
+          e.stopPropagation();
+        }
+      }}
       onPointerUp={(e) => {
         e.stopPropagation();
-        onClick?.();
+        // Nur klicken wenn weder Ctrl noch Alt (sonst war es ein Drag-Versuch)
+        if (!e.ctrlKey && !e.altKey) {
+          onClick?.();
+        }
       }}
     >
       {children}
