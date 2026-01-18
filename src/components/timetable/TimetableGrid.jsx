@@ -69,7 +69,6 @@ const isTouchDevice = typeof window !== 'undefined' &&
 
 const DraggableItem = ({ id, data, children, onClick }) => {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useDraggable({ id, data });
-  const [dragIntended, setDragIntended] = useState(false);
 
   const style = {
     transform: transform ? `translate3d(${transform.x}px, ${transform.y}px, 0)` : undefined,
@@ -83,21 +82,18 @@ const DraggableItem = ({ id, data, children, onClick }) => {
     // Touch: PointerSensor übernimmt mit Long-Press (300ms delay)
     const isMousePointer = e.pointerType === 'mouse';
     if (isMousePointer && !e.ctrlKey) {
-      setDragIntended(false);
       // Kein Drag-Listener aktivieren - wird zum normalen Click
       return;
     }
-    setDragIntended(true);
     listeners?.onPointerDown?.(e);
   };
 
   const handleClick = (e) => {
-    // Click nur wenn nicht gedraggt wird UND kein Drag beabsichtigt war
-    if (!isDragging && !dragIntended) {
+    // Click nur wenn nicht aktiv gedraggt wird
+    if (!isDragging) {
       e.stopPropagation();
       onClick?.();
     }
-    setDragIntended(false);
   };
 
   // Entferne potentiell konfliktierende Handler aus dnd-kit attributes
