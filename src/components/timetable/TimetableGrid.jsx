@@ -66,28 +66,15 @@ const getHolidayDisplay = (holiday) => {
 const isTouchDevice = typeof window !== 'undefined' &&
   ('ontouchstart' in window || navigator.maxTouchPoints > 0);
 
-// Wrapper für Lektionskarten - onPointerUp statt onClick für bessere Touchpad-Kompatibilität
+// Wrapper für Lektionskarten - onPointerUp statt onClick (umgeht dnd-kit Sensor)
 const LessonCardWrapper = ({ children, onClick }) => {
-  const pointerDownPos = React.useRef(null);
-
   return (
     <div
       className="h-full w-full cursor-pointer"
-      onPointerDown={(e) => {
-        e.stopPropagation();
-        pointerDownPos.current = { x: e.clientX, y: e.clientY };
-      }}
+      onPointerDown={(e) => e.stopPropagation()}
       onPointerUp={(e) => {
         e.stopPropagation();
-        // Nur klicken wenn keine signifikante Bewegung (< 5px)
-        if (pointerDownPos.current) {
-          const dx = Math.abs(e.clientX - pointerDownPos.current.x);
-          const dy = Math.abs(e.clientY - pointerDownPos.current.y);
-          if (dx < 5 && dy < 5) {
-            onClick?.();
-          }
-        }
-        pointerDownPos.current = null;
+        onClick?.();
       }}
     >
       {children}
