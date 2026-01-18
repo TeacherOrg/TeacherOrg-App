@@ -79,11 +79,19 @@ const DraggableLessonCard = ({ lesson, onClick, children }) => {
     cursor: 'pointer',
   };
 
-  const handleClick = (e) => {
-    // Nur klicken wenn weder Ctrl/Cmd noch Alt
-    if (!(e.ctrlKey || e.metaKey) && !e.altKey) {
-      onClick?.();
+  const handlePointerDown = (e) => {
+    // Alt-Key: Event durchlassen für Merge/Allerlei (Parent handleGridPointerDown)
+    if (e.altKey) {
+      return; // Kein dnd-kit, Event bubbled zum Parent
     }
+
+    // Ctrl/Cmd: dnd-kit Drag aktivieren
+    if (e.ctrlKey || e.metaKey) {
+      listeners?.onPointerDown?.(e);
+      return;
+    }
+
+    // Kein Modifier: Nichts tun, onClick wird später ausgelöst
   };
 
   return (
@@ -91,9 +99,9 @@ const DraggableLessonCard = ({ lesson, onClick, children }) => {
       ref={setNodeRef}
       style={style}
       className="h-full w-full"
-      {...listeners}
       {...attributes}
-      onClick={handleClick}
+      onPointerDown={handlePointerDown}
+      onClick={() => onClick?.()}
     >
       {children}
     </div>
