@@ -66,11 +66,12 @@ const getHolidayDisplay = (holiday) => {
 const isTouchDevice = typeof window !== 'undefined' &&
   ('ontouchstart' in window || navigator.maxTouchPoints > 0);
 
-// Ultra-einfacher Wrapper - NUR Click, KEIN Drag (wie isAltPressed || readOnly Zweig)
+// Wrapper für Lektionskarten - onPointerDown stoppt dnd-kit's PointerSensor
 const LessonCardWrapper = ({ children, onClick }) => {
   return (
     <div
       className="h-full w-full cursor-pointer"
+      onPointerDown={(e) => e.stopPropagation()}
       onClick={(e) => {
         e.stopPropagation();
         onClick?.();
