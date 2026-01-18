@@ -79,9 +79,10 @@ const DraggableItem = ({ id, data, children, onClick }) => {
   };
 
   const handlePointerDown = (e) => {
-    // Desktop: Nur Drag aktivieren wenn Ctrl gedrückt
+    // Mouse/Trackpad: Nur Drag aktivieren wenn Ctrl gedrückt
     // Touch: PointerSensor übernimmt mit Long-Press (300ms delay)
-    if (!isTouchDevice && !e.ctrlKey) {
+    const isMousePointer = e.pointerType === 'mouse';
+    if (isMousePointer && !e.ctrlKey) {
       setDragIntended(false);
       // Kein Drag-Listener aktivieren - wird zum normalen Click
       return;
