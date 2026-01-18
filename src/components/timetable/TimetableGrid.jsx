@@ -69,36 +69,44 @@ const isTouchDevice = typeof window !== 'undefined' &&
 
 const DraggableItem = ({ id, data, children, onClick }) => {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useDraggable({ id, data });
+  const [dragIntended, setDragIntended] = useState(false);
 
   const style = {
     transform: transform ? `translate3d(${transform.x}px, ${transform.y}px, 0)` : undefined,
     transition,
     opacity: isDragging ? 0 : 1, // Hide original during drag - DragOverlay shows the preview
+    touchAction: isTouchDevice ? 'none' : 'auto', // Mobile: Long-Press Drag ermöglichen
   };
 
   const handlePointerDown = (e) => {
     // Desktop: Nur Drag aktivieren wenn Ctrl gedrückt
     // Touch: PointerSensor übernimmt mit Long-Press (300ms delay)
     if (!isTouchDevice && !e.ctrlKey) {
+      setDragIntended(false);
       // Kein Drag-Listener aktivieren - wird zum normalen Click
       return;
     }
+    setDragIntended(true);
     listeners?.onPointerDown?.(e);
   };
 
   const handleClick = (e) => {
-    // Click nur wenn nicht gedraggt wird
-    if (!isDragging) {
+    // Click nur wenn nicht gedraggt wird UND kein Drag beabsichtigt war
+    if (!isDragging && !dragIntended) {
       e.stopPropagation();
       onClick?.();
     }
+    setDragIntended(false);
   };
+
+  // Entferne potentiell konfliktierende Handler aus dnd-kit attributes
+  const { onPointerDown: _ignored, ...safeAttributes } = attributes;
 
   return (
     <div
       ref={setNodeRef}
       style={style}
-      {...attributes}
+      {...safeAttributes}
       onPointerDown={handlePointerDown}
       onClick={handleClick}
       className="h-full w-full select-none lesson-card"

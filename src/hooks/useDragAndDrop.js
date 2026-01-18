@@ -30,13 +30,11 @@ const useDragAndDrop = (lessonsForCurrentWeek, allLessons, allerleiLessons, curr
 
     // Alt-Key: Merge-Selection (bestehend) → Drag abbrechen
     if (activatorEvent?.altKey) {
-      event.preventDefault();
       return;
     }
 
     // Desktop (non-touch): Ctrl erforderlich für Drag
     if (!isTouchDevice && !activatorEvent?.ctrlKey) {
-      event.preventDefault();
       return;
     }
 

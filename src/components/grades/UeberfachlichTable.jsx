@@ -2,28 +2,14 @@ import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { UeberfachlichKompetenz, Competency, User } from '@/api/entities';
-import { Search, ChevronDown, ChevronRight, Trash2, Star, Clock, Plus, Save, X, FileText } from 'lucide-react';
+import { ChevronDown, ChevronRight, Trash2, Star, Clock, Plus, Save, X, FileText } from 'lucide-react';
 import { format } from "date-fns";
 import { useToast } from "@/components/ui/use-toast";
 import { useStudentSortPreference } from '@/hooks/useStudentSortPreference';
 import { sortStudents } from '@/utils/studentSortUtils';
-
-const useDebounce = (value, delay) => {
-  const [debouncedValue, setDebouncedValue] = useState(value);
-  useEffect(() => {
-    const handler = setTimeout(() => {
-      setDebouncedValue(value);
-    }, delay);
-    return () => {
-      clearTimeout(handler);
-    };
-  }, [value, delay]);
-  return debouncedValue;
-};
 
 const StarRating = ({ rating, size = "w-4 h-4", showDecimal = false }) => {
   const stars = [1, 2, 3, 4, 5];
@@ -213,8 +199,6 @@ export default function UeberfachlichTable({
   savePreferences, // Bug 9 Fix: savePreferences als Prop von PerformanceView
   canEdit = true, // Team Teaching: Bearbeitungsrechte
 }) {
-  const [searchTerm, setSearchTerm] = useState('');
-  const debouncedSearchTerm = useDebounce(searchTerm, 300);
   const [quickAddState, setQuickAddState] = useState({ key: null, score: 0, notes: '' });
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
@@ -304,12 +288,7 @@ export default function UeberfachlichTable({
     return sum / validScores.length;
   }, [getAssessments]);
 
-  const filteredStudents = useMemo(() => {
-    if (!debouncedSearchTerm) return studentsForClass;
-    return studentsForClass.filter(student =>
-      student.name?.toLowerCase().includes(debouncedSearchTerm.toLowerCase())
-    );
-  }, [studentsForClass, debouncedSearchTerm]);
+  const filteredStudents = studentsForClass;
 
   const handleDeleteCompetency = async (competencyId) => {
     const competencyToDelete = allCompetenciesCombined.find(c => c.id === competencyId && c.class_id === activeClassId);
@@ -740,17 +719,7 @@ export default function UeberfachlichTable({
 
   return (
     <>
-      <div className="relative mb-4">
-        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 w-4 h-4" />
-        <Input
-          placeholder="Schüler suchen..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          className="pl-10 bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 text-black dark:text-white"
-          disabled={isLoading}
-        />
-      </div>
-      {isLoading && <Badge className="bg-blue-500 text-white animate-pulse">Aktionen werden ausgeführt...</Badge>}
+      {isLoading && <Badge className="bg-blue-500 text-white animate-pulse mb-4">Aktionen werden ausgeführt...</Badge>}
       {competencyIds.map(competencyId => {
         const competency = allCompetenciesCombined.find(c => c.id === competencyId);
         const isExpanded = expandedCompetencies.has(competencyId);

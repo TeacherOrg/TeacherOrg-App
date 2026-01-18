@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/components/ui/use-toast";
 import { Performance, User } from '@/api/entities';
-import { ChevronDown, ChevronUp, Edit, Trash2, Save, X, Plus } from 'lucide-react';
+import { ChevronDown, ChevronUp, Edit, Trash2, Save, X, Plus, Eye } from 'lucide-react';
 import { useStudentSortPreference } from '@/hooks/useStudentSortPreference';
 import { sortStudents } from '@/utils/studentSortUtils';
 import { getTextColor } from '@/utils/colorUtils';
@@ -29,21 +29,23 @@ const LeistungenTable = ({
   performances = [],
   students = [],
   subjects = [],
+  fachbereiche = [],
   activeClassId,
   onEdit,
   onDelete,
   onDataChange,
   expandedRows,
   setExpandedRows,
-  savePreferences, // Neu: von PerformanceView als Prop erhalten
-  canEdit = true // Team Teaching: Bearbeitungsrechte
+  savePreferences,
+  canEdit = true,
+  onCreatePerformance,
+  viewOnly = false
 }) => {
   const { toast } = useToast();
   const [sortPreference] = useStudentSortPreference();
   const sortedStudents = useMemo(() => sortStudents(students, sortPreference), [students, sortPreference]);
   const [editingGrades, setEditingGrades] = useState({});
   const [editingFachbereiche, setEditingFachbereiche] = useState({});
-  const [newFachbereichInputs, setNewFachbereichInputs] = useState({});
   const [sortBy, setSortBy] = useState('date');
   const [filterSubject, setFilterSubject] = useState('all');
 
@@ -147,7 +149,6 @@ const LeistungenTable = ({
       grades.weight = currentWeight;
       setEditingGrades({ [groupKey]: grades });
       setEditingFachbereiche({ [groupKey]: [...(group.fachbereiche || [])] });
-      setNewFachbereichInputs({ [groupKey]: '' });
     }
   };
 
@@ -235,7 +236,6 @@ const LeistungenTable = ({
 
       setEditingGrades({});
       setEditingFachbereiche({});
-      setNewFachbereichInputs({});
 
       setTimeout(() => {
         setExpandedRows(new Set(newExpanded));
@@ -261,13 +261,10 @@ const LeistungenTable = ({
   const cancelEditing = (groupKey) => {
     const newEditingGrades = { ...editingGrades };
     const newEditingFachbereiche = { ...editingFachbereiche };
-    const newInputs = { ...newFachbereichInputs };
     delete newEditingGrades[groupKey];
     delete newEditingFachbereiche[groupKey];
-    delete newInputs[groupKey];
     setEditingGrades(newEditingGrades);
     setEditingFachbereiche(newEditingFachbereiche);
-    setNewFachbereichInputs(newInputs);
   };
 
   const updateGrade = (groupKey, studentId, value) => {
@@ -287,13 +284,11 @@ const LeistungenTable = ({
     }));
   };
 
-  const addFachbereich = (groupKey) => {
-    const newFachbereich = newFachbereichInputs[groupKey];
-    if (newFachbereich && newFachbereich.trim()) {
+  const addFachbereich = (groupKey, fachbereichName) => {
+    if (fachbereichName && fachbereichName.trim()) {
       const currentFachbereiche = editingFachbereiche[groupKey] || [];
-      if (!currentFachbereiche.includes(newFachbereich.trim())) {
-        updateFachbereiche(groupKey, [...currentFachbereiche, newFachbereich.trim()]);
-        setNewFachbereichInputs(prev => ({ ...prev, [groupKey]: '' }));
+      if (!currentFachbereiche.includes(fachbereichName.trim())) {
+        updateFachbereiche(groupKey, [...currentFachbereiche, fachbereichName.trim()]);
       }
     }
   };
@@ -303,16 +298,14 @@ const LeistungenTable = ({
     updateFachbereiche(groupKey, currentFachbereiche.filter(f => f !== fachbereich));
   };
 
-  const updateFachbereichInput = (groupKey, value) => {
-    setNewFachbereichInputs(prev => ({
-      ...prev,
-      [groupKey]: value
-    }));
-  };
-
   const getSubjectName = (subjectId) => {
     const subject = subjects.find(s => s.id === subjectId);
     return subject ? subject.name : subjectId;
+  };
+
+  // Hilfsfunktion: Prüft ob Fachbereich ein LP21-Fachbereich ist
+  const isLp21Fachbereich = (fbName, subjectId) => {
+    return fachbereiche.some(fb => fb.subject_id === subjectId && fb.name === fbName);
   };
 
   return (
@@ -348,6 +341,27 @@ const LeistungenTable = ({
             </SelectContent>
           </Select>
         </div>
+
+        <div className="flex-1" />
+
+        {viewOnly && (
+          <div className="flex items-center gap-1.5 text-sm text-blue-400">
+            <Eye className="w-4 h-4" />
+            <span>Nur Einsicht</span>
+          </div>
+        )}
+        {onCreatePerformance && (
+          <Button
+            onClick={onCreatePerformance}
+            size="sm"
+            className="bg-blue-600 hover:bg-blue-700"
+            disabled={!canEdit}
+            title={!canEdit ? 'Keine Bearbeitungsrechte für diese Klasse' : ''}
+          >
+            <Plus className="w-4 h-4 mr-1.5"/>
+            Neue Leistung
+          </Button>
+        )}
       </div>
 
       {/* Table */}
@@ -414,11 +428,19 @@ const LeistungenTable = ({
                       <TableCell className="text-black dark:text-white">{group.assessment_name}</TableCell>
                       <TableCell>
                         <div className="flex flex-wrap gap-1">
-                          {(isEditing ? editingFachbereiche[groupKey] : group.fachbereiche || []).map(fachbereich => (
-                            <Badge key={fachbereich} variant="secondary" className="text-xs">
-                              {fachbereich}
-                            </Badge>
-                          ))}
+                          {(isEditing ? editingFachbereiche[groupKey] : group.fachbereiche || []).map(fachbereich => {
+                            const isLp21 = isLp21Fachbereich(fachbereich, group.subject);
+                            return (
+                              <Badge
+                                key={fachbereich}
+                                variant="secondary"
+                                className={`text-xs ${!isLp21 ? 'bg-orange-200 dark:bg-orange-900 text-orange-800 dark:text-orange-200' : ''}`}
+                                title={!isLp21 ? 'Kein LP21-Fachbereich' : ''}
+                              >
+                                {fachbereich}
+                              </Badge>
+                            );
+                          })}
                           {(!group.fachbereiche || group.fachbereiche.length === 0) && !isEditing && (
                             <span className="text-slate-500 dark:text-slate-400 text-xs italic">Keine</span>
                           )}
@@ -482,70 +504,75 @@ const LeistungenTable = ({
                           <div className="bg-slate-50 dark:bg-slate-700/30 rounded-lg p-4">
                             {isEditing && (
                               <div className="mb-4 pb-4 border-b border-slate-200 dark:border-slate-600">
-                                <h5 className="text-black dark:text-white font-medium mb-2">Fachbereiche bearbeiten</h5>
-                                <div className="flex gap-2 mb-2">
-                                  <Input
-                                    placeholder="Neuer Fachbereich"
-                                    value={newFachbereichInputs[groupKey] || ''}
-                                    onChange={(e) => updateFachbereichInput(groupKey, e.target.value)}
-                                    onKeyPress={(e) => { if (e.key === 'Enter') addFachbereich(groupKey); }}
-                                    className="bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 text-black dark:text-white"
-                                  />
-                                  <Button
-                                    onClick={() => addFachbereich(groupKey)}
-                                    className="bg-green-600 hover:bg-green-700"
-                                  >
-                                    <Plus className="w-4 h-4" />
-                                  </Button>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-3">
+                                  {/* Fachbereich Dropdown */}
+                                  <div>
+                                    <Label className="text-black dark:text-white">Fachbereich hinzufügen</Label>
+                                    <Select onValueChange={(value) => addFachbereich(groupKey, value)}>
+                                      <SelectTrigger className="mt-1 bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600">
+                                        <SelectValue placeholder="Fachbereich auswählen..." />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        {fachbereiche
+                                          .filter(fb => fb.subject_id === group.subject)
+                                          .filter(fb => !(editingFachbereiche[groupKey] || []).includes(fb.name))
+                                          .map(fb => (
+                                            <SelectItem key={fb.id} value={fb.name}>{fb.name}</SelectItem>
+                                          ))
+                                        }
+                                      </SelectContent>
+                                    </Select>
+                                  </div>
+                                  {/* Gewichtung */}
+                                  <div>
+                                    <Label className="text-black dark:text-white">Gewichtung</Label>
+                                    <Input
+                                      type="number"
+                                      step="0.01"
+                                      min="0"
+                                      max="10"
+                                      placeholder="1"
+                                      value={editingGrades[groupKey]?.weight ?? ''}
+                                      onChange={(e) => {
+                                        const val = e.target.value;
+                                        if (val === '') {
+                                          setEditingGrades(prev => ({
+                                            ...prev,
+                                            [groupKey]: { ...prev[groupKey], weight: null }
+                                          }));
+                                        } else {
+                                          const num = parseFloat(val);
+                                          if (!isNaN(num) && num >= 0 && num <= 10) {
+                                            setEditingGrades(prev => ({
+                                              ...prev,
+                                              [groupKey]: { ...prev[groupKey], weight: num }
+                                            }));
+                                          }
+                                        }
+                                      }}
+                                      className="mt-1 bg-white dark:bg-slate-800"
+                                    />
+                                    <p className="text-xs text-muted-foreground mt-1">
+                                      1 = Standard | 3 = Klausur | 0.5 = Stegreif
+                                    </p>
+                                  </div>
                                 </div>
-                                <div className="flex flex-wrap gap-1 mt-2">
-                                  {(editingFachbereiche[groupKey] || []).map(fachbereich => (
-                                    <Badge key={fachbereich} variant="secondary" className="text-xs">
-                                      {fachbereich}
-                                      <button
-                                        onClick={() => removeFachbereich(groupKey, fachbereich)}
-                                        className="ml-1.5 hover:text-red-400"
-                                      >
-                                        &times;
-                                      </button>
-                                    </Badge>
-                                  ))}
-                                </div>
-                              </div>
-                            )}
-                            {/* Gewichtung beim Bearbeiten */}
-                            {isEditing && (
-                              <div className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-600">
-                                <Label>Gewichtung</Label>
-                                <Input
-                                  type="number"
-                                  step="0.01"
-                                  min="0"
-                                  max="10"
-                                  placeholder="1"
-                                  value={editingGrades[groupKey]?.weight ?? ''}
-                                  onChange={(e) => {
-                                    const val = e.target.value;
-                                    if (val === '') {
-                                      setEditingGrades(prev => ({
-                                        ...prev,
-                                        [groupKey]: { ...prev[groupKey], weight: null }
-                                      }));
-                                    } else {
-                                      const num = parseFloat(val);
-                                      if (!isNaN(num) && num >= 0 && num <= 10) {
-                                        setEditingGrades(prev => ({
-                                          ...prev,
-                                          [groupKey]: { ...prev[groupKey], weight: num }
-                                        }));
-                                      }
-                                    }
-                                  }}
-                                  className="w-32 mt-1 bg-white dark:bg-slate-800"
-                                />
-                                <p className="text-xs text-muted-foreground mt-1">
-                                  Standard = 1 | Klausur = 3 | Stegreif = 0.5
-                                </p>
+                                {/* Ausgewählte Fachbereiche als Badges */}
+                                {(editingFachbereiche[groupKey] || []).length > 0 && (
+                                  <div className="flex flex-wrap gap-1">
+                                    {(editingFachbereiche[groupKey] || []).map(fachbereich => (
+                                      <Badge key={fachbereich} variant="secondary" className="text-xs">
+                                        {fachbereich}
+                                        <button
+                                          onClick={() => removeFachbereich(groupKey, fachbereich)}
+                                          className="ml-1.5 hover:text-red-400"
+                                        >
+                                          &times;
+                                        </button>
+                                      </Badge>
+                                    ))}
+                                  </div>
+                                )}
                               </div>
                             )}
                             <h4 className="text-black dark:text-white font-medium mb-3">Schülernoten</h4>

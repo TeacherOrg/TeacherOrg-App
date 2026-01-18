@@ -102,7 +102,6 @@ export default function TopicModal({ isOpen, onClose, onSave, onDelete, topic, s
   });
   const [lessons, setLessons] = useState([]);
   const [departments, setDepartments] = useState([]);
-  const [newDepartmentName, setNewDepartmentName] = useState('');
   const [selectedCompetencies, setSelectedCompetencies] = useState([]);
   const [competencySearch, setCompetencySearch] = useState('');
   const [competencyCycleFilter, setCompetencyCycleFilter] = useState('all');
@@ -330,26 +329,6 @@ export default function TopicModal({ isOpen, onClose, onSave, onDelete, topic, s
   };
 
   // --- HANDLERS ---
-  const handleAddNewDepartment = async () => {
-    if (newDepartmentName.trim() && effectiveSubject?.id) {
-      try {
-        const newDept = await Fachbereich.create({
-          name: newDepartmentName,
-          subject_id: effectiveSubject.id,
-          class_id: effectiveSubject.class_id,
-          user_id: pb.authStore.model?.id
-        });
-        setDepartments([...departments, newDept]);
-        setFormData({ ...formData, department: newDept.id });
-        setNewDepartmentName('');
-        toast.success('Fachbereich erstellt');
-      } catch (error) {
-        console.error('Error creating new department:', error);
-        toast.error('Fehler beim Erstellen des Fachbereichs');
-      }
-    }
-  };
-
   const handleAssignLessons = async () => {
     // Emit tour event for onboarding
     emitTourEvent(TOUR_EVENTS.NAVIGATE_TO_YEARLY_ASSIGN);
@@ -703,7 +682,14 @@ export default function TopicModal({ isOpen, onClose, onSave, onDelete, topic, s
                     </Badge>
                   )}
                 </TabsTrigger>
-                <TabsTrigger value="lessons" className="lessons-tab-trigger">Lektionen</TabsTrigger>
+                <TabsTrigger value="lessons" className="lessons-tab-trigger">
+                  Lektionen
+                  {totalLessonCount > 0 && (
+                    <Badge className="ml-2 bg-blue-600 text-white text-xs px-1.5 py-0.5">
+                      {totalLessonCount}
+                    </Badge>
+                  )}
+                </TabsTrigger>
                 <TabsTrigger value="material">
                   <Package className="w-4 h-4 mr-2" />
                   Material
@@ -741,17 +727,6 @@ export default function TopicModal({ isOpen, onClose, onSave, onDelete, topic, s
                           ))}
                         </SelectContent>
                       </Select>
-                      <div className="flex gap-2 mt-2">
-                        <Input
-                          value={newDepartmentName}
-                          onChange={(e) => setNewDepartmentName(e.target.value)}
-                          placeholder="Neuer Fachbereich..."
-                          className="bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 text-sm md:text-base"
-                        />
-                        <Button type="button" onClick={handleAddNewDepartment} className="flex items-center gap-2 text-sm md:text-base px-4 py-2">
-                          + Hinzufügen
-                        </Button>
-                      </div>
                     </div>
                   )}
                 </div>
@@ -1301,6 +1276,7 @@ export default function TopicModal({ isOpen, onClose, onSave, onDelete, topic, s
         onClose={() => setIsShareDialogOpen(false)}
         topic={loadedTopic || topic}
         yearlyLessons={allYearlyLessons}
+        departmentName={departments.find(d => d.id === (loadedTopic || topic)?.department)?.name || null}
       />
     </Dialog>
   );

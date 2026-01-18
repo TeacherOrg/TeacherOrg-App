@@ -22,11 +22,13 @@ import {
   UserPlus,
   Edit3,
 } from 'lucide-react';
-import { Class, Subject, Student, Setting, User } from '@/api/entities';
+import { Class, Subject, Student, Setting, User, Fachbereich } from '@/api/entities';
 import pb from '@/api/pb';
 import toast from 'react-hot-toast';
 import TemplateEditorModal from '@/components/settings/TemplateEditorModal';
 import CredentialsPrintModal from '@/components/settings/CredentialsPrintModal';
+import LP21SubjectSelector from '@/components/settings/LP21SubjectSelector';
+import { LEHRPLAN_ZYKLEN, getDefaultLessonsPerWeek, getFachbereicheForSubject } from '@/constants/lehrplan21Subjects';
 
 // Preset colors for subjects
 const PRESET_COLORS = [
@@ -60,6 +62,10 @@ export function SetupWizard({ isOpen, onComplete }) {
   const [subjects, setSubjects] = useState([]);
   const [newSubject, setNewSubject] = useState({ name: '', color: '#3b82f6', emoji: '📚', lessons_per_week: 4 });
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  // LP21 Subjects State
+  const [selectedZyklus, setSelectedZyklus] = useState('zyklus_2');
+  const [selectedLP21Subjects, setSelectedLP21Subjects] = useState([]);
+  const [isAddingSubjects, setIsAddingSubjects] = useState(false);
   const [students, setStudents] = useState([]);
   const [newStudent, setNewStudent] = useState({ first_name: '', last_name: '' });
   const [studentList, setStudentList] = useState('');
@@ -98,7 +104,7 @@ export function SetupWizard({ isOpen, onComplete }) {
       case 'class':
         return createdClassId !== null;
       case 'subjects':
-        return subjects.length > 0;
+        return subjects.length > 0 || selectedLP21Subjects.length > 0;
       case 'students':
         return true; // Optional step
       case 'schedule-type':
@@ -123,6 +129,27 @@ export function SetupWizard({ isOpen, onComplete }) {
   const handleSkip = () => {
     if (!isLastStep && currentStepData.skippable) {
       setCurrentStep(prev => prev + 1);
+    }
+  };
+
+  // Gesamten Wizard überspringen (für erfahrene Nutzer)
+  const handleSkipEntireWizard = async () => {
+    setIsLoading(true);
+    try {
+      const currentUserId = pb.authStore.model?.id;
+      if (currentUserId) {
+        const updatedUser = await pb.collection('users').update(currentUserId, {
+          has_completed_onboarding: true,
+        });
+        pb.authStore.save(pb.authStore.token, updatedUser);
+      }
+      toast.success('Wizard übersprungen. Alles kann später in den Einstellungen eingerichtet werden.');
+      onComplete(false);
+    } catch (error) {
+      console.error('Error skipping wizard:', error);
+      toast.error('Fehler beim Überspringen');
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -236,6 +263,63 @@ export function SetupWizard({ isOpen, onComplete }) {
       setSubjects(prev => prev.filter(s => s.id !== subjectId));
     } catch (error) {
       console.error('Error removing subject:', error);
+    }
+  };
+
+  // Save LP21 Subjects
+  const handleSaveLP21Subjects = async () => {
+    if (!createdClassId || selectedLP21Subjects.length === 0) return;
+
+    setIsAddingSubjects(true);
+    try {
+      const currentUserId = pb.authStore.model?.id;
+      const createdSubjects = [];
+
+      for (let i = 0; i < selectedLP21Subjects.length; i++) {
+        const subjectData = selectedLP21Subjects[i];
+
+        // Fach erstellen
+        const created = await Subject.create({
+          name: subjectData.name,
+          color: subjectData.color,
+          emoji: subjectData.emoji,
+          lessons_per_week: subjectData.lessons_per_week,
+          is_core_subject: subjectData.is_core_subject || false,
+          lp21_id: subjectData.lp21_id,
+          class_id: createdClassId,
+          user_id: currentUserId,
+          sort_order: i
+        });
+
+        // LP21-Fachbereiche automatisch erstellen
+        const lp21Fachbereiche = getFachbereicheForSubject(subjectData.lp21_id);
+        for (let j = 0; j < lp21Fachbereiche.length; j++) {
+          const fb = lp21Fachbereiche[j];
+          await Fachbereich.create({
+            name: fb.name,
+            subject_id: created.id,
+            class_id: createdClassId,
+            user_id: currentUserId,
+            lp21_id: fb.id,
+            sort_order: j
+          });
+        }
+
+        createdSubjects.push({
+          ...created,
+          name: subjectData.name,
+          color: subjectData.color,
+          emoji: subjectData.emoji
+        });
+      }
+
+      setSubjects(createdSubjects);
+      toast.success(`${createdSubjects.length} Fächer mit Fachbereichen hinzugefügt!`);
+    } catch (error) {
+      console.error('Error saving LP21 subjects:', error);
+      toast.error('Fehler beim Speichern der Fächer.');
+    } finally {
+      setIsAddingSubjects(false);
     }
   };
 
@@ -400,6 +484,24 @@ export function SetupWizard({ isOpen, onComplete }) {
                 Jeder Schritt kann übersprungen und später in den Einstellungen nachgeholt werden.
               </p>
             </motion.div>
+
+            {/* Skip-Button für erfahrene Nutzer */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.5 }}
+              className="pt-4"
+            >
+              <Button
+                variant="ghost"
+                onClick={handleSkipEntireWizard}
+                disabled={isLoading}
+                className="text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 text-sm"
+              >
+                <SkipForward className="w-4 h-4 mr-2" />
+                Ich kenne mich aus – Wizard überspringen
+              </Button>
+            </motion.div>
           </div>
         );
 
@@ -461,106 +563,75 @@ export function SetupWizard({ isOpen, onComplete }) {
             <div className="text-center mb-4">
               <BookOpen className="w-12 h-12 text-blue-500 mx-auto mb-3" />
               <h2 className="text-xl font-bold text-slate-900 dark:text-white">
-                Fügen Sie Ihre Fächer hinzu
+                Wählen Sie Ihre Fächer aus
               </h2>
+              <p className="text-slate-600 dark:text-slate-400 text-sm mt-1">
+                Lehrplan 21 Fächer nach Zyklus
+              </p>
             </div>
 
-            {/* Added subjects */}
-            {subjects.length > 0 && (
-              <div className="space-y-2 max-h-24 overflow-y-auto">
-                {subjects.map((subject) => (
-                  <div
-                    key={subject.id}
-                    className="flex items-center justify-between p-2 bg-slate-50 dark:bg-slate-800 rounded-lg"
-                  >
-                    <div className="flex items-center gap-2">
-                      <div className="w-3 h-3 rounded-full" style={{ backgroundColor: subject.color }} />
-                      <span className="text-sm">{subject.emoji}</span>
-                      <span className="font-medium text-sm text-slate-900 dark:text-white">{subject.name}</span>
-                    </div>
-                    <Button variant="ghost" size="icon" className="h-6 w-6 text-red-500" onClick={() => handleRemoveSubject(subject.id)}>
-                      <Trash2 className="w-3 h-3" />
-                    </Button>
+            {/* Show saved subjects or LP21 selector */}
+            {subjects.length > 0 ? (
+              <div className="space-y-3">
+                <motion.div
+                  initial={{ scale: 0.9, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  className="bg-green-50 dark:bg-green-900/20 p-4 rounded-lg border border-green-200 dark:border-green-800"
+                >
+                  <div className="flex items-center gap-2 mb-3">
+                    <Check className="w-5 h-5 text-green-500" />
+                    <span className="font-medium text-green-700 dark:text-green-400">
+                      {subjects.length} Fächer gespeichert
+                    </span>
                   </div>
-                ))}
+                  <div className="flex flex-wrap gap-1">
+                    {subjects.map((subject) => (
+                      <span
+                        key={subject.id}
+                        className="inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-full"
+                        style={{ backgroundColor: subject.color + '20', color: subject.color }}
+                      >
+                        <span>{subject.emoji}</span>
+                        <span>{subject.name}</span>
+                      </span>
+                    ))}
+                  </div>
+                </motion.div>
+                <p className="text-xs text-slate-500 dark:text-slate-400 text-center">
+                  Sie können Fächer später in den Einstellungen anpassen.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {/* LP21 Subject Selector */}
+                <div className="max-h-[280px] overflow-y-auto border border-slate-200 dark:border-slate-700 rounded-lg p-3">
+                  <LP21SubjectSelector
+                    selectedZyklus={selectedZyklus}
+                    onZyklusChange={setSelectedZyklus}
+                    selectedSubjects={selectedLP21Subjects}
+                    onSubjectsChange={setSelectedLP21Subjects}
+                    showZyklusSelector={true}
+                    compact={true}
+                  />
+                </div>
+
+                {/* Save Button */}
+                <Button
+                  onClick={handleSaveLP21Subjects}
+                  disabled={selectedLP21Subjects.length === 0 || isAddingSubjects}
+                  className="w-full bg-blue-600 hover:bg-blue-700"
+                >
+                  {isAddingSubjects ? (
+                    'Wird gespeichert...'
+                  ) : (
+                    <>
+                      <Check className="w-4 h-4 mr-2" />
+                      {selectedLP21Subjects.length} Fächer speichern
+                    </>
+                  )}
+                </Button>
               </div>
             )}
-
-            {/* Add subject form */}
-            <div className="space-y-3 p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg">
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <Label className="text-slate-700 dark:text-slate-300 text-xs">Fachname</Label>
-                  <Input
-                    value={newSubject.name}
-                    onChange={(e) => setNewSubject({ ...newSubject, name: e.target.value })}
-                    placeholder="z.B. Mathematik"
-                    className="mt-1 bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 h-8 text-sm"
-                  />
-                </div>
-                <div>
-                  <Label className="text-slate-700 dark:text-slate-300 text-xs">Lektionen/Woche</Label>
-                  <Input
-                    type="number"
-                    min="1"
-                    max="10"
-                    value={newSubject.lessons_per_week}
-                    onChange={(e) => setNewSubject({ ...newSubject, lessons_per_week: Number(e.target.value) })}
-                    className="mt-1 bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 h-8 text-sm"
-                  />
-                </div>
-              </div>
-
-              {/* Color picker */}
-              <div>
-                <Label className="text-slate-700 dark:text-slate-300 text-xs">Farbe</Label>
-                <div className="flex flex-wrap gap-1 mt-1">
-                  {PRESET_COLORS.map((color) => (
-                    <button
-                      key={color}
-                      type="button"
-                      className={`w-5 h-5 rounded-full border-2 transition-all hover:scale-110 ${
-                        newSubject.color === color ? 'border-slate-900 dark:border-white scale-110' : 'border-transparent'
-                      }`}
-                      style={{ backgroundColor: color }}
-                      onClick={() => setNewSubject({ ...newSubject, color })}
-                    />
-                  ))}
-                </div>
-              </div>
-
-              {/* Emoji picker */}
-              <div className="flex items-center gap-2">
-                <Label className="text-slate-700 dark:text-slate-300 text-xs">Emoji:</Label>
-                <div className="relative">
-                  <button
-                    type="button"
-                    className="w-8 h-8 rounded border border-slate-300 dark:border-slate-500 bg-white dark:bg-slate-700 flex items-center justify-center text-lg"
-                    onClick={() => setShowEmojiPicker(!showEmojiPicker)}
-                  >
-                    {newSubject.emoji}
-                  </button>
-                  {showEmojiPicker && (
-                    <div className="absolute z-50 bottom-full mb-1 p-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg shadow-lg grid grid-cols-5 gap-1">
-                      {PRESET_EMOJIS.map((emoji) => (
-                        <button
-                          key={emoji}
-                          type="button"
-                          className="w-7 h-7 rounded hover:bg-slate-100 dark:hover:bg-slate-700 text-lg"
-                          onClick={() => { setNewSubject({ ...newSubject, emoji }); setShowEmojiPicker(false); }}
-                        >
-                          {emoji}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <Button onClick={handleAddSubject} disabled={!newSubject.name.trim() || isLoading} className="w-full bg-green-600 hover:bg-green-700 h-8 text-sm">
-                <Plus className="w-3 h-3 mr-1" /> Fach hinzufügen
-              </Button>
-            </div>
           </div>
         );
 

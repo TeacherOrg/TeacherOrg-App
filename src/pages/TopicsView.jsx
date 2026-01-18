@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Subject, Topic, YearlyLesson, Lesson, LehrplanKompetenz as CurriculumCompetency, SharedTopic } from "@/api/entities";
+import { Subject, Topic, YearlyLesson, Lesson, LehrplanKompetenz as CurriculumCompetency, SharedTopic, Fachbereich } from "@/api/entities";
 import { deleteTopicWithLessons } from '@/api/topicService';
 import { syncYearlyLessonToWeekly } from '@/hooks/useYearlyLessonSync';
 import TopicCard from '../components/topics/TopicCard';
@@ -160,6 +160,35 @@ const TopicsView = () => {
         return;
       }
 
+      // Fachbereich erstellen/finden wenn vorhanden
+      let departmentId = null;
+      const fachbereichName = topicData.fachbereich_name;
+
+      if (fachbereichName) {
+        try {
+          // Prüfe ob Fachbereich bereits existiert
+          const existingDepts = await Fachbereich.list({
+            filter: `subject_id = '${subjectId}' && user_id = '${pb.authStore.model.id}' && name = '${fachbereichName}'`
+          });
+
+          if (existingDepts.length > 0) {
+            departmentId = existingDepts[0].id;
+          } else {
+            // Erstelle neuen Fachbereich
+            const newDept = await Fachbereich.create({
+              name: fachbereichName,
+              subject_id: subjectId,
+              class_id: subject.class_id,
+              user_id: pb.authStore.model.id
+            });
+            departmentId = newDept.id;
+          }
+        } catch (error) {
+          console.error('Error handling Fachbereich:', error);
+          // Fahre ohne Fachbereich fort
+        }
+      }
+
       // Neues Topic im Empfänger-Account erstellen
       const newTopic = await Topic.create({
         name: topicData.name,
@@ -169,7 +198,7 @@ const TopicsView = () => {
         materials: topicData.materials || [],
         lehrplan_kompetenz_ids: topicData.lehrplan_kompetenz_ids || [], // 1:1 vom Sender übernehmen
         estimated_lessons: topicData.estimated_lessons || 0,
-        department: null, // Empfaenger waehlt selbst
+        department: departmentId,
         subject: subjectId,
         class_id: subject.class_id,
         user_id: pb.authStore.model.id,
@@ -286,6 +315,32 @@ const TopicsView = () => {
     try {
       const topicData = sharedTopic.topic_snapshot;
 
+      // Fachbereich erstellen/finden wenn vorhanden
+      let departmentId = null;
+      const fachbereichName = topicData.fachbereich_name;
+
+      if (fachbereichName) {
+        try {
+          const existingDepts = await Fachbereich.list({
+            filter: `subject_id = '${selectedSubject.id}' && user_id = '${pb.authStore.model.id}' && name = '${fachbereichName}'`
+          });
+
+          if (existingDepts.length > 0) {
+            departmentId = existingDepts[0].id;
+          } else {
+            const newDept = await Fachbereich.create({
+              name: fachbereichName,
+              subject_id: selectedSubject.id,
+              class_id: selectedSubject.class_id,
+              user_id: pb.authStore.model.id
+            });
+            departmentId = newDept.id;
+          }
+        } catch (error) {
+          console.error('Error handling Fachbereich:', error);
+        }
+      }
+
       // 1. Neues Topic erstellen
       const newTopic = await Topic.create({
         name: topicData.name,
@@ -295,7 +350,7 @@ const TopicsView = () => {
         materials: topicData.materials || [],
         lehrplan_kompetenz_ids: topicData.lehrplan_kompetenz_ids || [],
         estimated_lessons: topicData.estimated_lessons || 0,
-        department: null, // Empfaenger waehlt selbst
+        department: departmentId,
         subject: selectedSubject.id,
         class_id: selectedSubject.class_id,
         user_id: pb.authStore.model.id,
@@ -1204,34 +1259,14 @@ const TopicsView = () => {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-slate-100 to-slate-200 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 flex items-center justify-center">
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-slate-100 to-slate-200 dark:from-slate-950 dark:via-slate-925 dark:to-slate-950 flex items-center justify-center">
         <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
       </div>
     );
   }
 
   return (
-    <div className="p-6 bg-gradient-to-br from-slate-50 via-slate-100 to-slate-200 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 h-screen overflow-y-auto transition-colors duration-300">
-      <motion.div
-        initial={{ opacity: 0, y: -20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="mb-6"
-      >
-        <div className="flex items-center gap-4">
-          <div className="w-14 h-14 bg-gradient-to-br from-blue-600 to-indigo-600 dark:from-blue-500 dark:to-indigo-500 rounded-2xl flex items-center justify-center shadow-lg">
-            <BookOpen className="w-7 h-7 text-white" />
-          </div>
-          <div>
-            <h1 className="text-3xl md:text-4xl font-bold text-gray-900 dark:text-white tracking-tight">
-              Themenansicht
-            </h1>
-            <p className="text-gray-600 dark:text-gray-400 text-sm font-medium mt-1">
-              Verwalten Sie Ihre Unterrichtsthemen und Lehrplankompetenzen
-            </p>
-          </div>
-        </div>
-      </motion.div>
-
+    <div className="p-6 bg-gradient-to-br from-slate-50 via-slate-100 to-slate-200 dark:from-slate-950 dark:via-slate-925 dark:to-slate-950 h-screen overflow-y-auto transition-colors duration-300">
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <TabsList className="grid w-full grid-cols-2 bg-white/60 dark:bg-slate-800/60 backdrop-blur-md mb-6">
           <TabsTrigger value="topics" className="flex items-center gap-2">

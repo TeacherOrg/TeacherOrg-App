@@ -23,11 +23,26 @@ export default function ProtectedRoute({ children }) {
         return false;
       }
 
-      // Rollen-Check (optional)
-      if (pb.authStore.model.role !== 'teacher') {
+      // Rollen-Check: teacher und student erlaubt
+      const allowedRoles = ['teacher', 'student'];
+      if (!allowedRoles.includes(pb.authStore.model.role)) {
         pb.authStore.clear();
         navigate('/login', { replace: true });
         return false;
+      }
+
+      // Route-Einschränkungen für Schüler
+      const STUDENT_ALLOWED_ROUTES = ['/timetable', '/student-dashboard', '/'];
+      if (pb.authStore.model.role === 'student') {
+        const currentPath = location.pathname.toLowerCase();
+        const isAllowed = STUDENT_ALLOWED_ROUTES.some(route =>
+          currentPath === route || currentPath.startsWith(route + '/')
+        );
+
+        if (!isAllowed) {
+          navigate('/student-dashboard', { replace: true });
+          return false;
+        }
       }
 
       setIsChecking(false);
@@ -49,7 +64,7 @@ export default function ProtectedRoute({ children }) {
   // Loading-State während Auth-Check
   if (isChecking) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-slate-100 to-slate-200 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 flex items-center justify-center">
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-slate-100 to-slate-200 dark:from-slate-950 dark:via-slate-925 dark:to-slate-950 flex items-center justify-center">
         <CalendarLoader />
       </div>
     );

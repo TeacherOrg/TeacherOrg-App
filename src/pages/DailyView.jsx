@@ -266,13 +266,63 @@ export default function DailyView({ currentDate, onDateChange, onThemeChange }) 
     try {
       // User-ID für Filterung - nur eigene Daten laden
       const userId = pb.authStore.model?.id;
+      const userRole = pb.authStore.model?.role;
       if (!userId) {
         console.error("[DailyView] Kein authentifizierter User gefunden");
         setIsLoading(false);
         return;
       }
 
-      // 1. Erst Team Teaching laden um shared class IDs zu bekommen
+      // STUDENT-PFAD: Lade die zugewiesene Klasse des Schülers
+      if (userRole === 'student') {
+        const students = await Student.list();
+        const studentData = students.find(s => s.account_id === userId);
+
+        if (!studentData?.class_id) {
+          console.warn("[DailyView] Student hat keine zugewiesene Klasse");
+          setClasses([]);
+          setIsLoading(false);
+          return;
+        }
+
+        const classData = await Class.findById(studentData.class_id);
+        if (!classData) {
+          setClasses([]);
+          setIsLoading(false);
+          return;
+        }
+
+        // Lade Daten für die Klasse des Schülers (Settings vom Klassenbesitzer)
+        const [lessonsData, yearlyLessonsData, subjectsData, settingsData, holidaysData, topicsData] = await Promise.all([
+          Lesson.filter({ class_id: studentData.class_id }).catch(() => []),
+          YearlyLesson.filter({ class_id: studentData.class_id }).catch(() => []),
+          Subject.filter({ class_id: studentData.class_id }).catch(() => []),
+          Setting.list({ user_id: classData.user_id }).catch(() => []),
+          Holiday.list({ user_id: classData.user_id }).catch(() => []),
+          Topic.filter({ class_id: studentData.class_id }).catch(() => []),
+        ]);
+
+        setAllLessons(lessonsData || []);
+        setYearlyLessons(yearlyLessonsData || []);
+        setSubjects(subjectsData || []);
+        setHolidays(holidaysData || []);
+        setTopics(topicsData || []);
+        setClasses([classData]);
+        setChores([]);
+        setChoreAssignments([]);
+        setAnnouncements([]);
+        setStudents([]);
+
+        if (settingsData && settingsData.length > 0) {
+          const latestSettings = settingsData.sort((a, b) => new Date(b.updated) - new Date(a.updated))[0];
+          setSettings(latestSettings);
+        }
+
+        setIsLoading(false);
+        return;
+      }
+
+      // LEHRER-PFAD: Erst Team Teaching laden um shared class IDs zu bekommen
       const teamTeachingAccess = await pb.collection('team_teachings').getFullList({
         filter: `invited_user_id = '${userId}' && status = 'accepted'`,
         expand: 'class_id,owner_id',

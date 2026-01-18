@@ -123,7 +123,7 @@ export default function CurrencyOverview({ currencyData = [], students = [], isL
       {/* Student List */}
       <Card className="overflow-hidden">
         <CardContent className="p-0">
-          <div className="overflow-auto max-h-[calc(100vh-450px)] min-h-[200px] scrollbar-thin scrollbar-thumb-slate-300 dark:scrollbar-thumb-slate-600 scrollbar-track-transparent">
+          <div className="overflow-auto max-h-[calc(100vh-380px)] min-h-[200px] pb-4 scrollbar-thin scrollbar-thumb-slate-300 dark:scrollbar-thumb-slate-600 scrollbar-track-transparent">
             <table className="w-full">
               <thead className="sticky top-0 z-10">
                 <tr className="border-b dark:border-slate-700 bg-slate-50 dark:bg-slate-800">

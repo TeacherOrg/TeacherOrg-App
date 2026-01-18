@@ -3,6 +3,7 @@ import { HelpCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useTutorial, TUTORIAL_IDS } from '@/hooks/useTutorial';
 import { useLocation } from 'react-router-dom';
+import pb from '@/api/pb';
 
 // Mapping von Routes zu Tutorial IDs
 const ROUTE_TUTORIAL_MAP = {
@@ -26,6 +27,12 @@ const TUTORIAL_NAMES = {
 export function HelpButton({ variant = 'floating' }) {
   const { showTutorial, isCompleted, progress } = useTutorial();
   const location = useLocation();
+
+  // Verstecke HelpButton für Schüler
+  const currentUser = pb.authStore.model;
+  if (currentUser?.role === 'student') {
+    return null;
+  }
 
   const currentTutorialId = ROUTE_TUTORIAL_MAP[location.pathname];
   const tutorialName = currentTutorialId ? TUTORIAL_NAMES[currentTutorialId] : null;

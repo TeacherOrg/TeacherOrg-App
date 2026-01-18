@@ -31,10 +31,63 @@ import { GradesTutorial } from '@/components/onboarding/tutorials/GradesTutorial
 import { HelpButton } from '@/components/onboarding/HelpButton';
 import TeamTeachingInvitationsModal from '@/components/settings/TeamTeachingInvitationsModal';
 import { useTeamTeaching } from '@/hooks/useTeamTeaching';
+import SubjectMigrationModal from '@/components/settings/SubjectMigrationModal';
+import { Subject, Fachbereich, Setting } from '@/api/entities';
 
 // Onboarding Content Component - renders all onboarding UI
 function OnboardingContent() {
   const { showSetupWizard, completeSetupWizard } = useOnboarding();
+  const [showMigrationModal, setShowMigrationModal] = useState(false);
+  const [migrationData, setMigrationData] = useState({ subjects: [], fachbereiche: [] });
+
+  // Check if migration is needed
+  useEffect(() => {
+    const checkMigration = async () => {
+      // Skip if setup wizard is showing
+      if (showSetupWizard) return;
+
+      try {
+        const currentUserId = pb.authStore.model?.id;
+        if (!currentUserId) return;
+
+        // Check if migration was already completed or skipped
+        const settingsList = await Setting.list({ user_id: currentUserId });
+        if (settingsList.length > 0) {
+          const settings = settingsList[0];
+          if (settings.subject_migration_completed || settings.subject_migration_skipped) {
+            return;
+          }
+        }
+
+        // Get all subjects for this user
+        const subjects = await Subject.list({ user_id: currentUserId });
+
+        // Check if there are subjects without lp21_id
+        const subjectsWithoutLp21 = subjects.filter(s => !s.lp21_id);
+
+        if (subjectsWithoutLp21.length > 0) {
+          // Get fachbereiche too
+          const fachbereiche = await Fachbereich.list({ user_id: currentUserId });
+
+          setMigrationData({
+            subjects: subjects,
+            fachbereiche: fachbereiche
+          });
+
+          // Small delay to not interfere with other modals
+          setTimeout(() => {
+            setShowMigrationModal(true);
+          }, 1000);
+        }
+      } catch (error) {
+        console.error('Error checking migration status:', error);
+      }
+    };
+
+    // Check after a delay to ensure data is loaded
+    const timer = setTimeout(checkMigration, 2000);
+    return () => clearTimeout(timer);
+  }, [showSetupWizard]);
 
   return (
     <>
@@ -42,6 +95,18 @@ function OnboardingContent() {
       <SetupWizard
         isOpen={showSetupWizard}
         onComplete={completeSetupWizard}
+      />
+      {/* Subject Migration Modal for existing users */}
+      <SubjectMigrationModal
+        isOpen={showMigrationModal}
+        onClose={() => setShowMigrationModal(false)}
+        subjects={migrationData.subjects}
+        fachbereiche={migrationData.fachbereiche}
+        onComplete={() => {
+          // Refresh data after migration
+          queryClient.invalidateQueries(['subjects']);
+          queryClient.invalidateQueries(['fachbereiche']);
+        }}
       />
       {/* Feature Tutorials */}
       <TimetableTutorial />

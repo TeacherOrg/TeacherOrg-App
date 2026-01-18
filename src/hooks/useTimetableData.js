@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Lesson, YearlyLesson, AllerleiLesson, Topic, Subject, Class, Setting, Holiday } from "@/api/entities";
+import { Lesson, YearlyLesson, AllerleiLesson, Topic, Subject, Class, Setting, Holiday, Student } from "@/api/entities";
 import pb from '@/api/pb';
 import { useLessonStore } from '@/store';
 import { isEqual } from 'lodash';
@@ -28,6 +28,7 @@ const useTimetableData = (currentYear, currentWeek, initialClassId = null, onCla
   const queryClientLocal = useQueryClient();
 
   const userId = pb.authStore.model?.id;
+  const isStudent = pb.authStore.model?.role === 'student';
 
   // Wrapper für setActiveClassId der optionalen Callback aufruft
   const setActiveClassId = (newClassId) => {
@@ -68,7 +69,113 @@ const useTimetableData = (currentYear, currentWeek, initialClassId = null, onCla
         };
       }
       try {
-        // 1. Lade eigene Daten + Team Teaching Zugriffe parallel
+        // STUDENT-PFAD: Lade die zugewiesene Klasse des Schülers
+        if (isStudent) {
+          const students = await Student.list();
+          const studentData = students.find(s => s.account_id === userId);
+
+          if (!studentData?.class_id) {
+            // Schüler hat keine zugewiesene Klasse
+            return {
+              lessonsData: [],
+              yearlyLessonsData: [],
+              allerleiLessonsData: [],
+              topicsData: [],
+              subjectsData: [],
+              classesData: [],
+              settingsData: [],
+              holidaysData: [],
+              isStudent: true,
+            };
+          }
+
+          // Nutze expandierte Klassendaten aus Student-Record (umgeht PocketBase Rules)
+          // Falls expand fehlschlägt, nutze user_id vom Student-Record als Fallback
+          const classData = studentData.expanded_class;
+          const teacherUserId = classData?.user_id || studentData.user_id;
+
+          if (!teacherUserId) {
+            console.error('Could not determine teacher user_id for student');
+            return {
+              lessonsData: [],
+              yearlyLessonsData: [],
+              allerleiLessonsData: [],
+              topicsData: [],
+              subjectsData: [],
+              classesData: [],
+              settingsData: [],
+              holidaysData: [],
+              isStudent: true,
+            };
+          }
+
+          // DEBUG: Prüfe Student-Daten
+          console.log('🔍 Student Data:', {
+            studentId: studentData.id,
+            classId: studentData.class_id,
+            teacherUserId,
+            expandedClass: classData,
+          });
+
+          // Lade alle Daten für diese Klasse (Settings vom Klassenbesitzer)
+          const [lessonsData, yearlyLessonsData, topicsData, subjectsData, settingsData, holidaysData] = await Promise.all([
+            Lesson.filter({ class_id: studentData.class_id }).then(data => {
+              console.log('📚 Lessons loaded:', data.length);
+              return data;
+            }).catch(err => {
+              console.error('❌ Lessons error:', err);
+              return [];
+            }),
+            YearlyLesson.filter({ class_id: studentData.class_id }).then(data => {
+              console.log('📅 YearlyLessons loaded:', data.length);
+              return data;
+            }).catch(err => {
+              console.error('❌ YearlyLessons error:', err);
+              return [];
+            }),
+            Topic.filter({ class_id: studentData.class_id }).catch(() => []),
+            Subject.filter({ class_id: studentData.class_id }).then(data => {
+              console.log('📖 Subjects loaded:', data.length);
+              return data;
+            }).catch(err => {
+              console.error('❌ Subjects error:', err);
+              return [];
+            }),
+            Setting.list({ user_id: teacherUserId }).then(data => {
+              console.log('⚙️ Settings loaded:', data.length);
+              return data;
+            }).catch(err => {
+              console.error('❌ Settings error:', err);
+              return [];
+            }),
+            Holiday.list({ user_id: teacherUserId }).catch(() => []),
+          ]);
+
+          // Fallback classData falls expand fehlgeschlagen ist
+          const effectiveClassData = classData || {
+            id: studentData.class_id,
+            name: 'Meine Klasse',
+            user_id: teacherUserId,
+          };
+
+          return {
+            lessonsData: lessonsData || [],
+            yearlyLessonsData: yearlyLessonsData || [],
+            allerleiLessonsData: [],
+            topicsData: topicsData || [],
+            subjectsData: subjectsData || [],
+            classesData: [{
+              ...effectiveClassData,
+              isOwner: false,
+              permissionLevel: 'view_only',
+            }],
+            settingsData: settingsData || [],
+            holidaysData: holidaysData || [],
+            isStudent: true,
+          };
+        }
+
+        // LEHRER-PFAD: Lade eigene Daten + Team Teaching Zugriffe parallel
         const [lessonsData, yearlyLessonsData, allerleiLessonsData, topicsData, subjectsData, ownedClassesData, settingsData, holidaysData, teamTeachingAccess] = await Promise.all([
           Lesson.list({ user_id: userId }).catch(err => {
             console.error('Lesson.list error:', err);
@@ -255,8 +362,8 @@ const useTimetableData = (currentYear, currentWeek, initialClassId = null, onCla
           setSettings(latestSettings);
         }
       } else {
-        const defaultSettings = {
-          user_id: currentUserId,
+        // Default-Settings Objekt
+        const defaultSettingsBase = {
           scheduleType: 'flexible',
           startTime: '08:00',
           lessonsPerDay: 8,
@@ -270,6 +377,18 @@ const useTimetableData = (currentYear, currentWeek, initialClassId = null, onCla
           afternoonBreakDuration: 15,
           cellWidth: 120,
           cellHeight: 80,
+        };
+
+        // Studenten sollten keine Settings erstellen - nur Default-Werte verwenden
+        if (isStudent || data?.isStudent) {
+          setSettings(defaultSettingsBase);
+          return;
+        }
+
+        // Nur für Lehrer: Settings in DB erstellen
+        const defaultSettings = {
+          ...defaultSettingsBase,
+          user_id: currentUserId,
         };
         try {
           const newSettings = await Setting.create(defaultSettings);
@@ -298,7 +417,8 @@ const useTimetableData = (currentYear, currentWeek, initialClassId = null, onCla
     topics: data?.topicsData || [],
     refetch,
     activeClassId,
-    setActiveClassId
+    setActiveClassId,
+    isStudent: data?.isStudent || isStudent,
   };
 };
 

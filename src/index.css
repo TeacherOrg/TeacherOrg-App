@@ -99,11 +99,11 @@
     --chart-3: 30 80% 55%;
     --chart-4: 280 65% 60%;
     --chart-5: 340 75% 55%;
-    --sidebar-background: 240 5.9% 10%;
-    --sidebar-foreground: 240 4.8% 95.9%;
+    --sidebar-background: 229 84% 5%;
+    --sidebar-foreground: 220 15% 80%;
     --sidebar-primary: 224.3 76.3% 48%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 240 3.7% 15.9%;
+    --sidebar-accent: 222 20% 14%;
     --sidebar-accent-foreground: 240 4.8% 95.9%;
     --sidebar-border: 240 3.7% 15.9%;
     --sidebar-ring: 217.2 91.2% 59.8%;
@@ -716,7 +716,7 @@ html, body, #root {
   }
 
   .dark .timetable-page-container {
-    background: linear-gradient(to bottom right, #020617, #0f172a, #020617); /* Dark Gradient */
+    background: linear-gradient(to bottom right, #020617, #0a101f, #020617); /* Dark Gradient - subtiler */
   }
 
   /* Space-Theme: Container transparent machen damit Sterne durchscheinen */
@@ -1270,5 +1270,22 @@ main {
 
   body.ctrl-pressed .lesson-card:active {
     cursor: grabbing;
+  }
+}
+
+/* ===== TIMETABLE TOUCH DRAG SUPPORT ===== */
+/* Verhindert Browser-Scroll bei Touch-Drag auf Lesson-Cards (Mobile) */
+@media (pointer: coarse) {
+  .lesson-card {
+    touch-action: none;
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+
+  /* Visual Feedback bei Long-Press */
+  .lesson-card:active {
+    transform: scale(0.98);
+    transition: transform 0.1s ease;
   }
 }

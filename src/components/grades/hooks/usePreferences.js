@@ -24,6 +24,11 @@ export const usePreferences = (activeClassId) => {
   // Bug 5 Fix: Spezifische Subscription-Referenz statt global unsubscribe
   const subscriptionUnsubscribeRef = useRef(null);
 
+  // Bug 9 Fix: Flag um Race Condition zwischen Save und Realtime-Subscription zu verhindern
+  const isSavingRef = useRef(false);
+  // Bug 9 Fix (v2): Speichert den erwarteten Tab-Wert um eigene Echos zu erkennen
+  const pendingTabRef = useRef(null);
+
   // Refs aktuell halten
   useEffect(() => { expandedLeistungenRowsRef.current = expandedLeistungenRows; }, [expandedLeistungenRows]);
   useEffect(() => { expandedUeberfachlichHistoriesRef.current = expandedUeberfachlichHistories; }, [expandedUeberfachlichHistories]);
@@ -32,17 +37,22 @@ export const usePreferences = (activeClassId) => {
   useEffect(() => { activeClassIdRef.current = activeClassId; }, [activeClassId]);
 
   // Bug 6 Fix: Debounce mit Refs statt Closures
-  const savePreferences = useCallback(
+  // Bug 9 Fix: Interne debounced Funktion (Flag wird in Wrapper gesetzt)
+  const debouncedSavePreferences = useCallback(
     debounce(async (customData = null) => {
       const currentActiveClassId = activeClassIdRef.current;
       if (!currentActiveClassId) {
         console.warn('No activeClassId provided, skipping savePreferences');
+        isSavingRef.current = false;
+        pendingTabRef.current = null;
         return;
       }
 
       const user = User.current();
       if (!user || !user.id) {
         console.warn('No user found for saving preferences');
+        isSavingRef.current = false;
+        pendingTabRef.current = null;
         return;
       }
 
@@ -60,7 +70,10 @@ export const usePreferences = (activeClassId) => {
           performanceTab: tabRef.current
         };
 
-        const preferencesToSave = customData || currentPreferences;
+        // Bug 9 Fix (v3): MERGE statt Replace - damit performanceTab nicht gelöscht wird
+        const preferencesToSave = customData
+          ? { ...currentPreferences, ...customData }
+          : currentPreferences;
 
         if (process.env.NODE_ENV === 'development') {
           console.log('savePreferences - Saving:', preferencesToSave);
@@ -75,6 +88,8 @@ export const usePreferences = (activeClassId) => {
         // Bug 7 Fix: Request-Überprüfung mit Symbol
         if (activeRequestRef.current !== requestId) {
           console.log('savePreferences - Request superseded, skipping');
+          isSavingRef.current = false;
+          pendingTabRef.current = null;
           return;
         }
 
@@ -93,7 +108,15 @@ export const usePreferences = (activeClassId) => {
         if (process.env.NODE_ENV === 'development') {
           console.log('savePreferences - Success');
         }
+
+        // Bug 9 Fix (v2): Fallback-Timeout falls Echo nie ankommt (normalerweise wird Flag durch Echo-Erkennung zurückgesetzt)
+        setTimeout(() => {
+          isSavingRef.current = false;
+          pendingTabRef.current = null;
+        }, 2000);
       } catch (error) {
+        isSavingRef.current = false;
+        pendingTabRef.current = null;
         if (!error.message?.includes('autocancelled')) {
           console.error('savePreferences - Error:', error);
         }
@@ -101,6 +124,24 @@ export const usePreferences = (activeClassId) => {
     }, 500),
     [] // Bug 6 Fix: Keine Dependencies nötig, da Refs verwendet werden
   );
+
+  // Bug 9 Fix (v2): Wrapper-Funktion die Flag und erwarteten Tab SOFORT setzt
+  const savePreferences = useCallback((customData = null) => {
+    console.log('=== SAVE PREFS WRAPPER: Called ===');
+    console.log('isSavingRef BEFORE:', isSavingRef.current);
+    console.log('pendingTabRef BEFORE:', pendingTabRef.current);
+    console.log('customData:', customData);
+
+    isSavingRef.current = true;
+    // Merken welchen Tab wir speichern wollen (für Echo-Erkennung)
+    if (customData?.performanceTab) {
+      pendingTabRef.current = customData.performanceTab;
+    }
+
+    console.log('isSavingRef AFTER:', isSavingRef.current);
+    console.log('pendingTabRef AFTER:', pendingTabRef.current);
+    debouncedSavePreferences(customData);
+  }, [debouncedSavePreferences]);
 
   const loadPreferences = useCallback(async () => {
     if (!activeClassId) {
@@ -146,30 +187,12 @@ export const usePreferences = (activeClassId) => {
       if (preference?.preferences) {
         console.log('Found preference:', preference.id, 'Data:', preference.preferences);
 
-        setExpandedLeistungenRows(new Set(
-          Array.isArray(preference.preferences.expandedLeistungenRows)
-            ? preference.preferences.expandedLeistungenRows
-            : []
-        ));
-        setExpandedUeberfachlichHistories(new Set(
-          Array.isArray(preference.preferences.expandedUeberfachlichHistories)
-            ? preference.preferences.expandedUeberfachlichHistories
-            : []
-        ));
-        setExpandedUeberfachlichCompetencies(new Set(
-          Array.isArray(preference.preferences.expandedUeberfachlichCompetencies)
-            ? preference.preferences.expandedUeberfachlichCompetencies
-            : []
-        ));
-
-        // Bug 2 Fix: Gespeicherten Tab respektieren statt 'diagramme' zu erzwingen
-        const savedTab = preference.preferences.performanceTab;
-        const validTabs = ['diagramme', 'leistungen', 'ueberfachlich'];
-        const initialTab = validTabs.includes(savedTab) ? savedTab : 'diagramme';
-        console.log('Loading saved tab:', initialTab);
-        setTab(initialTab);
-
-        // Bug 2 Fix: ENTFERNT - Keine Tab-Korrektur mehr auf 'diagramme'
+        // Bei Ansichtswechsel: Immer mit Defaults starten (Diagramme-Tab, alle zugeklappt)
+        setExpandedLeistungenRows(new Set());
+        setExpandedUeberfachlichHistories(new Set());
+        setExpandedUeberfachlichCompetencies(new Set());
+        setTab('diagramme');
+        console.log('>>> LOAD PREFS: Reset to defaults (diagramme, all collapsed)');
       } else {
         console.log('No preferences found, creating with defaults');
         const defaultPreferences = {
@@ -185,7 +208,12 @@ export const usePreferences = (activeClassId) => {
           preferences: defaultPreferences
         }, { $cancelKey: `create-default-${Date.now()}-${Math.random().toString(36).substr(2, 9)}` });
 
-        setTab('diagramme');
+        if (!isSavingRef.current) {
+          setTab('diagramme');
+          console.log('>>> LOAD PREFS (no prefs found): Tab set to diagramme');
+        } else {
+          console.log('>>> LOAD PREFS (no prefs found): Tab NOT set (saving in progress)');
+        }
         setExpandedLeistungenRows(new Set());
         setExpandedUeberfachlichHistories(new Set());
         setExpandedUeberfachlichCompetencies(new Set());
@@ -193,7 +221,12 @@ export const usePreferences = (activeClassId) => {
     } catch (error) {
       if (!error.message?.includes('autocancelled')) {
         console.error('Error loading preferences:', error);
-        setTab('diagramme');
+        if (!isSavingRef.current) {
+          setTab('diagramme');
+          console.log('>>> LOAD PREFS (error): Tab set to diagramme');
+        } else {
+          console.log('>>> LOAD PREFS (error): Tab NOT set (saving in progress)');
+        }
         setExpandedLeistungenRows(new Set());
         setExpandedUeberfachlichHistories(new Set());
         setExpandedUeberfachlichCompetencies(new Set());
@@ -276,11 +309,33 @@ export const usePreferences = (activeClassId) => {
           setExpandedUeberfachlichHistories(new Set(preferences.expandedUeberfachlichHistories));
           setExpandedUeberfachlichCompetencies(new Set(preferences.expandedUeberfachlichCompetencies));
 
-          // Tab nur aktualisieren wenn sich der Wert geändert hat
+          // Bug 9 Fix (v2): Intelligente Tab-Aktualisierung mit Echo-Erkennung
           const currentTab = tabRef.current;
+          console.log('=== REALTIME TAB CHECK ===');
+          console.log('preferences.performanceTab:', preferences.performanceTab);
+          console.log('currentTab (tabRef.current):', currentTab);
+          console.log('isSavingRef.current:', isSavingRef.current);
+          console.log('pendingTabRef.current:', pendingTabRef.current);
+
           if (preferences.performanceTab !== currentTab) {
-            setTab(preferences.performanceTab);
-            console.log('Realtime Subscription - Updated tab to:', preferences.performanceTab);
+            console.log('Tab values differ, checking flags...');
+            if (isSavingRef.current) {
+              // Prüfen ob es unser eigenes Echo ist
+              if (preferences.performanceTab === pendingTabRef.current) {
+                // Eigenes Echo erkannt - Flag zurücksetzen, Tab NICHT ändern
+                console.log('>>> REALTIME: Own echo received for tab:', preferences.performanceTab, '- NOT changing tab');
+                isSavingRef.current = false;
+                pendingTabRef.current = null;
+              } else {
+                // Saving aktiv aber anderer Tab-Wert - blockieren
+                console.log('>>> REALTIME: Tab update BLOCKED (saving in progress, different value)');
+                console.log('   Expected:', pendingTabRef.current, 'Got:', preferences.performanceTab);
+              }
+            } else {
+              // Nicht am Speichern - externes Update, Tab aktualisieren
+              console.log('>>> REALTIME: Updating tab to:', preferences.performanceTab);
+              setTab(preferences.performanceTab);
+            }
           }
 
           // Bug 2 Fix: ENTFERNT - Keine automatische Tab-Korrektur mehr
@@ -289,7 +344,12 @@ export const usePreferences = (activeClassId) => {
           setExpandedLeistungenRows(new Set());
           setExpandedUeberfachlichHistories(new Set());
           setExpandedUeberfachlichCompetencies(new Set());
-          setTab('diagramme');
+          if (!isSavingRef.current) {
+            setTab('diagramme');
+            console.log('>>> REALTIME (invalid prefs): Tab set to diagramme');
+          } else {
+            console.log('>>> REALTIME (invalid prefs): Tab NOT set (saving in progress)');
+          }
         }
       } catch (error) {
         if (!error.message?.includes('autocancelled')) {

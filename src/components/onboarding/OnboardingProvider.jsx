@@ -55,8 +55,9 @@ export function OnboardingProvider({ children }) {
         const completed = user.completed_tutorials || [];
         setCompletedTutorials(Array.isArray(completed) ? completed : []);
 
-        // Zeige Setup-Wizard wenn noch nicht abgeschlossen
-        if (!user.has_completed_onboarding) {
+        // Zeige Setup-Wizard wenn noch nicht abgeschlossen UND kein Schüler
+        const isStudent = user.role === 'student';
+        if (!user.has_completed_onboarding && !isStudent) {
           setShowSetupWizard(true);
         }
 
@@ -182,6 +183,10 @@ export function OnboardingProvider({ children }) {
   const triggerTutorialForRoute = useCallback((pathname) => {
     // Warte bis Daten geladen sind
     if (isLoading) return;
+
+    // Keine Tutorials für Schüler
+    const isStudent = pb.authStore.model?.role === 'student';
+    if (isStudent) return;
 
     const tutorialId = ROUTE_TUTORIAL_MAP[pathname];
     if (tutorialId && !isCompleted(tutorialId) && !showSetupWizard) {

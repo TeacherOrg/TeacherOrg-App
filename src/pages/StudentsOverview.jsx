@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { Student, Performance, UeberfachlichKompetenz, Class } from "@/api/entities";
 import pb from '@/api/pb';
-import { Users, Users2, TrendingDown, Award, AlertCircle, ChevronRight, Search, Star, LayoutDashboard, Scroll, Eye } from "lucide-react";
+import { Users, Users2, TrendingDown, Award, AlertCircle, ChevronRight, Search, Star, LayoutDashboard, Eye, BarChart3 } from "lucide-react";
 import { motion } from "framer-motion";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -12,7 +12,6 @@ import { useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { toast } from "sonner";
 import { calculateWeightedGrade } from '@/components/grades/utils/calculateWeightedGrade';
-import BountiesStoreTab from '@/components/grades/BountiesStoreTab/BountiesStoreTab';
 import { useStudentSortPreference } from '@/hooks/useStudentSortPreference';
 import { sortStudents } from '@/utils/studentSortUtils';
 
@@ -25,7 +24,6 @@ export default function StudentsOverview() {
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [sortBy, setSortBy] = useState("name");
-  const [activeTab, setActiveTab] = useState("students"); // "students" | "bounties-store"
 
   const navigate = useNavigate();
   const [sortPreference] = useStudentSortPreference();
@@ -293,7 +291,7 @@ export default function StudentsOverview() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-slate-100 to-slate-200 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 p-4 sm:p-6 transition-colors duration-300">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-slate-100 to-slate-200 dark:from-slate-950 dark:via-slate-925 dark:to-slate-950 p-4 sm:p-6 transition-colors duration-300">
       <div className="max-w-[1800px] mx-auto">
         {/* Header */}
         <motion.div
@@ -302,50 +300,7 @@ export default function StudentsOverview() {
           className="mb-6"
         >
           <div className="flex flex-col gap-4">
-            <div className="flex items-center justify-between flex-wrap gap-4">
-              <div className="flex items-center gap-4">
-                <div className="w-14 h-14 bg-gradient-to-br from-purple-600 to-pink-600 dark:from-purple-500 dark:to-pink-500 rounded-2xl flex items-center justify-center shadow-lg">
-                  <Users className="w-7 h-7 text-white" />
-                </div>
-                <div>
-                  <h1 className="text-3xl md:text-4xl font-bold text-gray-900 dark:text-white tracking-tight">
-                    Schülerübersicht
-                  </h1>
-                  <p className="text-gray-600 dark:text-gray-400 text-sm font-medium mt-1">
-                    {activeTab === "students" ? "Kompakte Übersicht über alle Schüler" : "Bounties & Store verwalten"}
-                  </p>
-                </div>
-              </div>
-
-              {/* Tab Navigation */}
-              <div className="flex bg-white/60 dark:bg-slate-800/60 backdrop-blur-sm rounded-xl p-1 border border-slate-200/50 dark:border-slate-700/50">
-                <button
-                  onClick={() => setActiveTab("students")}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                    activeTab === "students"
-                      ? "bg-white dark:bg-slate-700 text-purple-600 dark:text-purple-400 shadow-sm"
-                      : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
-                  }`}
-                >
-                  <Users className="w-4 h-4" />
-                  <span className="hidden sm:inline">Schüler</span>
-                </button>
-                <button
-                  onClick={() => setActiveTab("bounties-store")}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                    activeTab === "bounties-store"
-                      ? "bg-white dark:bg-slate-700 text-amber-600 dark:text-amber-400 shadow-sm"
-                      : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
-                  }`}
-                >
-                  <Scroll className="w-4 h-4" />
-                  <span className="hidden sm:inline">Bounties & Store</span>
-                </button>
-              </div>
-            </div>
-
-            {/* Filter und Suche - nur im Schüler-Tab */}
-            {activeTab === "students" && (
+            {/* Filter und Suche */}
             <div className="flex flex-col sm:flex-row gap-3">
               {/* Klassen-Auswahl mit Kategorien */}
               <Select value={activeClassId || ''} onValueChange={setActiveClassId}>
@@ -390,17 +345,6 @@ export default function StudentsOverview() {
                 </SelectContent>
               </Select>
 
-              {/* Suche */}
-              <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                <Input
-                  placeholder="Schüler suchen..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-10 bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700"
-                />
-              </div>
-
               {/* Sortierung */}
               <Select value={sortBy} onValueChange={setSortBy}>
                 <SelectTrigger className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 min-w-[200px]">
@@ -412,24 +356,21 @@ export default function StudentsOverview() {
                   <SelectItem value="average-asc">Nach Note (tief → hoch)</SelectItem>
                 </SelectContent>
               </Select>
+
+              {/* Suche */}
+              <div className="relative flex-1 min-w-[250px]">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                <Input
+                  placeholder="Schüler suchen..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-10 bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700"
+                />
+              </div>
             </div>
-            )}
           </div>
         </motion.div>
 
-        {/* Bounties & Store Tab */}
-        {activeTab === "bounties-store" && (
-          <BountiesStoreTab
-            students={students.filter(s => String(s.class_id) === String(activeClassId))}
-            classes={classes}
-            activeClassId={activeClassId}
-            onClassChange={setActiveClassId}
-          />
-        )}
-
-        {/* Statistik-Bar - nur im Schüler-Tab */}
-        {activeTab === "students" && (
-        <>
         {/* Statistik-Bar */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -491,7 +432,7 @@ export default function StudentsOverview() {
             </CardContent>
           </Card>
         ) : (
-          <div className="overflow-y-auto max-h-[calc(100vh-320px)] pr-2 scrollbar-thin scrollbar-thumb-slate-300 dark:scrollbar-thumb-slate-600 scrollbar-track-transparent">
+          <div className="overflow-y-auto max-h-[calc(100vh-180px)] pr-2 pb-4 scrollbar-thin scrollbar-thumb-slate-300 dark:scrollbar-thumb-slate-600 scrollbar-track-transparent">
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-4">
             {filteredAndSortedCards.map((card, index) => {
               const gradeColors = getGradeColor(card.average);
@@ -625,9 +566,10 @@ export default function StudentsOverview() {
                           <LayoutDashboard className="w-3.5 h-3.5" />
                           <span className="font-medium">Dashboard</span>
                         </button>
-                        <div className="flex items-center text-slate-500 dark:text-slate-400 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
-                          <span className="font-medium">Details</span>
-                          <ChevronRight className="w-3.5 h-3.5 ml-1 group-hover:translate-x-1 transition-transform" />
+                        <div className="flex items-center gap-1 text-slate-500 dark:text-slate-400 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+                          <BarChart3 className="w-3.5 h-3.5" />
+                          <span className="font-medium">Leistungsdetails</span>
+                          <ChevronRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
                         </div>
                       </div>
                     </CardContent>
@@ -637,8 +579,6 @@ export default function StudentsOverview() {
             })}
           </div>
           </div>
-        )}
-        </>
         )}
       </div>
     </div>

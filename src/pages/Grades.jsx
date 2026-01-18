@@ -188,8 +188,8 @@ export default function GradesPage() {
   const ueberfachlichForActiveClass = ueberfachlich.filter(u => u.class_id === activeClassId);
 
   return (
-    <div className="h-screen overflow-hidden bg-gradient-to-br from-slate-50 via-slate-100 to-slate-200 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 p-4 sm:p-6 transition-colors duration-300">
-      <div className="max-w-7xl mx-auto">
+    <div className="h-screen overflow-hidden bg-gradient-to-br from-slate-50 via-slate-100 to-slate-200 dark:from-slate-950 dark:via-slate-925 dark:to-slate-950 p-2 sm:p-3 transition-colors duration-300">
+      <div className="max-w-7xl mx-auto h-full">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}

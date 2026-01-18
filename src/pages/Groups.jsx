@@ -1,8 +1,7 @@
 import React, { useState, useMemo, useCallback } from "react";
-import { motion } from "framer-motion";
 import { DndContext, closestCenter, DragOverlay, useSensors, useSensor, PointerSensor, KeyboardSensor } from "@dnd-kit/core";
 import { sortableKeyboardCoordinates } from "@dnd-kit/sortable";
-import { Users, Eye } from "lucide-react";
+import { Eye } from "lucide-react";
 import { useGroups } from "@/components/groups/hooks/useGroups";
 import { Controls } from "@/components/groups/components/Controls";
 import { UnassignedBox } from "@/components/groups/components/UnassignedBox";
@@ -220,20 +219,8 @@ export default function GroupsPage() {
   };
 
   return (
-    <div className="h-full overflow-hidden bg-gradient-to-br from-slate-50 via-slate-100 to-slate-200 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 p-6">
+    <div className="h-full overflow-hidden bg-gradient-to-br from-slate-50 via-slate-100 to-slate-200 dark:from-slate-950 dark:via-slate-925 dark:to-slate-950 p-6">
       <div className="h-full flex flex-col">
-        <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} className="flex justify-between items-center mb-6">
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 bg-gradient-to-br from-gray-200 dark:from-orange-600 to-gray-50 dark:to-orange-800 rounded-2xl flex items-center justify-center shadow-lg">
-              <Users className="w-6 h-6 text-gray-800 dark:text-white" />
-            </div>
-            <div>
-              <h1 className="text-3xl font-bold text-gray-800 dark:text-white tracking-tight mb-1">Gruppenbildung</h1>
-              <p className="text-gray-500 dark:text-slate-400">Erstelle und verteile Schülergruppen nach Klasse.</p>
-            </div>
-          </div>
-        </motion.div>
-
         {error && <div className="mb-4 p-4 bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 rounded-xl">{error}</div>}
 
         {/* Team Teaching: View-Only Banner */}

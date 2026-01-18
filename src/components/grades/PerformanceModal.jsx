@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { Plus, Trash2, BookOpen, Save, X, Upload, FileText } from 'lucide-react';
+import { BookOpen, X } from 'lucide-react';
 import { Badge } from "@/components/ui/badge";
 import { Performance, Fachbereich, User } from '@/api/entities';
 import { useStudentSortPreference } from '@/hooks/useStudentSortPreference';
@@ -19,7 +19,6 @@ const PerformanceModal = ({ isOpen, onClose, onSave, students = [], subjects = [
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [selectedSubject, setSelectedSubject] = useState('');
   const [selectedFachbereiche, setSelectedFachbereiche] = useState([]);
-  const [newFachbereichName, setNewFachbereichName] = useState('');
   const [studentGrades, setStudentGrades] = useState([]);
   const [pasteData, setPasteData] = useState('');
   const [error, setError] = useState('');
@@ -60,7 +59,6 @@ const PerformanceModal = ({ isOpen, onClose, onSave, students = [], subjects = [
       setPasteData('');
       setError('');
       setImportMode('gradesOnly');
-      setNewFachbereichName('');
       setWeight(1); // ← Reset weight on open
 
       if (editingPerformance) {
@@ -89,55 +87,6 @@ const PerformanceModal = ({ isOpen, onClose, onSave, students = [], subjects = [
       }
     }
   }, [isOpen, students, subjects, activeClassId, editingPerformance, sortedStudents]);
-
-  const handleAddFachbereich = async () => {
-    if (!newFachbereichName.trim() || !selectedSubject || !activeClassId) {
-      setError("Bitte geben Sie einen Namen für den neuen Fachbereich ein und wählen Sie ein Fach und eine Klasse aus.");
-      return;
-    }
-    const user = User.current();
-    if (!user) {
-      setError("Kein Benutzer eingeloggt.");
-      return;
-    }
-    const subject = subjects.find(s => s.id === selectedSubject);
-    if (!subject) {
-      setError("Ungültiges Fach ausgewählt. Bitte wählen Sie ein gültiges Fach.");
-      return;
-    }
-    const existing = allFachbereiche.find(fb => fb.name.toLowerCase() === newFachbereichName.trim().toLowerCase() && fb.subject_id === selectedSubject);
-    if (existing) {
-      if (!selectedFachbereiche.includes(existing.name)) {
-        setSelectedFachbereiche([...selectedFachbereiche, existing.name]);
-      }
-      setNewFachbereichName('');
-      setError('');
-      return;
-    }
-    try {
-      console.log('Fachbereich create data:', {
-        name: newFachbereichName.trim(),
-        class_id: activeClassId,
-        subject_id: selectedSubject,
-        user_id: user.id,
-        description: ''
-      });
-      const newFb = await Fachbereich.create({
-        name: newFachbereichName.trim(),
-        class_id: activeClassId,
-        subject_id: selectedSubject,
-        user_id: user.id,
-        description: ''
-      });
-      setAllFachbereiche([...allFachbereiche, newFb]);
-      setSelectedFachbereiche([...selectedFachbereiche, newFb.name]);
-      setNewFachbereichName('');
-      setError('');
-    } catch (error) {
-      console.error("Fehler beim Erstellen des Fachbereichs:", error);
-      setError(`Fehler beim Erstellen des Fachbereichs: ${error.message || 'Unbekannter Fehler'}`);
-    }
-  };
 
   const handleParsePasteData = () => {
     if (!pasteData) return;
@@ -270,12 +219,12 @@ const PerformanceModal = ({ isOpen, onClose, onSave, students = [], subjects = [
                 <Input id="date" type="date" value={date} onChange={e => setDate(e.target.value)} required className="bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600" />
               </div>
             </div>
-            <div>
-              <Label>Fachbereiche (Optional)</Label>
-              <div className="flex gap-2 items-center mt-1">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <Label>Fachbereich wählen</Label>
                 <Select onValueChange={(value) => !selectedFachbereiche.includes(value) && setSelectedFachbereiche([...selectedFachbereiche, value])}>
-                  <SelectTrigger className="flex-1 bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600">
-                    <SelectValue placeholder="Bestehenden Fachbereich auswählen..." />
+                  <SelectTrigger className="bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600">
+                    <SelectValue placeholder="Fachbereich auswählen..." />
                   </SelectTrigger>
                   <SelectContent>
                     {availableFachbereiche.map(fb => (
@@ -283,18 +232,36 @@ const PerformanceModal = ({ isOpen, onClose, onSave, students = [], subjects = [
                     ))}
                   </SelectContent>
                 </Select>
-                <Input
-                  value={newFachbereichName}
-                  onChange={e => setNewFachbereichName(e.target.value)}
-                  placeholder="Oder neuen Fachbereich erstellen"
-                  className="flex-1 bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600"
-                  onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), handleAddFachbereich())}
-                />
-                <Button type="button" size="icon" onClick={handleAddFachbereich} className="bg-blue-600 hover:bg-blue-700">
-                  <Plus className="w-4 h-4" />
-                </Button>
               </div>
-              <div className="flex flex-wrap gap-2 mt-3">
+              <div>
+                <Label>Gewichtung</Label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  max="10"
+                  placeholder="1"
+                  value={weight === null ? '' : weight}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    if (val === '') {
+                      setWeight(null);
+                    } else {
+                      const num = parseFloat(val);
+                      if (!isNaN(num) && num >= 0 && num <= 10) {
+                        setWeight(num);
+                      }
+                    }
+                  }}
+                  className="bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600"
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  1 = Standard | 3 = Klausur | 0.5 = Stegreif
+                </p>
+              </div>
+            </div>
+            {selectedFachbereiche.length > 0 && (
+              <div className="flex flex-wrap gap-2">
                 {selectedFachbereiche.map((fbName) => (
                   <Badge key={fbName} variant="secondary" className="bg-slate-200 dark:bg-slate-700 text-slate-900 dark:text-white flex items-center gap-1.5 py-1 px-2">
                     {fbName}
@@ -304,34 +271,7 @@ const PerformanceModal = ({ isOpen, onClose, onSave, students = [], subjects = [
                   </Badge>
                 ))}
               </div>
-            </div>
-            <div className="space-y-1">
-              <Label>Gewichtung</Label>
-              <Input
-                type="number"
-                step="0.01"
-                min="0"
-                max="10"
-                placeholder="1"
-                value={weight === null ? '' : weight}
-                onChange={(e) => {
-                  const val = e.target.value;
-                  if (val === '') {
-                    setWeight(null);
-                  } else {
-                    const num = parseFloat(val);
-                    if (!isNaN(num) && num >= 0 && num <= 10) {
-                      setWeight(num);
-                    }
-                    // sonst ignorieren
-                  }
-                }}
-                className="bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600"
-              />
-              <p className="text-xs text-muted-foreground">
-                Standard = 1 | Klausur = 3 | Stegreif = 0.5 | mündlich = 1
-              </p>
-            </div>
+            )}
             {mode === 'import' && (
               <div>
                 <div className="flex gap-4 my-2">
@@ -380,7 +320,7 @@ const PerformanceModal = ({ isOpen, onClose, onSave, students = [], subjects = [
             </div>
           </div>
 
-          <div className="flex justify-end gap-3 px-6 py-4 border-t border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 flex-shrink-0">
+          <div className="flex justify-end gap-3 px-6 py-4 border-t border-slate-200 dark:border-slate-700 flex-shrink-0">
             <Button type="button" variant="outline" onClick={onClose} className="bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 border-slate-300 dark:border-slate-600">Abbrechen</Button>
             <Button type="submit" className="bg-blue-600 hover:bg-blue-700">Speichern</Button>
           </div>

@@ -732,8 +732,9 @@ export default function Chores() {
     weekEndDate.setDate(weekEndDate.getDate() + 4);
 
     return (
-        <div className="min-h-screen bg-gradient-to-br from-slate-50 via-slate-100 to-slate-200 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 p-6 flex flex-col transition-colors duration-300">
-            <div className="flex flex-wrap gap-4 items-center mb-6">
+        <div className="min-h-screen bg-gradient-to-br from-slate-50 via-slate-100 to-slate-200 dark:from-slate-950 dark:via-slate-925 dark:to-slate-950 p-6 flex flex-col transition-colors duration-300">
+            {/* Zeile 1: Navigation */}
+            <div className="flex items-center gap-4 mb-3">
                 <Select value={activeClassId || ''} onValueChange={setActiveClassId} disabled={isLoading || classes.length === 0}>
                     <SelectTrigger className="bg-white dark:bg-slate-800 border-gray-300 dark:border-slate-700 rounded-xl text-gray-800 dark:text-white placeholder:text-gray-400 dark:placeholder:text-slate-400 w-48">
                         <SelectValue placeholder="Klasse wählen" />
@@ -755,34 +756,6 @@ export default function Chores() {
                     </Button>
                 </div>
 
-                {canEdit && (
-                    <>
-                        <Button
-                            onClick={() => { setEditingChore(null); setIsChoreModalOpen(true); }}
-                            className="bg-blue-600 hover:bg-blue-700"
-                            disabled={!activeClassId || isLoading || classes.length === 0}
-                        >
-                            <Plus className="w-4 h-4 mr-2"/>
-                            Neues Ämtchen
-                        </Button>
-
-                        <Button onClick={() => setIsRandomAssignDialogOpen(true)} variant="outline" className="bg-white dark:bg-slate-700 border-gray-300 dark:border-slate-600 hover:bg-gray-100 dark:hover:bg-slate-600 text-gray-800 dark:text-white">
-                            <Zap className="w-4 h-4 mr-2" />
-                            Zufällig Zuweisen
-                        </Button>
-
-                        <Button onClick={() => setIsResetDialogOpen(true)} variant="outline" className="bg-white dark:bg-slate-700 border-gray-300 dark:border-slate-600 hover:bg-gray-100 dark:hover:bg-slate-600 text-gray-800 dark:text-white">
-                            <RotateCcw className="w-4 h-4 mr-2" />
-                            Rotation Reset
-                        </Button>
-
-                        <Button onClick={() => setIsOverviewDialogOpen(true)} variant="outline" className="bg-white dark:bg-slate-700 border-gray-300 dark:border-slate-600 hover:bg-gray-100 dark:hover:bg-slate-600 text-gray-800 dark:text-white">
-                            <ClipboardList className="w-4 h-4 mr-2" />
-                            Übersicht
-                        </Button>
-                    </>
-                )}
-
                 {/* Team Teaching: View-Only Banner */}
                 {!canEdit && activeClassId && (
                     <div className="flex items-center gap-2 bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-700 rounded-xl px-4 py-2">
@@ -794,13 +767,44 @@ export default function Chores() {
                 )}
             </div>
 
+            {/* Zeile 2: Aktionen */}
+            {canEdit && (
+                <div className="flex items-center gap-2 mb-4 p-2 bg-white/50 dark:bg-slate-800/50 rounded-xl border border-gray-200 dark:border-slate-700 w-fit">
+                    <Button
+                        onClick={() => { setEditingChore(null); setIsChoreModalOpen(true); }}
+                        className="bg-blue-600 hover:bg-blue-700"
+                        disabled={!activeClassId || isLoading || classes.length === 0}
+                    >
+                        <Plus className="w-4 h-4 mr-2"/>
+                        Neues Ämtchen
+                    </Button>
+
+                    <div className="h-6 w-px bg-gray-300 dark:bg-slate-600" />
+
+                    <Button onClick={() => setIsRandomAssignDialogOpen(true)} variant="ghost" className="text-gray-700 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-700">
+                        <Zap className="w-4 h-4 mr-2" />
+                        Zufällig Zuweisen
+                    </Button>
+
+                    <Button onClick={() => setIsResetDialogOpen(true)} variant="ghost" className="text-gray-700 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-700">
+                        <RotateCcw className="w-4 h-4 mr-2" />
+                        Reset
+                    </Button>
+
+                    <Button onClick={() => setIsOverviewDialogOpen(true)} variant="ghost" className="text-gray-700 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-700">
+                        <ClipboardList className="w-4 h-4 mr-2" />
+                        Übersicht
+                    </Button>
+                </div>
+            )}
+
             {isLoading ? <CalendarLoader /> : (
                 <DragDropContext onDragEnd={canEdit ? handleDragEnd : () => {}}>
                     <div className="flex-1 flex gap-6">
-                        <div className="w-80 flex-shrink-0">
+                        <div className="w-72 flex-shrink-0">
                             <StudentPool students={unassignedStudents} canEdit={canEdit} />
                         </div>
-                        <div className="flex-1 min-w-[800px]">
+                        <div className="flex-1 min-w-0">
                             <ChoresWeekTable
                                 chores={choresInClass}
                                 weekDates={weekDates}

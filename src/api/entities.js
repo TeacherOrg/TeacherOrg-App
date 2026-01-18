@@ -284,6 +284,8 @@ class PbEntity {
     if (this.name === 'student') {
       normalizedItem.has_account = !!normalizedItem.account_id;
       normalizedItem.account_email = normalizedItem.expand?.account_id?.email || null;
+      // Speichere expandierte Klassendaten für Student-Pfad im Timetable
+      normalizedItem.expanded_class = normalizedItem.expand?.class_id || null;
     }
 
     // Currency & Store System Normalizations
@@ -334,14 +336,19 @@ class PbEntity {
     const cancelKey = query.$cancelKey || `list-${this.name}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
     // Spezialfall für subjects: lädt deine aktuellen + alle alten ohne user_id
+    // Für Studenten: KEIN user_id-Filter, da sie Lehrer-Subjects über class_id laden
     let customFilter = '';
     if (this.name === 'subject') {
-      const uid = pb.authStore.model?.id;
-      if (uid) {
-        customFilter = `(user_id = '${uid}' || user_id = null || user_id = '')`;
-      } else {
-        customFilter = `(user_id = null || user_id = '')`;
+      const isStudent = pb.authStore.model?.role === 'student';
+      if (!isStudent) {
+        const uid = pb.authStore.model?.id;
+        if (uid) {
+          customFilter = `(user_id = '${uid}' || user_id = null || user_id = '')`;
+        } else {
+          customFilter = `(user_id = null || user_id = '')`;
+        }
       }
+      // Für Studenten: customFilter bleibt leer, class_id-Filter aus Query wird verwendet
     }
 
     const baseFilter = this.buildFilter({ ...query, $cancelKey: undefined }); // $cancelKey nicht als Filter
@@ -851,6 +858,7 @@ export const User = {
         role: 'student',
         name: name,
         emailVisibility: true,
+        verified: false,  // Studenten werden durch erstes Login verifiziert
       };
 
       const newUser = await pb.collection('users').create(userData);
@@ -905,6 +913,7 @@ export const User = {
         role: 'student',
         name: user.name,
         emailVisibility: true,
+        verified: true,  // Studenten werden automatisch verifiziert
       });
 
       // 5. Update Student mit neuem Account

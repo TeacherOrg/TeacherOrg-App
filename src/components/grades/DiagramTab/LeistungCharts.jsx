@@ -634,7 +634,7 @@ const Leistungscharts = ({ performances, students, subjects, selectedStudents, s
   };
 
   return (
-    <div className="grid md:grid-cols-2 gap-6">
+    <div className="grid md:grid-cols-2 gap-3">
       {/* LEFT: Notenschnitte der Fächer (Bar) or Leistungsverlauf (Line) */}
       <Card className="bg-white dark:bg-slate-800 text-black dark:text-white border-slate-200 dark:border-slate-700">
         <CardHeader className="pb-2">

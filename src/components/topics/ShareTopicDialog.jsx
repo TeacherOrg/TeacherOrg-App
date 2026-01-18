@@ -20,7 +20,8 @@ export default function ShareTopicDialog({
   isOpen,
   onClose,
   topic,
-  yearlyLessons = []
+  yearlyLessons = [],
+  departmentName = null
 }) {
   const [recipientEmail, setRecipientEmail] = useState('');
   const [isValidating, setIsValidating] = useState(false);
@@ -89,8 +90,8 @@ export default function ShareTopicDialog({
         goals: topic.goals || '',
         materials: topic.materials || [],
         lehrplan_kompetenz_ids: topic.lehrplan_kompetenz_ids || [],
-        estimated_lessons: topic.estimated_lessons || 0
-        // department wird nicht geteilt - Empfaenger waehlt selbst
+        estimated_lessons: topic.estimated_lessons || 0,
+        fachbereich_name: departmentName || null
       };
 
       // Create lessons snapshot (only content, no positioning)

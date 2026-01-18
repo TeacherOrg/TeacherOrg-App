@@ -1384,7 +1384,7 @@ function InnerYearlyOverviewPage() {
   const selectedSubject = useMemo(() => subjects.find(s => s.name === activeSubjectName), [subjects, activeSubjectName]);
 
   return (
-    <div className="h-screen flex flex-col bg-gradient-to-br from-slate-50 via-slate-100 to-slate-200 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 overflow-hidden transition-colors duration-300">
+    <div className="h-screen flex flex-col bg-gradient-to-br from-slate-50 via-slate-100 to-slate-200 dark:from-slate-950 dark:via-slate-925 dark:to-slate-950 overflow-hidden transition-colors duration-300">
       {/* Header - gleiche Struktur wie TimetableHeader */}
       <div className="flex flex-col items-center p-4">
         {/* View Toggle Buttons */}

@@ -125,7 +125,7 @@ function InnerTimetablePage() {
   const [currentYear, setCurrentYear] = useState(getCurrentWeekYear());
 
   // Call useTimetableData with currentYear, currentWeek, and URL-based classId
-  const { data, isLoading: queryLoading, classes, subjects, settings, holidays, topics, refetch, activeClassId, setActiveClassId } = useTimetableData(currentYear, currentWeek, urlClassId, handleClassIdChange);
+  const { data, isLoading: queryLoading, classes, subjects, settings, holidays, topics, refetch, activeClassId, setActiveClassId, isStudent } = useTimetableData(currentYear, currentWeek, urlClassId, handleClassIdChange);
 
   const { allYearlyLessons, refetch: refetchYearlyLessons } = useAllYearlyLessons(currentYear);
 
@@ -138,8 +138,12 @@ function InnerTimetablePage() {
   const memoizedTopics = useMemo(() => topics || [], [topics]);
 
   // Team Teaching: Berechne ob User diese Klasse bearbeiten darf
+  // Schüler können nie editieren
   const activeClass = useMemo(() => classes.find(c => c.id === activeClassId), [classes, activeClassId]);
-  const canEdit = useMemo(() => canEditClass(activeClass, pb.authStore.model?.id), [activeClass]);
+  const canEdit = useMemo(() => {
+    if (isStudent) return false;
+    return canEditClass(activeClass, pb.authStore.model?.id);
+  }, [activeClass, isStudent]);
 
   // Call useTimetableStates with settings, currentYear, and currentWeek
   const { currentView, setCurrentView, viewMode, setViewMode, currentDate, setCurrentDate, renderKey, setRenderKey, isModalOpen, setIsModalOpen, editingLesson, setEditingLesson, slotInfo, setSlotInfo, initialSubjectForModal, setInitialSubjectForModal, isCopying, setIsCopying, copiedLesson, setCopiedLesson, activeDragId, setActiveDragId, hoverLesson, setHoverLesson, hoverPosition, setHoverPosition, disableHover, setDisableHover, overlayRef, handleShowHover, handleHideHover, timeSlots, weekInfo, autoFit, setAutoFit } = useTimetableStates(settings || {}, currentYear, currentWeek);
@@ -979,14 +983,18 @@ function InnerTimetablePage() {
         <div className="flex flex-col items-center justify-center flex-1 p-8">
           <Users className="w-16 h-16 text-slate-400 dark:text-slate-500 mb-4" />
           <h2 className="text-xl font-semibold text-slate-700 dark:text-slate-300 mb-2">
-            Keine Klasse vorhanden
+            {isStudent ? 'Keine Klasse zugewiesen' : 'Keine Klasse vorhanden'}
           </h2>
           <p className="text-slate-500 dark:text-slate-400 text-center mb-6 max-w-md">
-            Erstellen Sie zuerst eine Klasse in den Einstellungen, um den Stundenplan nutzen zu können.
+            {isStudent
+              ? 'Du wurdest noch keiner Klasse zugewiesen. Bitte wende dich an deine Lehrperson.'
+              : 'Erstellen Sie zuerst eine Klasse in den Einstellungen, um den Stundenplan nutzen zu können.'}
           </p>
-          <Button onClick={() => navigate('/Settings')}>
-            Zu den Einstellungen
-          </Button>
+          {!isStudent && (
+            <Button onClick={() => navigate('/Settings')}>
+              Zu den Einstellungen
+            </Button>
+          )}
         </div>
       ) : viewMode === 'week' ? (
         <DndContext
@@ -1035,8 +1043,8 @@ function InnerTimetablePage() {
               />
             </motion.div>
 
-            {/* Only show pool in flexible mode and not during holidays */}
-            {settings?.scheduleType === 'flexible' && !hasHolidayInWeek && (
+            {/* Only show pool in flexible mode and not during holidays (not for students) */}
+            {settings?.scheduleType === 'flexible' && !hasHolidayInWeek && !isStudent && (
               <TimetablePool
                 availableYearlyLessonsForPool={availableYearlyLessonsForPool}
                 gridRef={gridRef}

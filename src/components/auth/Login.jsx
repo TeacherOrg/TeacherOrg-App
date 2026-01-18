@@ -67,10 +67,25 @@ export default function Login() {
       } else {
         const authData = await pb.collection('users').authWithPassword(email, password);
 
+        // Verifiziere Schüler beim ersten Login
+        if (authData.record.role === 'student' && !authData.record.verified) {
+          try {
+            const updatedUser = await pb.collection('users').update(authData.record.id, {
+              verified: true
+            });
+            pb.authStore.save(pb.authStore.token, updatedUser);
+          } catch (verifyError) {
+            console.error('Error verifying student on first login:', verifyError);
+          }
+        }
+
         // Audit-Logging: Erfolgreicher Login
         await auditLogger.logLogin(authData.record.id, authData.record.email);
 
-        const defaultPage = authData.record.default_start_page || 'Timetable';
+        // Schüler immer zum Dashboard, Lehrer zu ihrer Standardseite
+        const defaultPage = authData.record.role === 'student'
+          ? 'student-dashboard'
+          : (authData.record.default_start_page || 'Timetable');
         navigate(`/${defaultPage}`, { replace: true });
       }
     } catch (err) {

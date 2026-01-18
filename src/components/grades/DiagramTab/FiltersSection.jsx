@@ -69,8 +69,8 @@ const FiltersSection = ({
   }, [studentOptions, setSelectedStudents]);
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 p-4 bg-white/50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700">
-      <div className="space-y-2 min-h-[100px] flex flex-col justify-start">
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-2 p-2 bg-white/50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700">
+      <div className="space-y-2.5 flex flex-col justify-start">
         <Label className="text-slate-300 flex items-center gap-2">
           <Filter className="w-4 h-4" />
           {diagramView === 'leistung' ? 'Fach auswählen' : 'Kompetenz auswählen'}
@@ -107,7 +107,7 @@ const FiltersSection = ({
           </Select>
         )}
       </div>
-      <div className="space-y-2 min-h-[100px] flex flex-col justify-start">
+      <div className="space-y-2.5 flex flex-col justify-start">
         <Label className="text-slate-300">Schüler und Optionen</Label>
         <div className="relative">
           <Button

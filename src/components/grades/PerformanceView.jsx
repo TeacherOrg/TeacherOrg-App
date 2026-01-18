@@ -6,7 +6,7 @@ import { Performance, UeberfachlichKompetenz, Subject, Competency, Fachbereich, 
 import CalendarLoader from '../ui/CalendarLoader';
 import PerformanceModal from './PerformanceModal';
 import UeberfachlichModal from './UeberfachlichModal';
-import { BarChart3, Plus, GraduationCap, Users, Eye } from 'lucide-react';
+import { BarChart3, Plus, Users, Eye } from 'lucide-react';
 import { canEditClass, isViewOnly } from '@/utils/teamTeachingUtils';
 
 // Lazy-load Tabs for performance
@@ -18,6 +18,7 @@ const PerformanceView = ({ students = [], performances = [], activeClassId, setA
   const { toast } = useToast();
   const [subjects, setSubjects] = useState([]);
   const [allCompetencies, setAllCompetencies] = useState([]);
+  const [fachbereiche, setFachbereiche] = useState([]);
   const [ueberfachlich, setUeberfachlich] = useState([]);
   const [choreAssignments, setChoreAssignments] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -74,6 +75,7 @@ const PerformanceView = ({ students = [], performances = [], activeClassId, setA
           });
           setSubjects(subjectsData || []);
           setAllCompetencies(competenciesData || []);
+          setFachbereiche(fachbereicheData || []);
           setChoreAssignments(choreAssignmentsData || []);
           if (validUeberfachlich.length > 0) {
             console.log('ueberfachlich details:', validUeberfachlich);
@@ -273,7 +275,19 @@ const PerformanceView = ({ students = [], performances = [], activeClassId, setA
       if (onDataChange) onDataChange(updatedPerformances);
       setIsPerformanceModalOpen(false);
       setEditingPerformance(null);
-      savePreferences();
+
+      // Tab sofort setzen (vor dem debounced savePreferences)
+      console.log('=== SAVE PERFORMANCE: Setting tab to leistungen ===');
+      console.log('Current tab before setTab:', tab);
+      setTab('leistungen');
+      console.log('Calling savePreferences with performanceTab: leistungen');
+      savePreferences({
+        expandedLeistungenRows: Array.from(expandedLeistungenRows),
+        expandedUeberfachlichHistories: Array.from(expandedUeberfachlichHistories),
+        expandedUeberfachlichCompetencies: Array.from(expandedUeberfachlichCompetencies),
+        performanceTab: 'leistungen'
+      });
+      console.log('=== SAVE PERFORMANCE: Done ===');
     } catch (error) {
       console.error("Error saving performance:", error);
       alert(`Fehler beim Speichern der Leistung: ${error.message || 'Unbekannter Fehler'}`);
@@ -394,32 +408,20 @@ const PerformanceView = ({ students = [], performances = [], activeClassId, setA
 
   if (!activeClassId) {
     return (
-      <div className="p-4 sm:p-6">
-        {/* Header Row: Icon + Title + Tabs */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
-          <div className="flex items-center gap-4">
-            <div className="w-10 h-10 bg-gradient-to-br from-green-700 to-green-900 dark:from-green-600 dark:to-green-800 rounded-xl flex items-center justify-center shadow-lg">
-              <GraduationCap className="w-5 h-5 text-white" />
-            </div>
-            <h1 className="text-xl font-bold text-gray-900 dark:text-white">Noten</h1>
-          </div>
-        </div>
-
-        {/* Class Selector */}
-        <div className="flex flex-wrap items-center gap-3 mb-4 p-3 bg-white/50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700">
-          <div className="flex items-center gap-2 min-w-[140px]">
-            <Users className="w-4 h-4 text-slate-500 dark:text-slate-400" />
-            <select
-              value=""
-              onChange={(e) => setActiveClassId(e.target.value)}
-              className="bg-transparent text-sm text-gray-900 dark:text-white font-medium border-none outline-none cursor-pointer"
-            >
-              <option disabled value="">Klasse auswählen...</option>
-              {classes.map(cls => (
-                <option key={cls.id} value={String(cls.id)}>{cls.name}</option>
-              ))}
-            </select>
-          </div>
+      <div className="p-2 sm:p-3">
+        {/* Header Row: Class Selector */}
+        <div className="flex items-center gap-2 mb-4">
+          <Users className="w-4 h-4 text-slate-500 dark:text-slate-400" />
+          <select
+            value=""
+            onChange={(e) => setActiveClassId(e.target.value)}
+            className="bg-transparent text-sm text-gray-900 dark:text-white font-medium border-none outline-none cursor-pointer"
+          >
+            <option disabled value="">Klasse auswählen...</option>
+            {classes.map(cls => (
+              <option key={cls.id} value={String(cls.id)}>{cls.name}</option>
+            ))}
+          </select>
         </div>
 
         <div className="text-center py-16">
@@ -432,14 +434,23 @@ const PerformanceView = ({ students = [], performances = [], activeClassId, setA
   }
 
   return (
-    <div className="p-4 sm:p-6 bg-white/0 dark:bg-slate-900/0">
-      {/* Header Row: Icon + Title + Tabs */}
+    <div className="p-2 sm:p-3 bg-white/0 dark:bg-slate-900/0 max-h-[calc(100vh-4rem)] overflow-y-auto">
+      {/* Header Row: Class Selector + Tabs */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
-        <div className="flex items-center gap-4">
-          <div className="w-10 h-10 bg-gradient-to-br from-green-700 to-green-900 dark:from-green-600 dark:to-green-800 rounded-xl flex items-center justify-center shadow-lg">
-            <GraduationCap className="w-5 h-5 text-white" />
-          </div>
-          <h1 className="text-xl font-bold text-gray-900 dark:text-white">Noten</h1>
+        {/* Class Selector */}
+        <div className="flex items-center gap-2">
+          <Users className="w-4 h-4 text-slate-500 dark:text-slate-400" />
+          <select
+            value={activeClassId || ''}
+            onChange={(e) => setActiveClassId(e.target.value)}
+            className="bg-transparent text-sm text-gray-900 dark:text-white font-medium border-none outline-none cursor-pointer"
+            disabled={classes.length === 0}
+          >
+            <option disabled value="">Klasse...</option>
+            {classes.map(cls => (
+              <option key={cls.id} value={String(cls.id)}>{cls.name}</option>
+            ))}
+          </select>
         </div>
 
         <div className="flex gap-2 bg-white/60 dark:bg-slate-800/60 backdrop-blur-md rounded-xl p-1.5 shadow-lg border border-slate-200/50 dark:border-slate-700/50">
@@ -474,79 +485,30 @@ const PerformanceView = ({ students = [], performances = [], activeClassId, setA
         </div>
       </div>
 
-      {/* Filter Row: Class + Subject/Options + Create Button */}
-      <div className="flex flex-wrap items-center gap-3 mb-4 p-3 bg-white/50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700">
-        {/* Class Selector */}
-        <div className="flex items-center gap-2 min-w-[140px]">
-          <Users className="w-4 h-4 text-slate-500 dark:text-slate-400" />
-          <select
-            value={activeClassId || ''}
-            onChange={(e) => setActiveClassId(e.target.value)}
-            className="bg-transparent text-sm text-gray-900 dark:text-white font-medium border-none outline-none cursor-pointer"
-            disabled={classes.length === 0}
+      {/* Filter Row: nur für Überfachlich */}
+      {tab === 'ueberfachlich' ? (
+        <div className="flex flex-wrap items-center gap-3 mb-4 p-3 bg-white/50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700">
+          {viewOnly && (
+            <div className="flex items-center gap-1.5 text-sm text-purple-400">
+              <Eye className="w-4 h-4" />
+              <span>Nur Einsicht</span>
+            </div>
+          )}
+          <div className="flex-1" />
+          <Button
+            onClick={handleCreateUeberfachlich}
+            size="sm"
+            className="bg-purple-600 hover:bg-purple-700"
+            disabled={!canEdit}
+            title={!canEdit ? 'Keine Bearbeitungsrechte fuer diese Klasse' : ''}
           >
-            <option disabled value="">Klasse...</option>
-            {classes.map(cls => (
-              <option key={cls.id} value={String(cls.id)}>{cls.name}</option>
-            ))}
-          </select>
+            <Plus className="w-4 h-4 mr-1.5"/>
+            Neue Kompetenz
+          </Button>
         </div>
-
-        <div className="h-6 w-px bg-slate-300 dark:bg-slate-600 hidden sm:block" />
-
-        {/* Loading Indicator */}
-        {preferencesLoading && (
-          <div className="flex items-center gap-2 text-sm text-slate-400">
-            <div className="w-3 h-3 border-2 border-slate-400 border-t-transparent rounded-full animate-spin"></div>
-            <span>Lade...</span>
-          </div>
-        )}
-
-        {/* Spacer */}
-        <div className="flex-1" />
-
-        {/* Create Buttons - nur wenn Bearbeitungsrechte vorhanden */}
-        {tab === 'leistungen' && (
-          <>
-            {viewOnly && (
-              <div className="flex items-center gap-1.5 text-sm text-blue-400 mr-2">
-                <Eye className="w-4 h-4" />
-                <span>Nur Einsicht</span>
-              </div>
-            )}
-            <Button
-              onClick={handleCreatePerformance}
-              size="sm"
-              className="bg-blue-600 hover:bg-blue-700"
-              disabled={!canEdit}
-              title={!canEdit ? 'Keine Bearbeitungsrechte fuer diese Klasse' : ''}
-            >
-              <Plus className="w-4 h-4 mr-1.5"/>
-              Neue Leistung
-            </Button>
-          </>
-        )}
-        {tab === 'ueberfachlich' && (
-          <>
-            {viewOnly && (
-              <div className="flex items-center gap-1.5 text-sm text-purple-400 mr-2">
-                <Eye className="w-4 h-4" />
-                <span>Nur Einsicht</span>
-              </div>
-            )}
-            <Button
-              onClick={handleCreateUeberfachlich}
-              size="sm"
-              className="bg-purple-600 hover:bg-purple-700"
-              disabled={!canEdit}
-              title={!canEdit ? 'Keine Bearbeitungsrechte fuer diese Klasse' : ''}
-            >
-              <Plus className="w-4 h-4 mr-1.5"/>
-              Neue Kompetenz
-            </Button>
-          </>
-        )}
-      </div>
+      ) : tab === 'diagramme' ? (
+        <div className="border-b border-slate-200 dark:border-slate-700 mb-4" />
+      ) : null}
       <Suspense fallback={<CalendarLoader />}>
         {tab === 'diagramme' && (
           <DiagramTab
@@ -567,6 +529,7 @@ const PerformanceView = ({ students = [], performances = [], activeClassId, setA
             students={students}
             performances={performances}
             subjects={subjects}
+            fachbereiche={fachbereiche}
             activeClassId={activeClassId}
             onDataChange={onDataChange}
             expandedRows={expandedLeistungenRows}
@@ -578,6 +541,8 @@ const PerformanceView = ({ students = [], performances = [], activeClassId, setA
               setIsPerformanceModalOpen(true);
             }}
             canEdit={canEdit}
+            onCreatePerformance={handleCreatePerformance}
+            viewOnly={viewOnly}
           />
         )}
         {tab === 'ueberfachlich' && (

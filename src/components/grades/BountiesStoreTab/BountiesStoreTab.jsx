@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Scroll, ShoppingBag, CheckCircle, Coins, Star, Target } from 'lucide-react';
+import { Scroll, ShoppingBag, CheckCircle, Coins, Star, Target, Users } from 'lucide-react';
 import BountyManager from './BountyManager';
 import StoreManager from './StoreManager';
 import PurchaseApprovals from './PurchaseApprovals';
@@ -13,9 +13,9 @@ import { useClassGoals } from './hooks/useClassGoals';
 
 /**
  * BountiesStoreTab - Main teacher interface for managing bounties, store, and currency
- * Displayed as a tab in the StudentsOverview page
+ * Displayed as a standalone page (Game Zone)
  */
-export default function BountiesStoreTab({ students = [], activeClassId }) {
+export default function BountiesStoreTab({ students = [], classes = [], activeClassId, onClassChange }) {
   const [activeSubTab, setActiveSubTab] = useState('bounties');
 
   // Load all data
@@ -64,9 +64,27 @@ export default function BountiesStoreTab({ students = [], activeClassId }) {
   ];
 
   return (
-    <div className="flex flex-col h-full">
-      {/* Sub-Tab Navigation */}
-      <div className="flex flex-wrap gap-2 border-b border-slate-200 dark:border-slate-700 pb-4 mb-4 flex-shrink-0">
+    <div className="flex flex-col h-full p-2 sm:p-3">
+      {/* Header Row: Class Selector + Tabs */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-200 dark:border-slate-700 pb-4 mb-4 flex-shrink-0">
+        {/* Class Selector */}
+        <div className="flex items-center gap-2">
+          <Users className="w-4 h-4 text-slate-500 dark:text-slate-400" />
+          <select
+            value={activeClassId || ''}
+            onChange={(e) => onClassChange?.(e.target.value)}
+            className="bg-transparent text-sm text-gray-900 dark:text-white font-medium border-none outline-none cursor-pointer"
+            disabled={classes.length === 0}
+          >
+            <option disabled value="">Klasse...</option>
+            {classes.map(cls => (
+              <option key={cls.id} value={String(cls.id)}>{cls.name}</option>
+            ))}
+          </select>
+        </div>
+
+        {/* Sub-Tabs */}
+        <div className="flex flex-wrap gap-2">
         {subTabs.map(tab => {
           const Icon = tab.icon;
           const isActive = activeSubTab === tab.id;
@@ -97,6 +115,7 @@ export default function BountiesStoreTab({ students = [], activeClassId }) {
             </button>
           );
         })}
+        </div>
       </div>
 
       {/* Sub-Tab Content - Scrollable */}

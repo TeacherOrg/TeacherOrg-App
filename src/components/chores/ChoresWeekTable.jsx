@@ -61,7 +61,7 @@ const TableCell = ({
     }
 
     return (
-        <td className={`p-1 bg-gray-100 dark:bg-slate-800 min-w-[120px] ${
+        <td className={`p-1 bg-gray-100 dark:bg-slate-800 min-w-[140px] ${
             !isFirstCell ? 'border-l border-gray-200 dark:border-slate-700' : ''
         }`}>
             <Droppable droppableId={droppableId}>
@@ -131,7 +131,7 @@ const ChoreNameCell = ({
   }, [chore.name]);
 
   return (
-    <td className="p-3 bg-gradient-to-b from-gray-50/90 to-white dark:from-slate-800/90 dark:to-slate-900 min-w-[420px] max-w-[420px] relative group">
+    <td className="p-3 bg-gradient-to-b from-gray-50/90 to-white dark:from-slate-800/90 dark:to-slate-900 min-w-[320px] max-w-[320px] relative group">
       <Droppable droppableId={droppableId} isDropDisabled={isFull}>
         {(provided, snapshot) => (
           <div
@@ -270,7 +270,7 @@ export default function ChoresWeekTable({ chores, weekDates, assignments, studen
             <table className="w-full table-fixed border-collapse border-spacing-0">
                 <thead>
                     <tr className="bg-gray-100 dark:bg-slate-700 border-b border-gray-200 dark:border-slate-600 sticky top-0 z-10">
-                        <th className="p-4 text-center text-gray-800 dark:text-white font-semibold min-w-[420px] max-w-[420px] bg-gray-100 dark:bg-slate-700">
+                        <th className="p-4 text-center text-gray-800 dark:text-white font-semibold min-w-[320px] max-w-[320px] bg-gray-100 dark:bg-slate-700">
                             <div className="flex flex-col items-center gap-1">
                                 <span>Ämtchen</span>
                                 <span className="text-xs text-gray-500 dark:text-slate-300 font-normal">
@@ -279,7 +279,7 @@ export default function ChoresWeekTable({ chores, weekDates, assignments, studen
                             </div>
                         </th>
                         {weekDates.map((dayInfo, index) => (
-                            <th key={dayInfo.dayKey} className={`p-4 text-center text-gray-800 dark:text-white font-semibold min-w-[120px] bg-gray-100 dark:bg-slate-700 ${
+                            <th key={dayInfo.dayKey} className={`p-4 text-center text-gray-800 dark:text-white font-semibold min-w-[140px] bg-gray-100 dark:bg-slate-700 ${
                                 index === 0 ? '' : 'border-l border-gray-200 dark:border-slate-600'
                             }`}>
                                 <div className="flex flex-col">

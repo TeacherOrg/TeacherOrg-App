@@ -46,7 +46,7 @@ const DiagramTab = ({ students, performances, ueberfachlich, subjects, allCompet
   }, [diagramView, competencyOptions]);
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       {/* View Toggle */}
       <div className="flex justify-start gap-3 p-1.5 bg-white/50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700 max-w-xs">
         <Button

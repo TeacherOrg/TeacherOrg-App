@@ -10,4 +10,9 @@ if (!import.meta.env.VITE_POCKETBASE_URL && import.meta.env.DEV) {
 
 const pb = new PocketBase(POCKETBASE_URL);
 
+// Für Debugging/Migration in der Browser-Console verfügbar machen
+if (typeof window !== 'undefined') {
+  window.pb = pb;
+}
+
 export default pb;

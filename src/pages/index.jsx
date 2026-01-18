@@ -8,6 +8,7 @@ import TopicsView from "./TopicsView"; // Neue Komponente importieren
 import { Route, Routes, useLocation } from 'react-router-dom';
 import StudentsOverview from '@/pages/StudentsOverview';
 import StudentDashboardPage from './StudentDashboardPage';
+import GameZone from './GameZone';
 
 const PAGES = {
     Timetable: Timetable,
@@ -48,6 +49,7 @@ export default function Pages() {
                 <Route path="/studentsoverview" element={<StudentsOverview />} /> {/* Neue Route für "Studentsoverview" */}
                 <Route path="/students" element={<StudentsOverview />} /> {/* Neue Route für "Students" */}
                 <Route path="/student-dashboard" element={<StudentDashboardPage />} /> {/* Student Dashboard */}
+                <Route path="/gamezone" element={<GameZone />} /> {/* Game Zone */}
             </Routes>
         </Layout>
     );
