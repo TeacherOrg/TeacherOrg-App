@@ -1,5 +1,5 @@
 import React from "react";
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Plus } from "lucide-react";
 import { useDroppable, useDraggable } from "@dnd-kit/core";
@@ -73,6 +73,9 @@ const DraggableLessonCard = ({ lesson, onClick, children }) => {
     data: { type: 'existing-lesson', lesson },
   });
 
+  // Tracke ob ein Drag gestartet wurde (für Click-Unterscheidung)
+  const wasDraggingRef = useRef(false);
+
   const style = {
     transform: transform ? `translate3d(${transform.x}px, ${transform.y}px, 0)` : undefined,
     opacity: isDragging ? 0.5 : 1,
@@ -80,18 +83,34 @@ const DraggableLessonCard = ({ lesson, onClick, children }) => {
   };
 
   const handlePointerDown = (e) => {
-    // Alt-Key: Event durchlassen für Merge/Allerlei (Parent handleGridPointerDown)
+    wasDraggingRef.current = false;
+
+    // Alt-Key: Event durchlassen für Merge/Allerlei
     if (e.altKey) {
-      return; // Kein dnd-kit, Event bubbled zum Parent
+      return;
     }
 
     // Ctrl/Cmd: dnd-kit Drag aktivieren
     if (e.ctrlKey || e.metaKey) {
+      wasDraggingRef.current = true;
       listeners?.onPointerDown?.(e);
       return;
     }
 
-    // Kein Modifier: Nichts tun, onClick wird später ausgelöst
+    // Kein Modifier: Nichts tun, pointerup löst Click aus
+  };
+
+  const handlePointerUp = (e) => {
+    // Nicht klicken wenn gedraggt wurde
+    if (wasDraggingRef.current) {
+      wasDraggingRef.current = false;
+      return;
+    }
+
+    // Nur klicken wenn weder Ctrl/Cmd noch Alt
+    if (!(e.ctrlKey || e.metaKey) && !e.altKey) {
+      onClick?.();
+    }
   };
 
   return (
@@ -101,7 +120,7 @@ const DraggableLessonCard = ({ lesson, onClick, children }) => {
       className="h-full w-full"
       {...attributes}
       onPointerDown={handlePointerDown}
-      onClick={() => onClick?.()}
+      onPointerUp={handlePointerUp}
     >
       {children}
     </div>
