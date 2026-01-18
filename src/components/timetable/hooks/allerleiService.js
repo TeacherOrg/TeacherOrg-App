@@ -40,7 +40,7 @@ export const allerleiService = {
     await Promise.all(integrationPromises);
   },
 
-  async unlink(allerleiId, allLessons, timeSlots, currentWeek, originalData = {}, allerleiDay, allerleiPeriod) {
+  async unlink(allerleiId, allLessons, timeSlots, currentWeek, originalData = {}, allerleiDay, allerleiPeriod, class_id) {
     try {
       const allerlei = await AllerleiLesson.findById(allerleiId);
       if (!allerlei) {
@@ -181,6 +181,7 @@ export const allerleiService = {
             yearly_lesson_id: ylId,
             subject: yearlyLesson.subject,
             user_id: pb.authStore.model.id,
+            class_id,
             is_double_lesson: isDoubleLesson,
             second_yearly_lesson_id: yearlyLesson.second_yearly_lesson_id || null,
             is_exam: examYlIds.includes(ylId),
@@ -291,7 +292,8 @@ export const allerleiService = {
     currentWeek,
     day_of_week,
     period_slot,
-    allerleiLesson = null  // Optional: für exam/half_class Info
+    allerleiLesson = null,  // Optional: für exam/half_class Info
+    class_id  // Required: class_id für die neuen Lektionen
   ) => {
     const restored = [];
 
@@ -330,6 +332,7 @@ export const allerleiService = {
         end_time: timeSlot.end,
         is_hidden: false,
         user_id: pb.authStore.model.id,
+        class_id,
         subject: yearlyLesson.subject,
         // Doppellektions-Info aus YearlyLesson
         is_double_lesson: isDoubleLesson,

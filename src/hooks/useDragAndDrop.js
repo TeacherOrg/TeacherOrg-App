@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { useCallback, useRef } from 'react';
 import { PointerSensor, KeyboardSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { sortableKeyboardCoordinates } from '@dnd-kit/sortable';
 import { Lesson } from "@/api/entities";
@@ -12,6 +12,8 @@ const isTouchDevice = typeof window !== 'undefined' &&
   ('ontouchstart' in window || navigator.maxTouchPoints > 0);
 
 const useDragAndDrop = (lessonsForCurrentWeek, allLessons, allerleiLessons, currentWeek, yearlyLessons, timeSlots, currentYear, queryClientLocal, subjects, activeClassId, optimisticUpdateAllLessons, optimisticUpdateYearlyLessons, optimisticUpdateAllerleiLessons, reassignYearlyLessonLinks, updateYearlyLessonOrder, setAllLessons, setYearlyLessons, setAllerleiLessons, refetch, setActiveDragId) => {
+  // Ref um zu tracken, ob der Drag mit Ctrl gestartet wurde (gültig ist)
+  const isDragValidRef = useRef(false);
   // Touch: Long-Press (300ms) für Drag
   // Desktop: Sofortiger Start (Ctrl-Check erfolgt in handleDragStart)
   const sensors = useSensors(
@@ -30,15 +32,18 @@ const useDragAndDrop = (lessonsForCurrentWeek, allLessons, allerleiLessons, curr
 
     // Alt-Key: Merge-Selection (bestehend) → Drag abbrechen
     if (activatorEvent?.altKey) {
+      isDragValidRef.current = false;
       return;
     }
 
-    // Desktop (non-touch): Ctrl erforderlich für Drag
-    if (!isTouchDevice && !activatorEvent?.ctrlKey) {
+    // Desktop (non-touch): Ctrl/Cmd erforderlich für Drag
+    if (!isTouchDevice && !(activatorEvent?.ctrlKey || activatorEvent?.metaKey)) {
+      isDragValidRef.current = false;
       return;
     }
 
-    // Drag starten
+    // Drag ist gültig (mit Ctrl gestartet)
+    isDragValidRef.current = true;
     setActiveDragId(event.active.id);
   }, [setActiveDragId]);
 
@@ -64,6 +69,14 @@ const useDragAndDrop = (lessonsForCurrentWeek, allLessons, allerleiLessons, curr
 
   const handleDragEnd = useCallback(async (event) => {
     const { active, over } = event;
+
+    // Prüfe ob der Drag gültig gestartet wurde (mit Ctrl)
+    if (!isDragValidRef.current) {
+      setActiveDragId(null);
+      return;
+    }
+    isDragValidRef.current = false; // Reset für nächsten Drag
+
     if (!over || active.id === over.id) {
       setActiveDragId(null);
       return;

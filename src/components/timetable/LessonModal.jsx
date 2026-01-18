@@ -737,7 +737,8 @@ export default function LessonModal({
             currentWeek,
             lesson.day_of_week,
             lesson.period_slot,
-            lesson  // Pass Allerlei lesson for exam/half_class info
+            lesson,  // Pass Allerlei lesson for exam/half_class info
+            activeClassId
           );
 
           try {

@@ -2,7 +2,7 @@ import React from "react";
 import { useMemo, useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Plus } from "lucide-react";
-import { useDroppable } from "@dnd-kit/core";
+import { useDroppable, useDraggable } from "@dnd-kit/core";
 import TimeSlot from "./TimeSlot";
 import DayHeader, { DAYS } from "./DayHeader";
 import LessonCard from "./LessonCard";
@@ -66,24 +66,34 @@ const getHolidayDisplay = (holiday) => {
 const isTouchDevice = typeof window !== 'undefined' &&
   ('ontouchstart' in window || navigator.maxTouchPoints > 0);
 
-// Wrapper für Lektionskarten - Klick öffnet Modal, Ctrl/Alt+Drag für dnd-kit
-const LessonCardWrapper = ({ children, onClick }) => {
+// Draggable Wrapper für Lektionskarten - Ctrl+Drag für dnd-kit, Click öffnet Modal
+const DraggableLessonCard = ({ lesson, onClick, children }) => {
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+    id: lesson.id,
+    data: { type: 'existing-lesson', lesson },
+  });
+
+  const style = {
+    transform: transform ? `translate3d(${transform.x}px, ${transform.y}px, 0)` : undefined,
+    opacity: isDragging ? 0.5 : 1,
+    cursor: 'pointer',
+  };
+
+  const handleClick = (e) => {
+    // Nur klicken wenn weder Ctrl/Cmd noch Alt
+    if (!(e.ctrlKey || e.metaKey) && !e.altKey) {
+      onClick?.();
+    }
+  };
+
   return (
     <div
-      className="h-full w-full cursor-pointer"
-      onPointerDown={(e) => {
-        // Bei Ctrl oder Alt: Event durchlassen für dnd-kit Drag / Allerlei
-        if (!e.ctrlKey && !e.altKey) {
-          e.stopPropagation();
-        }
-      }}
-      onPointerUp={(e) => {
-        e.stopPropagation();
-        // Nur klicken wenn weder Ctrl noch Alt (sonst war es ein Drag-Versuch)
-        if (!e.ctrlKey && !e.altKey) {
-          onClick?.();
-        }
-      }}
+      ref={setNodeRef}
+      style={style}
+      className="h-full w-full"
+      {...listeners}
+      {...attributes}
+      onClick={handleClick}
     >
       {children}
     </div>
@@ -346,15 +356,15 @@ const TimetableGrid = React.forwardRef(
                   onPointerEnter={(e) => onShowHover(lesson, e)}
                   onPointerLeave={onHideHover}
                 >
-                  {/* Einfacher Wrapper für Click - Drag temporär deaktiviert */}
-                  <LessonCardWrapper onClick={() => onEditLesson?.(lesson.id)}>
+                  {/* Draggable Wrapper für Ctrl+Drag */}
+                  <DraggableLessonCard lesson={lesson} onClick={() => onEditLesson?.(lesson.id)}>
                     <LessonCard
                       lesson={lesson}
                       isDragging={false}
                       subjects={subjects}
                       isAltPressed={isAltPressed}
                     />
-                  </LessonCardWrapper>
+                  </DraggableLessonCard>
 
                   {/* Während Merge: Original-Lektion komplett ausblenden */}
                   {isPartOfMerge && (
