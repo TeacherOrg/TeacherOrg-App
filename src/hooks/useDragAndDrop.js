@@ -18,7 +18,7 @@ const useDragAndDrop = (lessonsForCurrentWeek, allLessons, allerleiLessons, curr
     useSensor(PointerSensor, {
       activationConstraint: isTouchDevice
         ? { delay: 300, tolerance: 5 }   // Touch: Long-press
-        : { delay: 0, tolerance: 0 },    // Desktop: Sofort (Ctrl-Check im Handler)
+        : { distance: 5 },               // Desktop: Erst nach 5px Bewegung (Click funktioniert)
     }),
     useSensor(KeyboardSensor, {
       coordinateGetter: sortableKeyboardCoordinates,
