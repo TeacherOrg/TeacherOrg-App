@@ -66,39 +66,15 @@ const getHolidayDisplay = (holiday) => {
 const isTouchDevice = typeof window !== 'undefined' &&
   ('ontouchstart' in window || navigator.maxTouchPoints > 0);
 
-// Einfacher Wrapper für Lektionskarten mit nativem HTML5 drag-drop (wie in Jahresansicht)
-const LessonCardWrapper = ({ lesson, children, onClick }) => {
-  const handlePointerDown = (e) => {
-    // Verhindert, dass dnd-kit's PointerSensor das Event abfängt
-    // Nur bei normalem Klick (ohne Ctrl für Drag)
-    if (!e.ctrlKey) {
-      e.stopPropagation();
-    }
-  };
-
-  const handleClick = (e) => {
-    e.stopPropagation();
-    onClick?.();
-  };
-
-  const handleDragStart = (e) => {
-    // Nur mit Ctrl erlauben
-    if (!e.ctrlKey) {
-      e.preventDefault();
-      return;
-    }
-    e.dataTransfer.setData('lessonId', lesson.id);
-    e.dataTransfer.setData('type', 'existing-lesson');
-    e.dataTransfer.effectAllowed = 'move';
-  };
-
+// Ultra-einfacher Wrapper - NUR Click, KEIN Drag (wie isAltPressed || readOnly Zweig)
+const LessonCardWrapper = ({ children, onClick }) => {
   return (
     <div
-      className="h-full w-full cursor-pointer lesson-card"
-      onPointerDown={handlePointerDown}
-      onClick={handleClick}
-      draggable={true}
-      onDragStart={handleDragStart}
+      className="h-full w-full cursor-pointer"
+      onClick={(e) => {
+        e.stopPropagation();
+        onClick?.();
+      }}
     >
       {children}
     </div>
@@ -361,8 +337,8 @@ const TimetableGrid = React.forwardRef(
                   onPointerEnter={(e) => onShowHover(lesson, e)}
                   onPointerLeave={onHideHover}
                 >
-                  {/* LessonCardWrapper mit nativem HTML5 drag-drop (Ctrl+Drag) */}
-                  <LessonCardWrapper lesson={lesson} onClick={() => onEditLesson?.(lesson.id)}>
+                  {/* Einfacher Wrapper für Click - Drag temporär deaktiviert */}
+                  <LessonCardWrapper onClick={() => onEditLesson?.(lesson.id)}>
                     <LessonCard
                       lesson={lesson}
                       isDragging={false}
